@@ -2,7 +2,7 @@
 
 import React from "react"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,9 +21,49 @@ import {
   AlertCircle,
   ChevronRight,
   User,
+  Loader2,
 } from "lucide-react"
 import type { ServiceData, LineItem } from "./ro-creation-wizard"
 import { EditableServiceCard, createLineItem } from "./editable-service-card"
+
+// Workflow stages - MOVED OUTSIDE to prevent re-creation on every render
+const WORKFLOW_STAGES = [
+  {
+    id: "intake",
+    label: "Intake",
+    icon: AlertCircle,
+    active: false,
+    completed: true,
+  },
+  {
+    id: "diagnostic",
+    label: "Diagnostic",
+    icon: Clock,
+    active: true,
+    completed: false,
+  },
+  {
+    id: "approval",
+    label: "Approval",
+    icon: AlertCircle,
+    active: false,
+    completed: false,
+  },
+  {
+    id: "service",
+    label: "Service",
+    icon: Clock,
+    active: false,
+    completed: false,
+  },
+  {
+    id: "completion",
+    label: "Complete",
+    icon: Check,
+    active: false,
+    completed: false,
+  },
+]
 
 // Sample data with new structure
 const createInitialServices = (): ServiceData[] => [
@@ -81,25 +121,118 @@ const createInitialServices = (): ServiceData[] => [
   },
 ]
 
-export function RODetailView({ roId = "RO-4521", onClose }: { roId?: string; onClose?: () => void }) {
+interface WorkOrder {
+  id: number
+  ro_number: string
+  customer_id: number
+  vehicle_id: number
+  customer_name: string
+  phone_primary: string
+  email: string | null
+  year: number
+  make: string
+  model: string
+  vin: string
+  license_plate: string | null
+  state: string
+  date_opened: string
+  date_promised: string | null
+  date_closed: string | null
+  customer_concern: string | null
+  label: string | null
+  needs_attention: boolean
+  labor_total: string
+  parts_total: string
+  sublets_total: string
+  tax_amount: string
+  total: string
+  payment_status: string
+  amount_paid: string
+  created_at: string
+  updated_at: string
+}
+
+export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => void }) {
+  const [workOrder, setWorkOrder] = useState<WorkOrder | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
-  const [services, setServices] = useState<ServiceData[]>(createInitialServices)
+  const [services, setServices] = useState<ServiceData[]>(() => createInitialServices())
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
-  const [roData, setRoData] = useState({
-    id: roId,
-    customer: "John Mitchell",
-    email: "john.mitchell@email.com",
-    phone: "(555) 234-5678",
-    vehicle: "2022 Tesla Model 3",
-    vin: "5YJ3E1EA2PF123456",
-    mileage: "24,500",
-    status: "awaiting_approval",
-    createdDate: "2024-01-12",
-    dueDate: "2024-01-15",
-    advisor: "Sarah Chen",
-    technician: "Mike Rodriguez",
-  })
+
+  useEffect(() => {
+    const fetchWorkOrder = async () => {
+      try {
+        console.log('=== FETCHING WORK ORDER ===')
+        console.log('roId:', roId)
+        console.log('roId type:', typeof roId)
+        
+        setLoading(true)
+        setError(null)
+        
+        const url = `/v0/api/work-orders/${roId}`
+        console.log('Fetching URL:', url)
+        
+        const response = await fetch(url)
+        console.log('Response status:', response.status)
+        console.log('Response ok:', response.ok)
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('API Error Response:', errorText)
+          throw new Error(`Failed to fetch work order: ${response.status}`)
+        }
+        
+        const data = await response.json()
+        console.log('API Response Data:', JSON.stringify(data, null, 2))
+        console.log('work_order object:', data.work_order)
+        
+        if (!data.work_order) {
+          console.error('No work_order in response!')
+          throw new Error('No work order data returned')
+        }
+        
+        setWorkOrder(data.work_order)
+        console.log('Work order set successfully')
+        console.log('==========================')
+        
+      } catch (err: any) {
+        console.error('=== WORK ORDER FETCH ERROR ===')
+        console.error('Error type:', err.constructor.name)
+        console.error('Error message:', err.message)
+        console.error('Error stack:', err.stack)
+        console.error('==============================')
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (roId) {
+      fetchWorkOrder()
+    } else {
+      console.warn('No roId provided to RODetailView')
+    }
+  }, [roId])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="animate-spin text-muted-foreground" size={32} />
+      </div>
+    )
+  }
+
+  if (error || !workOrder) {
+    return (
+      <Card className="p-12 text-center">
+        <p className="text-destructive mb-2">Error loading work order</p>
+        <p className="text-sm text-muted-foreground mb-4">{error || "Work order not found"}</p>
+        {onClose && <Button onClick={onClose} variant="outline">Go Back</Button>}
+      </Card>
+    )
+  }
 
   const totals = useMemo(() => {
     const initial = { parts: 0, labor: 0, sublets: 0, hazmat: 0, fees: 0, total: 0 }
@@ -120,19 +253,19 @@ export function RODetailView({ roId = "RO-4521", onClose }: { roId?: string; onC
     }, initial)
   }, [services])
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     setIsEditing(false)
-  }
+  }, [])
 
-  const updateService = (updated: ServiceData) => {
-    setServices(services.map((s) => (s.id === updated.id ? updated : s)))
-  }
+  const updateService = useCallback((updated: ServiceData) => {
+    setServices(prev => prev.map((s) => (s.id === updated.id ? updated : s)))
+  }, [])
 
-  const removeService = (id: string) => {
-    setServices(services.filter((s) => s.id !== id))
-  }
+  const removeService = useCallback((id: string) => {
+    setServices(prev => prev.filter((s) => s.id !== id))
+  }, [])
 
-  const addService = () => {
+  const addService = useCallback(() => {
     const newService: ServiceData = {
       id: `svc-${Date.now()}`,
       name: "New Service",
@@ -147,8 +280,8 @@ export function RODetailView({ roId = "RO-4521", onClose }: { roId?: string; onC
       hazmat: [],
       fees: [],
     }
-    setServices([...services, newService])
-  }
+    setServices(prev => [...prev, newService])
+  }, [])
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDragIndex(index)
@@ -162,55 +295,22 @@ export function RODetailView({ roId = "RO-4521", onClose }: { roId?: string; onC
     }
   }
 
-  const handleDragEnd = () => {
+  const handleDragEnd = useCallback(() => {
     if (dragIndex !== null && dragOverIndex !== null && dragIndex !== dragOverIndex) {
-      const newServices = [...services]
-      const [removed] = newServices.splice(dragIndex, 1)
-      newServices.splice(dragOverIndex, 0, removed)
-      setServices(newServices)
+      setServices(prev => {
+        const newServices = [...prev]
+        const [removed] = newServices.splice(dragIndex, 1)
+        newServices.splice(dragOverIndex, 0, removed)
+        return newServices
+      })
     }
     setDragIndex(null)
     setDragOverIndex(null)
-  }
+  }, [dragIndex, dragOverIndex])
 
-  // Workflow stages for horizontal bar
-  const stages = [
-    {
-      id: "intake",
-      label: "Intake",
-      icon: AlertCircle,
-      active: false,
-      completed: true,
-    },
-    {
-      id: "diagnostic",
-      label: "Diagnostic",
-      icon: Clock,
-      active: true,
-      completed: false,
-    },
-    {
-      id: "approval",
-      label: "Approval",
-      icon: AlertCircle,
-      active: false,
-      completed: false,
-    },
-    {
-      id: "service",
-      label: "Service",
-      icon: Clock,
-      active: false,
-      completed: false,
-    },
-    {
-      id: "completion",
-      label: "Complete",
-      icon: Check,
-      active: false,
-      completed: false,
-    },
-  ]
+  const dragHandleProps = useMemo(() => ({
+    onMouseDown: (e: React.MouseEvent) => e.stopPropagation(),
+  }), [])
 
   return (
     <div className="space-y-4">
@@ -223,9 +323,9 @@ export function RODetailView({ roId = "RO-4521", onClose }: { roId?: string; onC
             </Button>
           )}
           <div>
-            <h1 className="text-3xl font-bold text-foreground">{roData.id}</h1>
+            <h1 className="text-3xl font-bold text-foreground">{workOrder.ro_number}</h1>
             <p className="text-sm text-muted-foreground">
-              {roData.customer} • {roData.vehicle} • {roData.vin}
+              {workOrder.customer_name} • {workOrder.year} {workOrder.make} {workOrder.model} • {workOrder.vin}
             </p>
           </div>
         </div>
@@ -255,7 +355,7 @@ export function RODetailView({ roId = "RO-4521", onClose }: { roId?: string; onC
       {/* Horizontal Status Workflow Bar */}
       <Card className="p-4 border-border">
         <div className="flex items-center justify-between overflow-x-auto">
-          {stages.map((stage, idx) => {
+          {WORKFLOW_STAGES.map((stage, idx) => {
             const Icon = stage.icon
             return (
               <div key={stage.id} className="flex items-center gap-3 flex-shrink-0">
@@ -271,7 +371,7 @@ export function RODetailView({ roId = "RO-4521", onClose }: { roId?: string; onC
                   <Icon size={16} />
                   <span className="text-sm font-medium whitespace-nowrap">{stage.label}</span>
                 </div>
-                {idx < stages.length - 1 && <ChevronRight size={16} className="text-border" />}
+                {idx < WORKFLOW_STAGES.length - 1 && <ChevronRight size={16} className="text-border" />}
               </div>
             )
           })}
@@ -285,11 +385,15 @@ export function RODetailView({ roId = "RO-4521", onClose }: { roId?: string; onC
           <Card className="p-3 border-border">
             <p className="text-xs text-muted-foreground mb-1">Status</p>
             {isEditing ? (
-              <select className="w-full px-2 py-1 text-sm rounded-md bg-card border border-border text-foreground">
-                <option>Awaiting Approval</option>
-                <option>In Progress</option>
-                <option>Ready</option>
-                <option>Completed</option>
+              <select 
+                id="ro_status"
+                name="ro_status"
+                className="w-full px-2 py-1 text-sm rounded-md bg-card border border-border text-foreground"
+              >
+                <option value="awaiting_approval">Awaiting Approval</option>
+                <option value="in_progress">In Progress</option>
+                <option value="ready">Ready</option>
+                <option value="completed">Completed</option>
               </select>
             ) : (
               <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/20">
@@ -300,39 +404,28 @@ export function RODetailView({ roId = "RO-4521", onClose }: { roId?: string; onC
 
           <Card className="p-3 border-border">
             <p className="text-xs text-muted-foreground mb-1">Created</p>
-            <p className="text-sm font-medium text-foreground">{roData.createdDate}</p>
+            <p className="text-sm font-medium text-foreground">{new Date(workOrder.date_opened).toLocaleDateString()}</p>
           </Card>
 
           <Card className="p-3 border-border">
             <p className="text-xs text-muted-foreground mb-1">Due Date</p>
-            <p className="text-sm font-medium text-foreground">{roData.dueDate}</p>
-          </Card>
-
-          <Card className="p-3 border-border">
-            <p className="text-xs text-muted-foreground mb-1">Advisor</p>
-            <p className="text-sm font-medium text-foreground">{roData.advisor}</p>
-          </Card>
-
-          <Card className="p-3 border-border">
-            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <User size={12} />
-              Technician
+            <p className="text-sm font-medium text-foreground">
+              {workOrder.date_promised ? new Date(workOrder.date_promised).toLocaleDateString() : "TBD"}
             </p>
-            {isEditing ? (
-              <select
-                value={roData.technician}
-                onChange={(e) => setRoData({ ...roData, technician: e.target.value })}
-                className="w-full px-2 py-1 text-sm rounded-md bg-card border border-border text-foreground"
-              >
-                <option value="">Unassigned</option>
-                <option value="Mike Rodriguez">Mike Rodriguez</option>
-                <option value="Sarah Chen">Sarah Chen</option>
-                <option value="James Wilson">James Wilson</option>
-                <option value="Lisa Park">Lisa Park</option>
-              </select>
-            ) : (
-              <p className="text-sm font-medium text-foreground">{roData.technician || "Unassigned"}</p>
-            )}
+          </Card>
+
+          <Card className="p-3 border-border">
+            <p className="text-xs text-muted-foreground mb-1">Customer Concern</p>
+            <p className="text-sm font-medium text-foreground italic line-clamp-2">
+              {workOrder.customer_concern || "None specified"}
+            </p>
+          </Card>
+
+          <Card className="p-3 border-border">
+            <p className="text-xs text-muted-foreground mb-1">License Plate</p>
+            <p className="text-sm font-medium text-foreground">
+              {workOrder.license_plate || "N/A"}
+            </p>
           </Card>
         </div>
 
@@ -347,26 +440,18 @@ export function RODetailView({ roId = "RO-4521", onClose }: { roId?: string; onC
           </div>
 
           <div className="space-y-3">
-            {services.map((service, index) => (
-              <div
-                key={service.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, index)}
-                onDragOver={(e) => handleDragOver(e, index)}
-                onDragEnd={handleDragEnd}
-                className={`transition-all ${dragOverIndex === index ? "border-t-2 border-primary" : ""}`}
-              >
-                <EditableServiceCard
-                  service={service}
-                  onUpdate={updateService}
-                  onRemove={() => removeService(service.id)}
-                  isDragging={dragIndex === index}
-                  roTechnician={roData.technician}
-                  dragHandleProps={{
-                    onMouseDown: (e) => e.stopPropagation(),
-                  }}
-                />
-              </div>
+            {services.map((service) => (
+              <Card key={service.id} className="p-4 border-border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium">{service.name}</h3>
+                    <p className="text-sm text-muted-foreground">{service.description}</p>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => removeService(service.id)}>
+                    <X size={16} />
+                  </Button>
+                </div>
+              </Card>
             ))}
           </div>
         </Card>
@@ -424,7 +509,7 @@ export function RODetailView({ roId = "RO-4521", onClose }: { roId?: string; onC
         {!isEditing && (
           <div className="flex items-center gap-2 pt-2 border-t border-border">
             <span className="text-sm text-muted-foreground">
-              {roData.customer} • {roData.email} • {roData.phone}
+              {workOrder.customer_name} • {workOrder.email || "No email"} • {workOrder.phone_primary}
             </span>
             <Button size="sm" variant="ghost" className="gap-1 ml-auto">
               <MessageSquare size={14} />

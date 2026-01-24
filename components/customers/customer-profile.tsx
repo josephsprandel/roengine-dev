@@ -1,25 +1,83 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Edit2, Mail, Phone, MessageSquare, MapPin, Calendar, DollarSign } from "lucide-react"
+import { ArrowLeft, Edit2, Mail, Phone, MessageSquare, MapPin, Calendar, DollarSign, Loader2 } from "lucide-react"
 import { VehicleManagement } from "./vehicle-management"
 
-export function CustomerProfile({ customerId = "cust-001", onClose }: { customerId?: string; onClose?: () => void }) {
-  const customer = {
-    id: customerId,
-    name: "John Mitchell",
-    phone: "(555) 234-5678",
-    email: "john.mitchell@email.com",
-    address: "123 Main St, Denver, CO 80202",
-    joinDate: "2022-03-15",
-    totalServices: 12,
-    totalSpent: "$4,250",
-    status: "active",
-    rating: 5,
-    notes: "Preferred customer - always uses premium services. Responds well to email communication.",
+interface Customer {
+  id: string
+  customer_name: string
+  first_name: string | null
+  last_name: string | null
+  phone_primary: string
+  phone_secondary: string | null
+  phone_mobile: string | null
+  email: string | null
+  address_line1: string | null
+  address_line2: string | null
+  city: string | null
+  state: string | null
+  zip: string | null
+  customer_type: string
+  is_active: boolean
+  created_at: string
+}
+
+export function CustomerProfile({ customerId, onClose }: { customerId: string; onClose?: () => void }) {
+  const [customer, setCustomer] = useState<Customer | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchCustomer = async () => {
+      setLoading(true)
+      setError(null)
+      
+      try {
+        const response = await fetch(`/v0/api/customers/${customerId}`)
+        if (!response.ok) {
+          throw new Error("Failed to load customer")
+        }
+        const data = await response.json()
+        setCustomer(data.customer)
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (customerId) {
+      fetchCustomer()
+    }
+  }, [customerId])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="animate-spin text-muted-foreground" size={32} />
+      </div>
+    )
   }
+
+  if (error || !customer) {
+    return (
+      <Card className="p-12 text-center">
+        <p className="text-destructive mb-2">Error loading customer</p>
+        <p className="text-sm text-muted-foreground mb-4">{error || "Customer not found"}</p>
+        {onClose && <Button onClick={onClose} variant="outline">Go Back</Button>}
+      </Card>
+    )
+  }
+
+  const fullAddress = [
+    customer.address_line1,
+    customer.address_line2,
+    [customer.city, customer.state, customer.zip].filter(Boolean).join(", ")
+  ].filter(Boolean).join(", ")
 
   return (
     <div className="space-y-6">
@@ -32,19 +90,15 @@ export function CustomerProfile({ customerId = "cust-001", onClose }: { customer
             </Button>
           )}
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-accent to-blue-600 flex items-center justify-center text-accent-foreground font-bold text-2xl">
-            {customer.name.charAt(0)}
+            {customer.customer_name.charAt(0)}
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">{customer.name}</h1>
+            <h1 className="text-3xl font-bold text-foreground">{customer.customer_name}</h1>
             <div className="flex items-center gap-2 mt-1">
-              <Badge className="bg-green-500/20 text-green-700 dark:text-green-400">Active Customer</Badge>
-              <div className="flex items-center gap-0.5">
-                {[...Array(5)].map((_, i) => (
-                  <span key={i} className={i < customer.rating ? "text-amber-500" : "text-muted-foreground"}>
-                    ★
-                  </span>
-                ))}
-              </div>
+              <Badge className={customer.is_active ? "bg-green-500/20 text-green-700 dark:text-green-400" : "bg-muted"}>
+                {customer.is_active ? "Active Customer" : "Inactive"}
+              </Badge>
+              <Badge variant="outline">{customer.customer_type}</Badge>
             </div>
           </div>
         </div>
@@ -63,24 +117,34 @@ export function CustomerProfile({ customerId = "cust-001", onClose }: { customer
               <div className="flex items-center gap-3">
                 <Phone size={18} className="text-accent flex-shrink-0" />
                 <div>
-                  <p className="text-sm text-muted-foreground">Phone</p>
-                  <p className="font-medium text-foreground">{customer.phone}</p>
+                  <p className="text-sm text-muted-foreground">Primary Phone</p>
+                  <p className="font-medium text-foreground">{customer.phone_primary}</p>
+                  {customer.phone_secondary && (
+                    <p className="text-sm text-muted-foreground">Secondary: {customer.phone_secondary}</p>
+                  )}
+                  {customer.phone_mobile && (
+                    <p className="text-sm text-muted-foreground">Mobile: {customer.phone_mobile}</p>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <Mail size={18} className="text-accent flex-shrink-0" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="font-medium text-foreground">{customer.email}</p>
+              {customer.email && (
+                <div className="flex items-center gap-3">
+                  <Mail size={18} className="text-accent flex-shrink-0" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Email</p>
+                    <p className="font-medium text-foreground">{customer.email}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <MapPin size={18} className="text-accent flex-shrink-0" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Address</p>
-                  <p className="font-medium text-foreground">{customer.address}</p>
+              )}
+              {fullAddress && (
+                <div className="flex items-center gap-3">
+                  <MapPin size={18} className="text-accent flex-shrink-0" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Address</p>
+                    <p className="font-medium text-foreground">{fullAddress}</p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
             <div className="flex gap-2 mt-4 pt-4 border-t border-border">
               <Button size="sm" variant="outline" className="gap-2 flex-1 bg-transparent">
@@ -101,11 +165,6 @@ export function CustomerProfile({ customerId = "cust-001", onClose }: { customer
           {/* Vehicles */}
           <VehicleManagement customerId={customerId} />
 
-          {/* Notes */}
-          <Card className="p-6 border-border">
-            <h2 className="text-lg font-semibold text-foreground mb-3">Customer Notes</h2>
-            <p className="text-foreground bg-muted/30 p-3 rounded-lg border border-border">{customer.notes}</p>
-          </Card>
         </div>
 
         {/* Sidebar */}
@@ -119,18 +178,7 @@ export function CustomerProfile({ customerId = "cust-001", onClose }: { customer
                   <Calendar size={16} className="text-accent" />
                   <p className="text-sm text-muted-foreground">Customer Since</p>
                 </div>
-                <p className="font-semibold text-foreground">{customer.joinDate}</p>
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <DollarSign size={16} className="text-accent" />
-                  <p className="text-sm text-muted-foreground">Total Spent</p>
-                </div>
-                <p className="font-semibold text-foreground text-xl">{customer.totalSpent}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Total Services</p>
-                <p className="font-semibold text-foreground text-2xl">{customer.totalServices}</p>
+                <p className="font-semibold text-foreground">{new Date(customer.created_at).toLocaleDateString()}</p>
               </div>
             </div>
           </Card>
