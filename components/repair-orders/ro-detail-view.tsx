@@ -458,137 +458,25 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           </div>
 
           <div className="space-y-3">
-            {services.map((service) => {
-              const isExpanded = expandedServices.has(service.id)
-              const serviceTotal = 
-                service.parts.reduce((sum, item) => sum + item.total, 0) +
-                service.labor.reduce((sum, item) => sum + item.total, 0) +
-                service.sublets.reduce((sum, item) => sum + item.total, 0) +
-                service.hazmat.reduce((sum, item) => sum + item.total, 0) +
-                service.fees.reduce((sum, item) => sum + item.total, 0)
-
-              return (
-                <Card key={service.id} className="border-border overflow-hidden">
-                  {/* Service Header */}
-                  <div 
-                    className="p-4 cursor-pointer hover:bg-muted/30 transition-colors"
-                    onClick={() => toggleServiceExpanded(service.id)}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-medium text-foreground">{service.name}</h3>
-                          <Badge variant="outline" className="text-xs">
-                            {service.status === 'completed' && '✓ Completed'}
-                            {service.status === 'in_progress' && '⚙ In Progress'}
-                            {service.status === 'pending' && '○ Pending'}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{service.description}</p>
-                        <p className="text-xs text-muted-foreground mt-1">Est. Time: {service.estimatedTime}</p>
-                      </div>
-                      <div className="flex items-center gap-2 ml-4">
-                        <div className="text-right">
-                          <p className="text-lg font-semibold text-foreground">${serviceTotal.toFixed(2)}</p>
-                        </div>
-                        <ChevronRight 
-                          size={20} 
-                          className={`text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Expanded Details */}
-                  {isExpanded && (
-                    <div className="px-4 pb-4 pt-2 border-t border-border bg-muted/20">
-                      {/* Parts */}
-                      {service.parts.length > 0 && (
-                        <div className="mb-3">
-                          <h4 className="text-xs font-semibold text-muted-foreground mb-2">PARTS</h4>
-                          {service.parts.map((part) => (
-                            <div key={part.id} className="flex justify-between text-sm mb-1">
-                              <span className="text-foreground">
-                                {part.description} <span className="text-muted-foreground">× {part.quantity}</span>
-                              </span>
-                              <span className="font-medium">${part.total.toFixed(2)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Labor */}
-                      {service.labor.length > 0 && (
-                        <div className="mb-3">
-                          <h4 className="text-xs font-semibold text-muted-foreground mb-2">LABOR</h4>
-                          {service.labor.map((labor) => (
-                            <div key={labor.id} className="flex justify-between text-sm mb-1">
-                              <span className="text-foreground">
-                                {labor.description} <span className="text-muted-foreground">× {labor.quantity}h</span>
-                              </span>
-                              <span className="font-medium">${labor.total.toFixed(2)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Sublets */}
-                      {service.sublets.length > 0 && (
-                        <div className="mb-3">
-                          <h4 className="text-xs font-semibold text-muted-foreground mb-2">SUBLETS</h4>
-                          {service.sublets.map((sublet) => (
-                            <div key={sublet.id} className="flex justify-between text-sm mb-1">
-                              <span className="text-foreground">{sublet.description}</span>
-                              <span className="font-medium">${sublet.total.toFixed(2)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Hazmat */}
-                      {service.hazmat.length > 0 && (
-                        <div className="mb-3">
-                          <h4 className="text-xs font-semibold text-muted-foreground mb-2">HAZMAT</h4>
-                          {service.hazmat.map((item) => (
-                            <div key={item.id} className="flex justify-between text-sm mb-1">
-                              <span className="text-foreground">{item.description}</span>
-                              <span className="font-medium">${item.total.toFixed(2)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Fees */}
-                      {service.fees.length > 0 && (
-                        <div className="mb-3">
-                          <h4 className="text-xs font-semibold text-muted-foreground mb-2">FEES</h4>
-                          {service.fees.map((fee) => (
-                            <div key={fee.id} className="flex justify-between text-sm mb-1">
-                              <span className="text-foreground">{fee.description}</span>
-                              <span className="font-medium">${fee.total.toFixed(2)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Remove Button */}
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="w-full mt-2 text-destructive border-destructive/30 hover:bg-destructive/10"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          removeService(service.id)
-                        }}
-                      >
-                        <X size={14} className="mr-1" />
-                        Remove Service
-                      </Button>
-                    </div>
-                  )}
-                </Card>
-              )
-            })}
+            {services.map((service, index) => (
+              <div
+                key={service.id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDragEnd={handleDragEnd}
+                className={`transition-all ${dragOverIndex === index ? "border-t-2 border-primary" : ""}`}
+              >
+                <EditableServiceCard
+                  service={service}
+                  onUpdate={updateService}
+                  onRemove={() => removeService(service.id)}
+                  isDragging={dragIndex === index}
+                  roTechnician="Unassigned"
+                  dragHandleProps={dragHandleProps}
+                />
+              </div>
+            ))}
           </div>
         </Card>
 
