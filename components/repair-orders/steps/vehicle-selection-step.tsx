@@ -115,25 +115,56 @@ export function VehicleSelectionStep({
   const handleAnalyzeImages = async () => {
     setIsAnalyzing(true)
 
-    // Simulate AI analysis delay
-    await new Promise((resolve) => setTimeout(resolve, 2500))
+    try {
+      console.log('=== STARTING VEHICLE ANALYSIS ===')
+      console.log('Number of images:', uploadedImages.length)
 
-    // Simulated extracted data
-    const simulatedExtraction: Partial<VehicleData> = {
-      year: "2023",
-      make: "Ford",
-      model: "F-150",
-      trim: "Lariat",
-      vin: "1FTFW1E85NFA12345",
-      licensePlate: "CO-12345",
-      color: "Iconic Silver",
-      mileage: "",
+      // Create FormData with images
+      const formData = new FormData()
+      uploadedImages.forEach((img) => {
+        formData.append('images', img.file)
+      })
+
+      // Call the API
+      const response = await fetch('/v0/api/analyze-vehicle', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to analyze images')
+      }
+
+      const result = await response.json()
+      console.log('Analysis result:', result)
+
+      if (result.success && result.data) {
+        const extracted: Partial<VehicleData> = {
+          year: result.data.year || "",
+          make: result.data.make || "",
+          model: result.data.model || "",
+          trim: result.data.trim || "",
+          vin: result.data.vin || "",
+          licensePlate: result.data.licensePlate || "",
+          color: result.data.color || "",
+          mileage: result.data.mileage || "",
+        }
+
+        setExtractedData(extracted)
+        setManualData((prev) => ({ ...prev, ...extracted }))
+        setAnalysisComplete(true)
+        console.log('Vehicle data extracted successfully')
+      } else {
+        throw new Error('No data extracted from images')
+      }
+    } catch (error: any) {
+      console.error('Analysis error:', error)
+      alert(`Failed to analyze images: ${error.message}`)
+    } finally {
+      setIsAnalyzing(false)
+      console.log('=================================')
     }
-
-    setExtractedData(simulatedExtraction)
-    setManualData((prev) => ({ ...prev, ...simulatedExtraction }))
-    setIsAnalyzing(false)
-    setAnalysisComplete(true)
   }
 
   const handleSelectExisting = (vehicle: typeof existingVehicles[0]) => {
