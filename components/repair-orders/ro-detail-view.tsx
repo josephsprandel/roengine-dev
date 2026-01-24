@@ -153,6 +153,7 @@ interface WorkOrder {
 }
 
 export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => void }) {
+  // ALL HOOKS MUST BE AT THE TOP - BEFORE ANY EARLY RETURNS!
   const [workOrder, setWorkOrder] = useState<WorkOrder | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -161,6 +162,74 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
+  // ALL useMemo and useCallback MUST ALSO BE AT THE TOP
+  const totals = useMemo(() => {
+    const initial = { parts: 0, labor: 0, sublets: 0, hazmat: 0, fees: 0, total: 0 }
+    return services.reduce((acc, svc) => {
+      const partsSum = svc.parts.reduce((sum, item) => sum + item.total, 0)
+      const laborSum = svc.labor.reduce((sum, item) => sum + item.total, 0)
+      const subletsSum = svc.sublets.reduce((sum, item) => sum + item.total, 0)
+      const hazmatSum = svc.hazmat.reduce((sum, item) => sum + item.total, 0)
+      const feesSum = svc.fees.reduce((sum, item) => sum + item.total, 0)
+      return {
+        parts: acc.parts + partsSum,
+        labor: acc.labor + laborSum,
+        sublets: acc.sublets + subletsSum,
+        hazmat: acc.hazmat + hazmatSum,
+        fees: acc.fees + feesSum,
+        total: acc.total + partsSum + laborSum + subletsSum + hazmatSum + feesSum,
+      }
+    }, initial)
+  }, [services])
+
+  const handleSave = useCallback(() => {
+    setIsEditing(false)
+  }, [])
+
+  const updateService = useCallback((updated: ServiceData) => {
+    setServices(prev => prev.map((s) => (s.id === updated.id ? updated : s)))
+  }, [])
+
+  const removeService = useCallback((id: string) => {
+    setServices(prev => prev.filter((s) => s.id !== id))
+  }, [])
+
+  const addService = useCallback(() => {
+    const newService: ServiceData = {
+      id: `svc-${Date.now()}`,
+      name: "New Service",
+      description: "",
+      estimatedCost: 0,
+      estimatedTime: "TBD",
+      category: "Custom",
+      status: "pending",
+      parts: [],
+      labor: [],
+      sublets: [],
+      hazmat: [],
+      fees: [],
+    }
+    setServices(prev => [...prev, newService])
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    if (dragIndex !== null && dragOverIndex !== null && dragIndex !== dragOverIndex) {
+      setServices(prev => {
+        const newServices = [...prev]
+        const [removed] = newServices.splice(dragIndex, 1)
+        newServices.splice(dragOverIndex, 0, removed)
+        return newServices
+      })
+    }
+    setDragIndex(null)
+    setDragOverIndex(null)
+  }, [dragIndex, dragOverIndex])
+
+  const dragHandleProps = useMemo(() => ({
+    onMouseDown: (e: React.MouseEvent) => e.stopPropagation(),
+  }), [])
+
+  // useEffect MUST also be before early returns
   useEffect(() => {
     const fetchWorkOrder = async () => {
       try {
@@ -216,6 +285,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     }
   }, [roId])
 
+  // NOW we can do early returns - ALL HOOKS are called above
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -234,55 +304,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     )
   }
 
-  const totals = useMemo(() => {
-    const initial = { parts: 0, labor: 0, sublets: 0, hazmat: 0, fees: 0, total: 0 }
-    return services.reduce((acc, svc) => {
-      const partsSum = svc.parts.reduce((sum, item) => sum + item.total, 0)
-      const laborSum = svc.labor.reduce((sum, item) => sum + item.total, 0)
-      const subletsSum = svc.sublets.reduce((sum, item) => sum + item.total, 0)
-      const hazmatSum = svc.hazmat.reduce((sum, item) => sum + item.total, 0)
-      const feesSum = svc.fees.reduce((sum, item) => sum + item.total, 0)
-      return {
-        parts: acc.parts + partsSum,
-        labor: acc.labor + laborSum,
-        sublets: acc.sublets + subletsSum,
-        hazmat: acc.hazmat + hazmatSum,
-        fees: acc.fees + feesSum,
-        total: acc.total + partsSum + laborSum + subletsSum + hazmatSum + feesSum,
-      }
-    }, initial)
-  }, [services])
-
-  const handleSave = useCallback(() => {
-    setIsEditing(false)
-  }, [])
-
-  const updateService = useCallback((updated: ServiceData) => {
-    setServices(prev => prev.map((s) => (s.id === updated.id ? updated : s)))
-  }, [])
-
-  const removeService = useCallback((id: string) => {
-    setServices(prev => prev.filter((s) => s.id !== id))
-  }, [])
-
-  const addService = useCallback(() => {
-    const newService: ServiceData = {
-      id: `svc-${Date.now()}`,
-      name: "New Service",
-      description: "",
-      estimatedCost: 0,
-      estimatedTime: "TBD",
-      category: "Custom",
-      status: "pending",
-      parts: [],
-      labor: [],
-      sublets: [],
-      hazmat: [],
-      fees: [],
-    }
-    setServices(prev => [...prev, newService])
-  }, [])
-
+  // Non-hook functions can stay here
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDragIndex(index)
     e.dataTransfer.effectAllowed = "move"
@@ -294,23 +316,6 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
       setDragOverIndex(index)
     }
   }
-
-  const handleDragEnd = useCallback(() => {
-    if (dragIndex !== null && dragOverIndex !== null && dragIndex !== dragOverIndex) {
-      setServices(prev => {
-        const newServices = [...prev]
-        const [removed] = newServices.splice(dragIndex, 1)
-        newServices.splice(dragOverIndex, 0, removed)
-        return newServices
-      })
-    }
-    setDragIndex(null)
-    setDragOverIndex(null)
-  }, [dragIndex, dragOverIndex])
-
-  const dragHandleProps = useMemo(() => ({
-    onMouseDown: (e: React.MouseEvent) => e.stopPropagation(),
-  }), [])
 
   return (
     <div className="space-y-4">
