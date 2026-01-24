@@ -1,3 +1,5 @@
+import { Sidebar } from "@/components/layout/sidebar"
+import { Header } from "@/components/layout/header"
 import { RODetailView } from '@/components/repair-orders/ro-detail-view'
 
 export default async function RepairOrderDetailPage({
@@ -8,8 +10,16 @@ export default async function RepairOrderDetailPage({
   const { id } = await params
   
   return (
-    <div className="container mx-auto p-6">
-      <RODetailView roId={id} />
+    <div className="flex h-screen bg-background">
+      <Sidebar />
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <Header />
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-6">
+            <RODetailView roId={id} />
+          </div>
+        </main>
+      </div>
     </div>
   )
 }
