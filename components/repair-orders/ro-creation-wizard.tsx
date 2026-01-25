@@ -1,9 +1,10 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Check, ChevronRight, User, Car, Wrench, FileText } from "lucide-react"
+import { Check, ChevronRight, User, Car, Wrench, FileText, Loader2 } from "lucide-react"
 import { CustomerSelectionStep } from "./steps/customer-selection-step"
 import { VehicleSelectionStep } from "./steps/vehicle-selection-step"
 import { ServicesStep } from "./steps/services-step"
@@ -67,6 +68,8 @@ export function ROCreationWizard() {
   const [vehicleData, setVehicleData] = useState<VehicleData | null>(null)
   const [selectedServices, setSelectedServices] = useState<ServiceData[]>([])
   const [notes, setNotes] = useState("")
+  const [isCreating, setIsCreating] = useState(false)
+  const router = useRouter()
 
   const canProceed = () => {
     switch (currentStep) {
@@ -95,10 +98,102 @@ export function ROCreationWizard() {
     }
   }
 
-  const handleCreateRO = () => {
-    // Create the RO
-    console.log("Creating RO:", { customerData, vehicleData, selectedServices, notes })
-    // Navigate to the new RO or show success
+  const handleCreateRO = async () => {
+    if (!customerData || !vehicleData) {
+      alert("Customer and vehicle data are required")
+      return
+    }
+
+    setIsCreating(true)
+    
+    try {
+      console.log("[RO Wizard] Creating RO...", { customerData, vehicleData, selectedServices })
+
+      // Step 1: Create customer if new
+      let customerId = customerData.id
+      if (customerData.isNew) {
+        console.log("[RO Wizard] Creating new customer...")
+        const customerResponse = await fetch('/v0/api/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customer_name: customerData.name,
+            phone_primary: customerData.phone,
+            email: customerData.email || null,
+            customer_type: 'individual'
+          })
+        })
+
+        if (!customerResponse.ok) {
+          throw new Error('Failed to create customer')
+        }
+
+        const customerResult = await customerResponse.json()
+        customerId = customerResult.customer.id
+        console.log("[RO Wizard] Customer created:", customerId)
+      }
+
+      // Step 2: Create vehicle if new
+      let vehicleId = vehicleData.id
+      if (vehicleData.isNew) {
+        console.log("[RO Wizard] Creating new vehicle...")
+        const vehicleResponse = await fetch('/v0/api/vehicles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customer_id: customerId,
+            year: vehicleData.year,
+            make: vehicleData.make,
+            model: vehicleData.model,
+            trim: vehicleData.trim || null,
+            vin: vehicleData.vin,
+            license_plate: vehicleData.licensePlate || null,
+            color: vehicleData.color || null,
+            odometer: vehicleData.mileage ? parseInt(vehicleData.mileage.replace(/,/g, '')) : null
+          })
+        })
+
+        if (!vehicleResponse.ok) {
+          throw new Error('Failed to create vehicle')
+        }
+
+        const vehicleResult = await vehicleResponse.json()
+        vehicleId = vehicleResult.vehicle.id
+        console.log("[RO Wizard] Vehicle created:", vehicleId)
+      }
+
+      // Step 3: Create work order
+      console.log("[RO Wizard] Creating work order...")
+      const woResponse = await fetch('/v0/api/work-orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id: customerId,
+          vehicle_id: vehicleId,
+          state: 'estimate',
+          date_opened: new Date().toISOString().slice(0, 10),
+          customer_concern: notes || null,
+          label: selectedServices.length > 0 ? selectedServices[0].name : null
+        })
+      })
+
+      if (!woResponse.ok) {
+        throw new Error('Failed to create work order')
+      }
+
+      const woResult = await woResponse.json()
+      console.log("[RO Wizard] Work order created:", woResult.work_order.ro_number)
+
+      // Success! Navigate to the new RO
+      alert(`✅ Repair Order ${woResult.work_order.ro_number} created successfully!`)
+      router.push(`/v0/repair-orders/${woResult.work_order.id}`)
+
+    } catch (error: any) {
+      console.error("[RO Wizard] Error:", error)
+      alert(`Failed to create repair order: ${error.message}`)
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   return (
@@ -197,9 +292,22 @@ export function ROCreationWizard() {
               <ChevronRight size={16} />
             </Button>
           ) : (
-            <Button onClick={handleCreateRO} className="gap-2">
-              Create Repair Order
-              <Check size={16} />
+            <Button 
+              onClick={handleCreateRO} 
+              disabled={isCreating}
+              className="gap-2"
+            >
+              {isCreating ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  Create Repair Order
+                  <Check size={16} />
+                </>
+              )}
             </Button>
           )}
         </div>
