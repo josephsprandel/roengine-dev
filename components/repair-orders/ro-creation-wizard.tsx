@@ -186,7 +186,7 @@ export function ROCreationWizard() {
 
       // Success! Navigate to the new RO
       alert(`✅ Repair Order ${woResult.work_order.ro_number} created successfully!`)
-      router.push(`/v0/repair-orders/${woResult.work_order.id}`)
+      router.push(`/repair-orders/${woResult.work_order.id}`)
 
     } catch (error: any) {
       console.error("[RO Wizard] Error:", error)
