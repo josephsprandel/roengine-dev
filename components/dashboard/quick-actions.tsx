@@ -1,23 +1,15 @@
 "use client"
 
-import { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Plus, FileText, Phone, Edit2 } from "lucide-react"
-import { WorkOrderCreateWizard } from "@/components/repair-orders/work-order-create-wizard"
 import { useRouter } from "next/navigation"
 
 export function QuickActions() {
   const router = useRouter()
-  const [showCreateRO, setShowCreateRO] = useState(false)
-
-  const handleROCreated = (roNumber: string) => {
-    // Show success and redirect to repair orders page
-    router.push('/repair-orders')
-  }
 
   const actions = [
-    { icon: Plus, label: "Create New RO", color: "text-blue-500", onClick: () => setShowCreateRO(true) },
+    { icon: Plus, label: "Create New RO", color: "text-blue-500", onClick: () => router.push('/repair-orders/new') },
     { icon: FileText, label: "Generate Estimate", color: "text-purple-500" },
     { icon: Phone, label: "Send SMS Update", color: "text-green-500" },
     { icon: Edit2, label: "Edit Active RO", color: "text-orange-500" },
@@ -45,11 +37,6 @@ export function QuickActions() {
         </div>
       </Card>
 
-      <WorkOrderCreateWizard
-        open={showCreateRO}
-        onOpenChange={setShowCreateRO}
-        onSuccess={handleROCreated}
-      />
     </>
   )
 }
