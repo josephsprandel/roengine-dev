@@ -31,6 +31,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import type { ServiceData, LineItem } from "./ro-creation-wizard"
 import { EditableServiceCard, createLineItem } from "./editable-service-card"
 import type { LineItemCategory } from "./editable-service-card"
+import { PartsSelectionModal } from "./parts-selection-modal"
 
 // Workflow stages - MOVED OUTSIDE to prevent re-creation on every render
 const WORKFLOW_STAGES = [
@@ -188,6 +189,11 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   const [aiServices, setAiServices] = useState<any[]>([])
   const [selectedAiServices, setSelectedAiServices] = useState<any[]>([])
   const [aiSource, setAiSource] = useState<string | null>(null)
+
+  // Parts generation states
+  const [partsDialogOpen, setPartsDialogOpen] = useState(false)
+  const [servicesWithParts, setServicesWithParts] = useState<any[]>([])
+  const [generatingParts, setGeneratingParts] = useState(false)
 
   // ALL useMemo and useCallback MUST ALSO BE AT THE TOP
   const totals = useMemo(() => {
@@ -624,67 +630,141 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     )
   }, [])
 
+  /**
+   * NEW FLOW: Generate parts list with AI + PartsTech pricing
+   * 
+   * This replaces the old "add services with labor only" flow.
+   * Now we:
+   * 1. Generate parts list via AI
+   * 2. Look up pricing via PartsTech
+   * 3. Show parts selection modal
+   * 4. Add services + parts to RO
+   */
   const addSelectedAiServices = useCallback(async () => {
     if (!workOrder?.id || selectedAiServices.length === 0) return
 
-    console.log('=== SAVING AI SERVICES TO WORK ORDER ===')
+    console.log('=== GENERATING PARTS LIST FOR SERVICES ===')
     console.log('Selected services:', selectedAiServices.length)
 
+    setGeneratingParts(true)
     setAiDialogOpen(false)
 
-    // Save each selected service - create service record first, then add labor item
-    for (const aiService of selectedAiServices) {
+    try {
+      // Step 1: Generate parts list via AI
+      const partsResponse = await fetch('/api/services/generate-parts-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          services: selectedAiServices.map(s => ({
+            service_name: s.service_name,
+            service_description: s.service_description
+          })),
+          vehicle: {
+            year: workOrder.year,
+            make: workOrder.make,
+            model: workOrder.model,
+            engine: `${workOrder.year} ${workOrder.make} ${workOrder.model}`,
+            vin: workOrder.vin
+          }
+        })
+      })
+
+      if (!partsResponse.ok) {
+        throw new Error('Failed to generate parts list')
+      }
+
+      const { servicesWithParts: generatedParts } = await partsResponse.json()
+      console.log('✓ Parts generated for', generatedParts.length, 'services')
+
+      // Step 2: Show parts selection modal
+      setServicesWithParts(generatedParts)
+      setPartsDialogOpen(true)
+
+    } catch (error: any) {
+      console.error('Failed to generate parts:', error)
+      showToast(error.message || 'Failed to generate parts list', 'error')
+    } finally {
+      setGeneratingParts(false)
+    }
+  }, [selectedAiServices, workOrder, showToast])
+
+  /**
+   * Confirm parts selection and add services + parts to RO
+   */
+  const handleConfirmPartsSelection = useCallback(async (servicesWithSelectedParts: any[]) => {
+    if (!workOrder?.id) return
+
+    console.log('=== ADDING SERVICES WITH PARTS ===')
+    setPartsDialogOpen(false)
+
+    // Save each service with its selected parts
+    for (let i = 0; i < servicesWithSelectedParts.length; i++) {
+      const serviceData = servicesWithSelectedParts[i]
+      const aiService = selectedAiServices[i]
+
       try {
-        console.log('Creating service:', aiService.service_name)
+        console.log('Creating service:', serviceData.serviceName)
 
         // Step 1: Create service record
         const serviceResponse = await fetch(`/api/work-orders/${workOrder.id}/services`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title: aiService.service_name,
+            title: serviceData.serviceName,
             description: aiService.service_description || '',
-            display_order: services.length,
-            ai_generated: true,
-          }),
+            display_order: services.length + i,
+            ai_generated: true
+          })
         })
 
         if (!serviceResponse.ok) {
-          console.error('✗ Failed to create service:', aiService.service_name)
+          console.error('✗ Failed to create service:', serviceData.serviceName)
           continue
         }
 
-        const serviceData = await serviceResponse.json()
-        const serviceId = serviceData.service?.id
+        const serviceResult = await serviceResponse.json()
+        const serviceId = serviceResult.service?.id
         console.log('✓ Service created - ID:', serviceId)
 
-        // Step 2: Add labor item linked to the service
-        const laborResponse = await fetch(`/api/work-orders/${workOrder.id}/items`, {
+        // Step 2: Add labor item
+        await fetch(`/api/work-orders/${workOrder.id}/items`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             item_type: 'labor',
-            description: aiService.service_name,
+            description: serviceData.serviceName,
             notes: aiService.service_description,
-            quantity: 1,
-            unit_price: 0,
-            labor_hours: aiService.estimated_labor_hours || 0,
+            labor_hours: aiService.estimated_labor_hours || 1,
             labor_rate: 160,
             is_taxable: false,
-            display_order: 0,
-            service_id: serviceId,
-          }),
+            service_id: serviceId
+          })
         })
+        console.log('✓ Labor item added')
 
-        if (laborResponse.ok) {
-          const data = await laborResponse.json()
-          console.log('✓ Labor item added - DB ID:', data.item?.id)
-        } else {
-          const errorText = await laborResponse.text()
-          console.error('✗ Failed to add labor item:', errorText)
+        // Step 3: Add part items
+        for (const part of serviceData.parts) {
+          if (!part.selectedOption) {
+            console.log('⚠️ No pricing for:', part.description, '- skipping')
+            continue
+          }
+
+          await fetch(`/api/work-orders/${workOrder.id}/items`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              item_type: 'part',
+              description: part.selectedOption.description || part.description,
+              quantity: part.quantity,
+              unit_price: part.selectedOption.retailPrice,
+              is_taxable: true,
+              service_id: serviceId
+            })
+          })
+          console.log('✓ Part added:', part.description)
         }
       } catch (error) {
-        console.error('Error saving service:', error)
+        console.error('Error adding service:', error)
       }
     }
 
@@ -694,16 +774,16 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
       const servicesResponse = await fetch(`/api/work-orders/${workOrder.id}/services`)
       if (servicesResponse.ok) {
         const servicesData = await servicesResponse.json()
-        console.log('✓ Reloaded', servicesData.services?.length || 0, 'services')
         const loadedServices = convertDbServicesToServiceData(servicesData.services || [])
         setServices(loadedServices)
+        showToast('Services and parts added to RO', 'success')
       }
     } catch (error) {
       console.error('Error reloading services:', error)
     }
 
     console.log('=== SAVE COMPLETE ===')
-  }, [selectedAiServices, workOrder, services.length])
+  }, [workOrder, selectedAiServices, services, showToast])
 
   const handleDragEnd = useCallback(() => {
     if (dragIndex !== null && dragOverIndex !== null && dragIndex !== dragOverIndex) {
@@ -1172,10 +1252,17 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
               </div>
 
               <div className="flex gap-2 mt-4">
-                <Button onClick={addSelectedAiServices} className="flex-1">
-                  Add {selectedAiServices.length} Service{selectedAiServices.length !== 1 ? 's' : ''} to RO
+                <Button onClick={addSelectedAiServices} className="flex-1" disabled={generatingParts}>
+                  {generatingParts ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generating parts list...
+                    </>
+                  ) : (
+                    <>Add {selectedAiServices.length} Service{selectedAiServices.length !== 1 ? 's' : ''} to RO</>
+                  )}
                 </Button>
-                <Button variant="outline" onClick={() => setAiDialogOpen(false)}>
+                <Button variant="outline" onClick={() => setAiDialogOpen(false)} disabled={generatingParts}>
                   Cancel
                 </Button>
               </div>
@@ -1200,6 +1287,14 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Parts Selection Modal */}
+      <PartsSelectionModal
+        isOpen={partsDialogOpen}
+        onClose={() => setPartsDialogOpen(false)}
+        servicesWithParts={servicesWithParts}
+        onConfirm={handleConfirmPartsSelection}
+      />
     </div>
   )
 }
