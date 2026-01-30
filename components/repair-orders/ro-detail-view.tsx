@@ -573,19 +573,31 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   const saveRecommendationsToDatabase = async (services: any[]) => {
     if (!workOrder?.vehicle_id || !services || services.length === 0) {
       console.log('[DEBUG] Skip save: no vehicle_id or no services')
+      console.log('[DEBUG] workOrder.vehicle_id:', workOrder?.vehicle_id)
       return
     }
 
     try {
       console.log('[DEBUG] Saving recommendations to database...')
       console.log('[DEBUG] Vehicle ID:', workOrder.vehicle_id)
+      console.log('[DEBUG] Vehicle ID type:', typeof workOrder.vehicle_id)
       console.log('[DEBUG] Services count:', services.length)
+
+      // Ensure vehicle_id is a number
+      const vehicleId = typeof workOrder.vehicle_id === 'string' 
+        ? parseInt(workOrder.vehicle_id, 10) 
+        : workOrder.vehicle_id
+
+      if (!vehicleId || isNaN(vehicleId)) {
+        console.error('[DEBUG] Invalid vehicle_id:', vehicleId)
+        return
+      }
 
       const saveResponse = await fetch('/api/save-recommendations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vehicle_id: workOrder.vehicle_id,
+          vehicle_id: vehicleId,
           services: services
         })
       })
