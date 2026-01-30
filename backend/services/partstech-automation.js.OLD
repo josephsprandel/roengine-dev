@@ -1,0 +1,1840 @@
+/**
+ * PartsTech Browser Automation Module
+ * 
+ * Uses Playwright for browser automation and Gemini vision for intelligent
+ * AI-driven page navigation and data extraction.
+ * 
+ * Features:
+ * - Session management (login once, search multiple times)
+ * - Full AI navigation using Gemini vision (no hardcoded selectors)
+ * - VIN-based vehicle loading
+ * - Multi-vendor results extraction
+ * - Manual vs AI operating modes
+ */
+
+require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env.local') });
+const { chromium } = require('playwright');
+const { analyzeImageAsJson, getModelWithConfig, analyzeImage } = require('./gemini-client');
+
+// PartsTech URLs
+const PARTSTECH_URL = 'https://app.partstech.com';
+
+// Session state
+let browser = null;
+let context = null;
+let page = null;
+let isLoggedIn = false;
+let currentVehicle = null;
+
+// Debug settings
+const DEBUG_SCREENSHOTS = process.env.DEBUG_SCREENSHOTS === 'true';
+const SCREENSHOT_DIR = '/tmp/partstech-debug';
+
+/**
+ * Save debug screenshot if enabled
+ */
+async function saveDebugScreenshot(name, fullPage = false) {
+  if (DEBUG_SCREENSHOTS && page) {
+    const fs = require('fs');
+    if (!fs.existsSync(SCREENSHOT_DIR)) {
+      fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+    }
+    const filename = `${SCREENSHOT_DIR}/${Date.now()}-${name}.png`;
+    // Use viewport screenshot by default to better capture modals/overlays
+    await page.screenshot({ path: filename, fullPage: fullPage });
+    console.log(`  📸 Debug screenshot: ${filename}`);
+  }
+}
+
+/**
+ * Use Gemini to find an element and perform an action
+ * @param {string} description - What to find
+ * @param {string} action - 'click', 'fill', 'extract'
+ * @param {string} value - Value to fill (for 'fill' action)
+ * @param {number} retries - Number of retries
+ * @returns {Promise<Object>} - Result of the action
+ */
+async function aiAction(description, action, value = null, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const screenshot = await page.screenshot({ type: 'png' });
+      
+      let prompt;
+      if (action === 'click') {
+        prompt = `You are analyzing a web page screenshot. Find this element: "${description}"
+
+You MUST respond with ONLY a JSON object in this exact format:
+{"found":true,"selector":"CSS_SELECTOR_HERE","text":"BUTTON_TEXT_HERE","x":123,"y":456}
+
+Or if not found:
+{"found":false,"reason":"explanation"}
+
+Rules:
+- selector should be a valid CSS selector like "button.login" or "#submit" or "[type='submit']"
+- text should be the exact visible text on the element
+- x,y are pixel coordinates from top-left
+- DO NOT return just a selector - wrap it in JSON
+
+Respond with ONLY the JSON object, no other text.`;
+      } else if (action === 'fill') {
+        prompt = `You are analyzing a web page screenshot. Find this input field: "${description}"
+
+You MUST respond with ONLY a JSON object in this exact format:
+{"found":true,"selector":"CSS_SELECTOR_HERE","placeholder":"PLACEHOLDER_TEXT","x":123,"y":456}
+
+Or if not found:
+{"found":false,"reason":"explanation"}
+
+Rules:
+- selector should be a valid CSS selector like "input#email" or "[name='username']"
+- placeholder is the input placeholder text if visible
+- x,y are pixel coordinates from top-left
+- DO NOT return just a selector - wrap it in JSON
+
+Respond with ONLY the JSON object, no other text.`;
+      }
+
+      let result;
+      try {
+        result = await analyzeImageAsJson(screenshot, prompt);
+      } catch (parseError) {
+        // If JSON parsing fails, try to extract selector from raw response
+        const rawText = await require('./gemini-client').analyzeImage(screenshot, prompt);
+        console.log(`  🔍 Raw AI response: ${rawText.substring(0, 100)}...`);
+        
+        // Check if it looks like a selector
+        if (rawText.includes('[') || rawText.includes('#') || rawText.includes('.')) {
+          const selectorMatch = rawText.match(/[\[\#\.][^\s\n]+/);
+          if (selectorMatch) {
+            result = { found: true, selector: selectorMatch[0] };
+          } else {
+            throw parseError;
+          }
+        } else {
+          throw parseError;
+        }
+      }
+      
+      if (!result.found) {
+        console.log(`  ⚠️ Not found: ${description} - ${result.reason || 'unknown reason'}`);
+        if (attempt < retries) {
+          await page.waitForTimeout(2000);
+          continue;
+        }
+        return { success: false, message: result.reason || 'Element not found' };
+      }
+
+      // Get coordinates from either format
+      const coords = result.coordinates || (result.x && result.y ? { x: result.x, y: result.y } : null);
+
+      // Execute the action
+      if (action === 'click') {
+        if (result.selector) {
+          try {
+            await page.click(result.selector, { timeout: 5000 });
+            console.log(`  ✓ Clicked via selector: ${result.selector}`);
+            return { success: true };
+          } catch (e) {
+            console.log(`  ⚠️ Selector failed: ${e.message}`);
+          }
+        }
+        if (result.text) {
+          try {
+            await page.getByText(result.text, { exact: false }).first().click({ timeout: 5000 });
+            console.log(`  ✓ Clicked via text: "${result.text}"`);
+            return { success: true };
+          } catch (e) {
+            console.log(`  ⚠️ Text click failed: ${e.message}`);
+          }
+        }
+        if (coords) {
+          await page.mouse.click(coords.x, coords.y);
+          console.log(`  ✓ Clicked at coordinates: (${coords.x}, ${coords.y})`);
+          return { success: true };
+        }
+      } else if (action === 'fill') {
+        if (result.selector) {
+          try {
+            await page.fill(result.selector, value, { timeout: 5000 });
+            console.log(`  ✓ Filled via selector: ${result.selector}`);
+            return { success: true };
+          } catch (e) {
+            console.log(`  ⚠️ Fill selector failed: ${e.message}`);
+          }
+        }
+        if (coords) {
+          // Click to focus, then triple-click to select all, then type
+          await page.mouse.click(coords.x, coords.y);
+          await page.waitForTimeout(300);
+          await page.mouse.click(coords.x, coords.y, { clickCount: 3 }); // Select all
+          await page.waitForTimeout(100);
+          await page.keyboard.type(value);
+          await page.waitForTimeout(100);
+          console.log(`  ✓ Filled via coordinates: (${coords.x}, ${coords.y})`);
+          return { success: true };
+        }
+        
+        // Last resort: try Tab + typing
+        await page.keyboard.press('Tab');
+        await page.waitForTimeout(200);
+        await page.keyboard.type(value);
+        console.log(`  ✓ Filled via Tab + type`);
+        return { success: true };
+      }
+
+      return { success: false, message: 'Could not execute action' };
+
+    } catch (error) {
+      console.log(`  ❌ AI action error (attempt ${attempt + 1}): ${error.message}`);
+      if (attempt < retries) {
+        await page.waitForTimeout(2000);
+      }
+    }
+  }
+  
+  return { success: false, message: 'All retries exhausted' };
+}
+
+/**
+ * Try to dismiss any alert/modal popups
+ */
+async function dismissAlerts(maxAttempts = 3) {
+  console.log('🔔 Checking for popups/alerts...');
+  
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Check if there's a visible modal
+    const modalExists = await page.$('[data-testid^="modal-"]');
+    const hasVisibleModal = modalExists && await modalExists.isVisible().catch(() => false);
+    
+    if (!hasVisibleModal && attempt > 0) {
+      console.log('  ✓ No more modals detected');
+      return;
+    }
+    
+    // Try specific PartsTech modal selectors first
+    const dismissSelectors = [
+      // PartsTech specific patterns
+      '[data-testid^="modal-"] button:has-text("Update")',
+      '[data-testid^="modal-"] button:has-text("Skip")',
+      '[data-testid^="modal-"] button:has-text("Not Now")',
+      '[data-testid^="modal-"] button:has-text("Later")',
+      '[data-testid^="modal-"] button:has-text("Close")',
+      '[data-testid^="modal-"] button:has-text("OK")',
+      '[data-testid^="modal-"] button:has-text("Got it")',
+      '[data-testid^="modal-"] button:has-text("Dismiss")',
+      '[data-testid^="modal-"] button:has-text("Cancel")',
+      '[data-testid^="modal-"] [aria-label="Close"]',
+      '[data-testid^="modal-"] .close',
+      '[data-testid^="modal-"] button[class*="close"]',
+      // Generic patterns
+      'button:has-text("Close")',
+      'button:has-text("OK")',
+      'button:has-text("Got it")',
+      'button:has-text("Dismiss")',
+      'button:has-text("Skip")',
+      'button:has-text("Not Now")',
+      'button:has-text("Later")',
+      'button:has-text("Cancel")',
+      '[aria-label="Close"]',
+      '.modal-close',
+      'button.close',
+      '[data-dismiss="modal"]',
+      // Click backdrop/overlay to close
+      '.ui-modal-backdrop',
+      '[class*="overlay"]',
+      '[class*="backdrop"]'
+    ];
+
+    let dismissed = false;
+    for (const selector of dismissSelectors) {
+      try {
+        const element = await page.$(selector);
+        if (element && await element.isVisible()) {
+          await element.click({ timeout: 2000 });
+          console.log(`  ✓ Dismissed popup via: ${selector}`);
+          await page.waitForTimeout(1000);
+          dismissed = true;
+          break;
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+
+    // Try Escape key multiple times
+    if (!dismissed) {
+      for (let i = 0; i < 3; i++) {
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+      }
+    }
+    
+    // AI detection as last resort
+    if (!dismissed) {
+      try {
+        const screenshot = await page.screenshot({ type: 'png' });
+        const result = await analyzeImageAsJson(screenshot, `
+Look for any modal/alert/popup dialog on this page. If found, identify the BEST button to close/dismiss it.
+
+Common dismiss buttons: Update, Skip, Not Now, Later, Close, OK, Got it, Cancel, X
+
+Return JSON: {"alert_found":true,"dismiss_text":"exact button text to click"} or {"alert_found":false}
+`);
+        if (result && result.alert_found && result.dismiss_text) {
+          console.log(`  Found alert via AI: "${result.dismiss_text}"`);
+          try {
+            await page.getByText(result.dismiss_text, { exact: false }).first().click({ timeout: 3000 });
+            console.log(`  ✓ Dismissed via text: "${result.dismiss_text}"`);
+            dismissed = true;
+          } catch (e) {
+            // Try clicking any button containing the text
+            try {
+              await page.locator(`button:has-text("${result.dismiss_text}")`).first().click({ timeout: 3000 });
+              console.log(`  ✓ Dismissed via button text: "${result.dismiss_text}"`);
+              dismissed = true;
+            } catch (e2) {}
+          }
+        }
+      } catch (e) {
+        // AI detection failed
+      }
+    }
+
+    await page.waitForTimeout(500);
+  }
+}
+
+/**
+ * Initialize browser if not already running
+ */
+async function initBrowser() {
+  if (!browser) {
+    browser = await chromium.launch({
+      headless: true,
+      args: [
+        '--no-sandbox', 
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage'
+      ]
+    });
+    context = await browser.newContext({
+      viewport: { width: 1920, height: 1080 },
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    });
+    page = await context.newPage();
+    console.log('✅ Browser initialized (1920x1080)');
+  }
+  return page;
+}
+
+/**
+ * Login to PartsTech using direct selectors (fast) with AI fallback
+ */
+async function loginToPartsTech(
+  username = process.env.PARTSTECH_USERNAME,
+  password = process.env.PARTSTECH_PASSWORD
+) {
+  if (!username || !password) {
+    return { 
+      success: false, 
+      message: 'PartsTech credentials not set in environment' 
+    };
+  }
+
+  if (isLoggedIn) {
+    console.log('ℹ️ Already logged in, reusing session');
+    return { success: true, message: 'Already logged in' };
+  }
+
+  try {
+    await initBrowser();
+    console.log('🔐 Navigating to PartsTech...');
+    
+    // Navigate to login page directly
+    await page.goto(`${PARTSTECH_URL}/login`, { waitUntil: 'networkidle', timeout: 30000 });
+    await page.waitForTimeout(2000);
+    await saveDebugScreenshot('01-login-page');
+
+    // Try direct selectors first (fast) - skip AI page analysis
+    console.log('📝 Filling login form...');
+    
+    // Fill username - try multiple selectors
+    const usernameSelectors = [
+      'input[type="email"]',
+      'input[name="email"]',
+      'input[name="username"]',
+      'input[autocomplete="email"]',
+      'input[autocomplete="username"]',
+      '#email',
+      '#username',
+      'input[placeholder*="email" i]',
+      'input[placeholder*="user" i]'
+    ];
+    
+    let result = { success: false };
+    for (const selector of usernameSelectors) {
+      try {
+        await page.fill(selector, username, { timeout: 2000 });
+        console.log(`  ✓ Filled username via: ${selector}`);
+        result = { success: true };
+        break;
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    if (!result.success) {
+      // Fall back to AI detection only if direct selectors fail
+      console.log('  ⚠️ Direct selectors failed, trying AI...');
+      result = await aiAction('username or email input field for login', 'fill', username);
+    }
+    if (!result.success) {
+      return { success: false, message: 'Could not fill username' };
+    }
+
+    // Fill password
+    const passwordSelectors = [
+      'input[type="password"]',
+      'input[name="password"]',
+      '#password',
+      'input[placeholder*="password" i]'
+    ];
+    
+    result = { success: false };
+    for (const selector of passwordSelectors) {
+      try {
+        await page.fill(selector, password, { timeout: 2000 });
+        console.log(`  ✓ Filled password via: ${selector}`);
+        result = { success: true };
+        break;
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    if (!result.success) {
+      result = await aiAction('password input field', 'fill', password);
+    }
+    if (!result.success) {
+      return { success: false, message: 'Could not fill password' };
+    }
+
+    // Click login/submit button - try direct selectors first
+    console.log('📝 Submitting login...');
+    const submitSelectors = [
+      'button[type="submit"]',
+      'input[type="submit"]',
+      'button:has-text("Sign In")',
+      'button:has-text("Log In")',
+      'button:has-text("Login")',
+      '[data-testid*="login"]',
+      '[data-testid*="submit"]'
+    ];
+    
+    let submitted = false;
+    for (const selector of submitSelectors) {
+      try {
+        await page.click(selector, { timeout: 2000 });
+        console.log(`  ✓ Clicked submit via: ${selector}`);
+        submitted = true;
+        break;
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    if (!submitted) {
+      // Press Enter as fallback
+      await page.keyboard.press('Enter');
+      console.log('  ⏎ Pressed Enter to submit');
+    }
+
+    // Wait for navigation
+    await page.waitForTimeout(5000);
+    await saveDebugScreenshot('02-post-login');
+
+    // Dismiss any alerts (credit card warning, etc.) - quick check without AI
+    await dismissAlertsQuick();
+    await saveDebugScreenshot('03-alerts-dismissed');
+
+    // Quick login verification using DOM check (not AI)
+    const isLoggedInNow = await verifyLoginViaDOM();
+    
+    if (isLoggedInNow) {
+      isLoggedIn = true;
+      console.log('✅ Login successful!');
+      return { success: true, message: 'Login successful' };
+    } else {
+      console.log('❌ Login verification failed');
+      return { success: false, message: 'Login verification failed - may still be on login page' };
+    }
+
+  } catch (error) {
+    console.error('❌ Login error:', error.message);
+    return { success: false, message: error.message };
+  }
+}
+
+/**
+ * Quick alert dismissal without AI - just tries common selectors
+ */
+async function dismissAlertsQuick() {
+  console.log('🔔 Quick check for popups...');
+  
+  const dismissSelectors = [
+    // PartsTech specific patterns
+    '[data-testid^="modal-"] button:has-text("Update")',
+    '[data-testid^="modal-"] button:has-text("Skip")',
+    '[data-testid^="modal-"] button:has-text("Close")',
+    '[data-testid^="modal-"] button:has-text("OK")',
+    '[data-testid^="modal-"] button:has-text("Got it")',
+    '[data-testid^="modal-"] [aria-label="Close"]',
+    // Generic patterns
+    'button:has-text("Close")',
+    'button:has-text("OK")',
+    'button:has-text("Got it")',
+    'button:has-text("Skip")',
+    '[aria-label="Close"]',
+    '.modal-close',
+    'button.close'
+  ];
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let dismissed = false;
+    for (const selector of dismissSelectors) {
+      try {
+        const element = await page.$(selector);
+        if (element && await element.isVisible()) {
+          await element.click({ timeout: 1000 });
+          console.log(`  ✓ Dismissed popup via: ${selector}`);
+          dismissed = true;
+          await page.waitForTimeout(500);
+          break;
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    if (!dismissed) {
+      // Try Escape key
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+    }
+    
+    await page.waitForTimeout(500);
+  }
+}
+
+/**
+ * Verify login success by checking DOM for logged-in indicators
+ */
+async function verifyLoginViaDOM() {
+  try {
+    // Check for indicators that we're logged in
+    const loggedInIndicators = [
+      // Search functionality visible
+      'input[placeholder*="search" i]',
+      '[data-testid*="search"]',
+      // User menu/account
+      '[data-testid*="user"]',
+      '[data-testid*="account"]',
+      '[class*="user-menu"]',
+      '[class*="account"]',
+      // Vehicle selector (only visible when logged in)
+      'button:has-text("Select Vehicle")',
+      '[data-testid*="vehicle"]',
+      // Navigation elements
+      '[class*="dashboard"]',
+      '[class*="main-nav"]'
+    ];
+    
+    for (const selector of loggedInIndicators) {
+      try {
+        const element = await page.$(selector);
+        if (element && await element.isVisible()) {
+          console.log(`  ✓ Login verified via: ${selector}`);
+          return true;
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    // Check if we're still on login page (bad sign)
+    const stillOnLogin = await page.$('input[type="password"]');
+    if (stillOnLogin && await stillOnLogin.isVisible()) {
+      console.log('  ⚠️ Still on login page');
+      return false;
+    }
+    
+    // Check URL
+    const currentUrl = page.url();
+    if (currentUrl.includes('/login')) {
+      console.log('  ⚠️ URL still shows login page');
+      return false;
+    }
+    
+    // If we're past login page, assume success
+    console.log('  ✓ Login appears successful (not on login page)');
+    return true;
+    
+  } catch (error) {
+    console.error('❌ Login verification error:', error.message);
+    return false;
+  }
+}
+
+/**
+ * Extract vehicle info from the DOM (faster than AI)
+ * Parses the actual text from PartsTech's vehicle display instead of pattern matching
+ */
+async function extractVehicleInfoFromDOM(vin) {
+  try {
+    const vehicleInfo = await page.evaluate(() => {
+      // PartsTech displays vehicle as "2012 MINI Cooper" or "2012 Ford F-150 3.5L V6"
+      // in the selectVehicleButton or vehicle selector area
+      
+      // Look for the vehicle selector button which shows the current vehicle
+      const vehicleButtonSelectors = [
+        '[data-testid="selectVehicleButton"]',
+        '[data-testid*="vehicle"] button',
+        'button[class*="vehicle"]'
+      ];
+      
+      let vehicleText = null;
+      for (const selector of vehicleButtonSelectors) {
+        const el = document.querySelector(selector);
+        if (el) {
+          const text = (el.textContent || '').trim();
+          // Skip if it's "Select Vehicle" or similar
+          if (text && !text.toLowerCase().includes('select') && text.match(/\b(19|20)\d{2}\b/)) {
+            vehicleText = text;
+            break;
+          }
+        }
+      }
+      
+      if (!vehicleText) {
+        // Fallback: look in other vehicle display areas
+        const fallbackSelectors = [
+          '[class*="vehicle-info"]',
+          '[class*="selected-vehicle"]',
+          '[class*="VehicleInfo"]'
+        ];
+        
+        for (const selector of fallbackSelectors) {
+          const el = document.querySelector(selector);
+          if (el) {
+            const text = (el.textContent || '').trim();
+            if (text && text.match(/\b(19|20)\d{2}\b/)) {
+              vehicleText = text;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (!vehicleText) {
+        return { found: false };
+      }
+      
+      // Parse the vehicle text directly
+      // Format is typically: "2012 MINI Cooper" or "2012 Ford F-150 3.5L V6"
+      
+      // Extract year
+      const yearMatch = vehicleText.match(/\b(19\d{2}|20\d{2})\b/);
+      const year = yearMatch ? parseInt(yearMatch[1]) : null;
+      
+      // Extract engine (if present) - at the end like "3.5L V6" or "2.5L I4"
+      const engineMatch = vehicleText.match(/\b(\d\.\d)L\s*([A-Z]?\d+)?/i);
+      const engine = engineMatch ? engineMatch[0] : null;
+      
+      // Remove year and engine from text to isolate make/model
+      let makeModel = vehicleText
+        .replace(/\b(19|20)\d{2}\b/, '')  // Remove year
+        .replace(/\b\d\.\d\s*L\s*[A-Z]?\d+\b/gi, '')  // Remove engine
+        .replace(/\s+/g, ' ')  // Normalize whitespace
+        .trim();
+      
+      // Split make/model - typically the first word is the make
+      const parts = makeModel.split(' ').filter(p => p);
+      let make = parts[0] || null;
+      let model = parts.slice(1).join(' ') || null;
+      
+      // Handle edge cases
+      if (make && !model && parts.length === 1) {
+        // Only one word - might be missing make or model
+        model = make;
+        make = null;
+      }
+      
+      return {
+        found: true,
+        year: year,
+        make: make ? make.toUpperCase() : null,
+        model: model || null,
+        engine: engine,
+        rawText: vehicleText.substring(0, 200)
+      };
+    });
+    
+    if (vehicleInfo.found) {
+      console.log(`  📋 Extracted from DOM: "${vehicleInfo.rawText}"`);
+      return {
+        success: true,
+        vehicle: {
+          vin: vin,
+          year: vehicleInfo.year,
+          make: vehicleInfo.make || 'Unknown',
+          model: vehicleInfo.model || 'Vehicle',
+          engine: vehicleInfo.engine,
+          trim: null
+        }
+      };
+    }
+    
+    return { success: false, message: 'Could not find vehicle info in DOM' };
+    
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+/**
+ * Load vehicle by VIN
+ * @param {string} vin - Vehicle Identification Number
+ */
+async function loadVehicleByVIN(vin) {
+  if (!isLoggedIn) {
+    const loginResult = await loginToPartsTech();
+    if (!loginResult.success) return loginResult;
+  }
+
+  // Check if this VIN is already loaded
+  if (currentVehicle && currentVehicle.vin === vin) {
+    console.log(`ℹ️ Vehicle already loaded: ${currentVehicle.year} ${currentVehicle.make} ${currentVehicle.model}`);
+    return { success: true, vehicle: currentVehicle };
+  }
+
+  // Clear cached vehicle since we're loading a new one
+  currentVehicle = null;
+
+  try {
+    console.log(`🚗 Loading vehicle by VIN: ${vin}`);
+    
+    // Make sure no modals are blocking
+    await dismissAlerts();
+    await page.waitForTimeout(1000);
+    
+    // Click vehicle selector button/dropdown
+    // IMPORTANT: If a vehicle is already selected, the button shows the vehicle name, not "Select Vehicle"
+    console.log('📝 Looking for vehicle selector...');
+    
+    // Try specific PartsTech selectors first - using data-testid is most reliable
+    const vehicleSelectors = [
+      '[data-testid="selectVehicleButton"]',  // PartsTech's actual selector
+      '[data-testid="vehicleSelector"] button',
+      'button:has-text("Select Vehicle")',
+      'button:has-text("Select a Vehicle")',
+      // If vehicle already selected, look for button containing year/make/model
+      'button[class*="vehicle"]',
+      '[class*="vehicle-selector"] button',
+      '[class*="VehicleSelector"] button'
+    ];
+    
+    let clicked = false;
+    for (const selector of vehicleSelectors) {
+      try {
+        const element = await page.$(selector);
+        if (element && await element.isVisible()) {
+          await element.click({ timeout: 3000 });
+          console.log(`  ✓ Clicked vehicle selector via: ${selector}`);
+          clicked = true;
+          break;
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    // If no direct selector worked, try finding any button in the top-right that might be the vehicle selector
+    if (!clicked) {
+      // Look for a button that contains a year (indicates a vehicle is selected)
+      try {
+        const buttons = await page.$$('button');
+        for (const btn of buttons) {
+          const text = await btn.textContent();
+          // Check if it looks like a vehicle selector (contains year or "Select Vehicle")
+          if (text && (text.match(/\b(19|20)\d{2}\b/) || text.includes('Select Vehicle') || text.includes('Select a Vehicle'))) {
+            await btn.click();
+            console.log(`  ✓ Clicked vehicle selector containing: "${text.substring(0, 30)}..."`);
+            clicked = true;
+            break;
+          }
+        }
+      } catch (e) {
+        // Continue to AI fallback
+      }
+    }
+    
+    if (!clicked) {
+      const result = await aiAction('vehicle selector button or dropdown to change/select vehicle (usually shows current vehicle or "Select Vehicle")', 'click');
+      if (!result.success) {
+        return { success: false, message: 'Could not find vehicle selector button' };
+      }
+    }
+    
+    // Wait for modal/dropdown to appear
+    await page.waitForTimeout(2000);
+    await saveDebugScreenshot('05-vehicle-dropdown');
+
+    // Look for VIN tab or VIN input - try multiple approaches
+    console.log('📝 Looking for VIN input option...');
+    
+    // First try clicking VIN tab if it exists
+    const vinTabSelectors = [
+      'button:has-text("VIN")',
+      'div:has-text("VIN"):not(:has(*))',
+      '[role="tab"]:has-text("VIN")',
+      'a:has-text("VIN")'
+    ];
+    
+    for (const selector of vinTabSelectors) {
+      try {
+        await page.click(selector, { timeout: 2000 });
+        console.log(`  ✓ Clicked VIN tab via: ${selector}`);
+        await page.waitForTimeout(1000);
+        break;
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    // Try AI to click VIN tab
+    await aiAction('VIN tab or VIN option to enter vehicle by VIN number', 'click');
+    await page.waitForTimeout(1000);
+    await saveDebugScreenshot('06-vin-tab');
+
+    // Fill VIN input - try direct selectors first
+    console.log('📝 Entering VIN...');
+    const vinInputSelectors = [
+      'input[placeholder*="VIN"]',
+      'input[placeholder*="vin"]',
+      'input[name="vin"]',
+      'input[id="vin"]',
+      'input[type="text"][maxlength="17"]'
+    ];
+    
+    let filled = false;
+    for (const selector of vinInputSelectors) {
+      try {
+        await page.fill(selector, vin, { timeout: 2000 });
+        console.log(`  ✓ Filled VIN via: ${selector}`);
+        filled = true;
+        break;
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    if (!filled) {
+      const result = await aiAction('VIN input field to enter 17-character VIN', 'fill', vin);
+      if (!result.success) {
+        return { success: false, message: 'Could not fill VIN input' };
+      }
+    }
+    
+    await page.waitForTimeout(500);
+    await saveDebugScreenshot('07-vin-entered');
+
+    // Click Search/Decode/Submit button for VIN lookup
+    // IMPORTANT: The VIN panel has its own search button, we need to find the right one
+    console.log('📝 Submitting VIN...');
+    
+    // First approach: Just press Enter in the VIN field - most reliable
+    await page.keyboard.press('Enter');
+    console.log('  ⏎ Pressed Enter to submit VIN');
+    
+    // Wait a moment for VIN decode to process
+    await page.waitForTimeout(2000);
+    
+    // Take a screenshot to see the current state
+    await saveDebugScreenshot('08a-after-enter');
+    
+    // Check if we need to click on a result or if vehicle was auto-selected
+    // PartsTech may show decoded vehicle info that needs to be clicked
+    console.log('📝 Looking for VIN decode results...');
+    
+    // Try to find vehicle result within the dropdown panel
+    // The results typically show Year Make Model Engine and need to be clicked
+    const vinResultSelectors = [
+      // Look for clickable vehicle rows/options within the vehicle selector area
+      '[class*="vehicle-selector"] [class*="result"]',
+      '[class*="vehicle-dropdown"] li',
+      '[class*="vin-result"]',
+      '[class*="decoded-vehicle"]',
+      '[data-testid*="vehicle-result"]',
+      '[data-testid*="vin-result"]',
+      '[data-testid="listItem"]',
+      'li[class*="ListItem"]'
+    ];
+    
+    let resultClicked = false;
+    for (const selector of vinResultSelectors) {
+      try {
+        const element = await page.$(selector);
+        if (element && await element.isVisible()) {
+          await element.click({ timeout: 2000 });
+          console.log(`  ✓ Clicked VIN result via: ${selector}`);
+          resultClicked = true;
+          break;
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    // If no direct selector worked, use AI to analyze and click the result
+    if (!resultClicked) {
+      const screenshot = await page.screenshot({ type: 'png' });
+      try {
+        const vinDecodeState = await analyzeImageAsJson(screenshot, `
+Analyze this PartsTech screen. Look for the vehicle selector dropdown panel (usually top-right).
+
+Is there decoded VIN information showing a vehicle like "2012 Ford Fusion" that needs to be clicked?
+Is there a list of engine options to choose from?
+What clickable elements do you see in the vehicle selection area?
+
+Return JSON:
+{
+  "dropdown_open": true/false,
+  "vehicle_decoded": true/false,
+  "vehicle_info": "e.g., 2012 Ford Fusion",
+  "has_engine_options": true/false,
+  "clickable_element": "exact text of what to click to select the vehicle",
+  "notes": "description of what you see"
+}
+Return ONLY valid JSON.
+`);
+        
+        console.log(`  📋 VIN decode state: ${JSON.stringify(vinDecodeState)}`);
+        
+        if (vinDecodeState.vehicle_decoded && vinDecodeState.clickable_element) {
+          const clickResult = await aiAction(vinDecodeState.clickable_element, 'click');
+          if (clickResult.success) {
+            resultClicked = true;
+            console.log(`  ✓ Clicked decoded vehicle`);
+          }
+        } else if (vinDecodeState.has_engine_options) {
+          // If there are engine options, try to click the first one
+          const engineResult = await aiAction('first engine option or vehicle configuration', 'click');
+          if (engineResult.success) {
+            resultClicked = true;
+          }
+        }
+      } catch (e) {
+        console.log(`  ⚠️ AI VIN state analysis failed: ${e.message}`);
+      }
+    }
+    
+    // Wait for selection to register
+    await page.waitForTimeout(1500);
+    
+    // Wait for VIN decode results - give it enough time to show options
+    await page.waitForTimeout(3000);
+    await saveDebugScreenshot('08-vin-results');
+
+    // After VIN search, we typically need to select from matching vehicles
+    // Look for vehicle results to click
+    console.log('📝 Looking for VIN lookup results to select...');
+    
+    // Try to find and click a vehicle result row/card
+    // PartsTech typically shows the decoded vehicle info that can be clicked
+    const vehicleResultSelectors = [
+      // Common patterns for vehicle result rows
+      '[data-testid*="vehicle-result"]',
+      '[data-testid="listItem"]',
+      'li[class*="ListItem"]',
+      '.vehicle-result',
+      '.vehicle-option',
+      '.vin-result'
+    ];
+    
+    let vehicleSelected = false;
+    for (const selector of vehicleResultSelectors) {
+      try {
+        const element = await page.$(selector);
+        if (element && await element.isVisible()) {
+          await element.click({ timeout: 3000 });
+          console.log(`  ✓ Clicked vehicle result via: ${selector}`);
+          vehicleSelected = true;
+          break;
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    // If direct selectors didn't work, use AI to find the vehicle option
+    if (!vehicleSelected) {
+      console.log('  📝 Using AI to find vehicle option...');
+      try {
+        const screenshot = await page.screenshot({ type: 'png' });
+        const vinResults = await analyzeImageAsJson(screenshot, `
+Look at this PartsTech VIN lookup screen. Find the decoded vehicle information that needs to be clicked to select it.
+
+The VIN lookup should show:
+- Vehicle year, make, model (e.g., "2012 Ford Fusion")
+- Engine options if multiple engines are available
+- A clickable row/card/button to select the vehicle
+
+Return JSON:
+{
+  "results_visible": true/false,
+  "vehicle_text": "full text of the vehicle option to click (e.g., '2012 Ford Fusion 2.5L I4')",
+  "is_modal_still_open": true/false,
+  "notes": "what you see"
+}
+Return ONLY valid JSON, no extra text.
+`);
+        
+        console.log(`  📋 VIN results: ${JSON.stringify(vinResults)}`);
+        
+        if (vinResults.results_visible && vinResults.vehicle_text) {
+          // Try to click the vehicle text
+          const clickResult = await aiAction(vinResults.vehicle_text, 'click');
+          if (clickResult.success) {
+            vehicleSelected = true;
+          }
+        }
+      } catch (e) {
+        console.log(`  ⚠️ AI vehicle detection failed: ${e.message}`);
+      }
+    }
+    
+    // Also try clicking any "Select" or "Use" button that might be in the results
+    if (vehicleSelected) {
+      await page.waitForTimeout(1000);
+      
+      const confirmSelectors = [
+        'button:has-text("Select")',
+        'button:has-text("Use")',
+        'button:has-text("Choose")',
+        'button:has-text("Apply")'
+      ];
+      
+      for (const selector of confirmSelectors) {
+        try {
+          const btn = await page.$(selector);
+          if (btn && await btn.isVisible()) {
+            await btn.click({ timeout: 2000 });
+            console.log(`  ✓ Confirmed vehicle via: ${selector}`);
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+    
+    // Wait for vehicle to be applied
+    await page.waitForTimeout(2000);
+    
+    await saveDebugScreenshot('09-vehicle-loaded');
+
+    // Extract vehicle info using DOM (faster and more reliable than AI)
+    const vehicleInfo = await extractVehicleInfoFromDOM(vin);
+    
+    if (vehicleInfo.success) {
+      currentVehicle = vehicleInfo.vehicle;
+      console.log(`✅ Vehicle loaded: ${currentVehicle.year} ${currentVehicle.make} ${currentVehicle.model}`);
+      return { success: true, vehicle: currentVehicle };
+    } else {
+      // Check if we at least have the vehicle selected (button text changed)
+      const vehicleBtn = await page.$('button:has-text("Select Vehicle")');
+      if (!vehicleBtn || !(await vehicleBtn.isVisible())) {
+        // "Select Vehicle" is gone - likely means a vehicle is loaded
+        currentVehicle = { vin: vin, year: null, make: 'Unknown', model: 'Vehicle', engine: null };
+        console.log('✅ Vehicle appears loaded (Select Vehicle button gone)');
+        return { success: true, vehicle: currentVehicle };
+      }
+      return { success: false, message: vehicleInfo.message || 'Could not load vehicle' };
+    }
+
+  } catch (error) {
+    console.error('❌ Vehicle loading error:', error.message);
+    return { success: false, message: error.message };
+  }
+}
+
+/**
+ * Search for parts - uses direct selectors for speed
+ * @param {string} searchTerm - What to search for (e.g., "Brake Pads", "Oil Filter")
+ */
+async function searchParts(searchTerm) {
+  if (!isLoggedIn) {
+    return { success: false, message: 'Not logged in' };
+  }
+
+  try {
+    console.log(`🔍 Searching for: "${searchTerm}"`);
+    
+    // Find and fill search box using direct selectors first
+    const searchSelectors = [
+      'input[placeholder*="Search" i]',
+      'input[placeholder*="search" i]',
+      'input[type="search"]',
+      '[data-testid*="search"] input',
+      'input[name="search"]',
+      '#search',
+      '.search-input'
+    ];
+    
+    let filled = false;
+    for (const selector of searchSelectors) {
+      try {
+        await page.fill(selector, searchTerm, { timeout: 2000 });
+        console.log(`  ✓ Filled search via: ${selector}`);
+        filled = true;
+        break;
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    if (!filled) {
+      // Fall back to AI
+      let result = await aiAction('main search box or part search input', 'fill', searchTerm);
+      if (!result.success) {
+        return { success: false, message: 'Could not find search box' };
+      }
+    }
+    
+    // Wait briefly for autocomplete
+    await page.waitForTimeout(1500);
+    await saveDebugScreenshot('08-autocomplete');
+
+    // Try to click an autocomplete suggestion that matches
+    // This is faster than AI analysis
+    const autocompleteSelectors = [
+      `li:has-text("${searchTerm}")`,
+      `[role="option"]:has-text("${searchTerm}")`,
+      `[class*="autocomplete"] li:first-child`,
+      `[class*="suggestion"]:first-child`,
+      `[data-testid*="suggestion"]:first-child`
+    ];
+    
+    let clicked = false;
+    for (const selector of autocompleteSelectors) {
+      try {
+        const element = await page.$(selector);
+        if (element && await element.isVisible()) {
+          await element.click({ timeout: 2000 });
+          console.log(`  ✓ Clicked autocomplete via: ${selector}`);
+          clicked = true;
+          break;
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    if (!clicked) {
+      // Just press Enter to search
+      await page.keyboard.press('Enter');
+      console.log('  ⏎ Pressed Enter to search');
+    }
+
+    // Wait for results to load - look for indicators that results are present
+    console.log('  ⏳ Waiting for search results...');
+    try {
+      await page.waitForSelector('[class*="result"], [class*="product"], [class*="part"], [data-testid*="result"]', { 
+        timeout: 10000 
+      });
+      console.log('  ✓ Results container detected');
+    } catch (e) {
+      console.log('  ⚠️ Timeout waiting for results selector, proceeding anyway');
+    }
+    
+    // Additional wait for content to render
+    await page.waitForTimeout(3000);
+    await saveDebugScreenshot('09-search-results');
+    
+    console.log('✅ Search submitted');
+    return { success: true, message: 'Search completed' };
+
+  } catch (error) {
+    console.error('❌ Search error:', error.message);
+    return { success: false, message: error.message };
+  }
+}
+
+/**
+ * Extract results from ALL vendor cards - clicks each vendor to reveal their parts
+ * @param {string} mode - 'manual' (filter 0 availability) or 'ai' (return all)
+ */
+async function extractAllVendorResults(mode = 'manual') {
+  if (!page) {
+    return { success: false, vendors: [], message: 'No active browser session' };
+  }
+
+  try {
+    console.log(`📊 Extracting vendor results (mode: ${mode})...`);
+    
+    // Wait for results to be present
+    await page.waitForTimeout(2000);
+    
+    // Find all vendor tabs/cards - PartsTech shows vendors as clickable tabs
+    const vendorTabs = await findVendorTabs();
+    console.log(`  Found ${vendorTabs.length} vendor tabs`);
+    
+    if (vendorTabs.length === 0) {
+      console.log('⚠️ No vendor tabs found');
+      await saveDebugScreenshot('no-vendors', true);
+      return { success: false, vendors: [], message: 'No vendor tabs found on page' };
+    }
+    
+    const allVendors = [];
+    
+    // Click each supplier button and extract their parts
+    for (let i = 0; i < vendorTabs.length; i++) {
+      const vendorInfo = vendorTabs[i];
+      console.log(`  📦 Supplier ${i + 1}/${vendorTabs.length}: ${vendorInfo.name || 'Unknown'}`);
+      
+      // Click the supplier button to show their parts
+      try {
+        // Use data-testid="supplier" selector and click by index
+        const supplierButtons = await page.$$('[data-testid="supplier"]');
+        if (supplierButtons[vendorInfo.index]) {
+          await supplierButtons[vendorInfo.index].click();
+          console.log(`    ✓ Clicked supplier button`);
+        } else {
+          console.log(`    ⚠️ Could not find supplier button at index ${vendorInfo.index}`);
+          continue;
+        }
+        
+        // Wait for parts to load after clicking supplier
+        await page.waitForTimeout(2000);
+        
+        // Wait for product cards to appear
+        try {
+          await page.waitForSelector('[data-testid="product"]', { timeout: 5000 });
+        } catch (e) {
+          console.log(`    ⚠️ No product cards appeared`);
+        }
+        
+        // Extract parts for this supplier
+        const parts = await extractPartsFromCurrentView();
+        
+        if (parts.length > 0) {
+          allVendors.push({
+            vendor: vendorInfo.name || `Supplier ${i + 1}`,
+            vendor_location: vendorInfo.location || '',
+            parts: parts
+          });
+          console.log(`    ✓ Found ${parts.length} parts`);
+        } else {
+          console.log(`    ⚠️ No parts found (supplier may not carry this item)`);
+        }
+        
+      } catch (e) {
+        console.log(`    ⚠️ Error processing supplier: ${e.message}`);
+      }
+    }
+    
+    // Filter based on mode
+    let vendors = allVendors;
+    if (mode === 'manual') {
+      vendors = vendors.map(v => ({
+        ...v,
+        parts: v.parts.filter(p => {
+          const status = (p.stock_status || '').toLowerCase();
+          return !status.includes('not available') && 
+                 !status.includes('(0)') &&
+                 !status.includes('out of stock');
+        })
+      })).filter(v => v.parts.length > 0);
+    }
+
+    const totalParts = vendors.reduce((sum, v) => sum + v.parts.length, 0);
+    console.log(`✅ Extracted ${totalParts} parts from ${vendors.length} vendors`);
+    
+    return {
+      success: true,
+      vendors,
+      total_vendors: vendors.length,
+      total_parts: totalParts,
+      message: `Found ${totalParts} parts from ${vendors.length} vendors`
+    };
+
+  } catch (error) {
+    console.error('❌ Extraction error:', error.message);
+    return { success: false, vendors: [], message: error.message };
+  }
+}
+
+/**
+ * Find all supplier tabs on the results page
+ * Uses data-testid="supplier" which are BUTTON elements in the supplierSelector carousel
+ */
+async function findVendorTabs() {
+  const vendorTabs = await page.evaluate(() => {
+    const tabs = [];
+    
+    // PartsTech supplier buttons have data-testid="supplier"
+    // They're inside data-testid="supplierSelector" 
+    // Class pattern: {name}_supplier aftermarket_supplier (e.g., o_reilly_auto_parts_supplier)
+    const supplierButtons = document.querySelectorAll('[data-testid="supplier"]');
+    
+    supplierButtons.forEach((btn, index) => {
+      // Get supplier name from class (e.g., "o_reilly_auto_parts_supplier" → "O'Reilly Auto Parts")
+      const className = btn.className || '';
+      let name = null;
+      
+      // Extract supplier name from class like "ssf_imported_auto_parts_supplier"
+      const supplierMatch = className.match(/([a-z_]+)_supplier\s+aftermarket_supplier/i);
+      if (supplierMatch) {
+        // Convert snake_case to Title Case
+        name = supplierMatch[1]
+          .split('_')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+      }
+      
+      // Fallback: get text content
+      if (!name) {
+        name = btn.textContent?.trim().split('\n')[0] || `Supplier ${index + 1}`;
+      }
+      
+      tabs.push({
+        name: name,
+        index: index,
+        testId: 'supplier'
+      });
+    });
+    
+    return tabs;
+  });
+  
+  console.log(`  📋 Found suppliers: ${vendorTabs.map(v => v.name).join(', ')}`);
+  return vendorTabs;
+}
+
+/**
+ * Extract parts from the currently visible vendor panel
+ * Uses PartsTech-specific selectors based on actual HTML structure
+ */
+async function extractPartsFromCurrentView() {
+  const parts = await page.evaluate(() => {
+    const extractedParts = [];
+    
+    // PartsTech product cards have data-testid="product"
+    const productCards = document.querySelectorAll('[data-testid="product"]');
+    
+    productCards.forEach(card => {
+      try {
+        // Product title/description - from productTitle link
+        const titleEl = card.querySelector('[data-testid="productTitle"]');
+        const description = titleEl ? titleEl.textContent.trim() : null;
+        
+        // Part number - in a span after the details section, pattern like "M1-212"
+        // It's in a span with class css-1og29io (but classes are dynamic, use structure)
+        let partNumber = null;
+        const partNumSpan = card.querySelector('span[class*="1og29io"]');
+        if (partNumSpan) {
+          partNumber = partNumSpan.textContent.trim();
+        } else {
+          // Fallback: look for part number pattern in text
+          const cardText = card.textContent || '';
+          const partMatch = cardText.match(/\s([A-Z]{1,4}[\d-]+[A-Z\d]*)\s/i);
+          if (partMatch) partNumber = partMatch[1].trim();
+        }
+        
+        // Brand - from brand logo alt text
+        const brandLogo = card.querySelector('[data-testid="brandLogo"]');
+        let brand = null;
+        if (brandLogo) {
+          const alt = brandLogo.getAttribute('alt') || '';
+          brand = alt.replace(' logo', '').trim();
+        }
+        
+        // Prices - look for the price divs
+        // Main price is in css-fk0aju, list/retail in css-18jlr4b
+        let price = null;
+        let listPrice = null;
+        let retailPrice = null;
+        
+        // Find all text containing dollar amounts
+        const priceContainer = card.querySelector('[class*="ys523e"], [class*="price"]');
+        if (priceContainer) {
+          const allText = priceContainer.textContent || '';
+          const priceMatches = allText.match(/\$[\d,.]+/g) || [];
+          if (priceMatches.length >= 1) price = parseFloat(priceMatches[0].replace('$', '').replace(',', ''));
+          if (priceMatches.length >= 2) listPrice = parseFloat(priceMatches[1].replace('$', '').replace(',', ''));
+          if (priceMatches.length >= 3) retailPrice = parseFloat(priceMatches[2].replace('$', '').replace(',', ''));
+        }
+        
+        // Fallback price extraction
+        if (!price) {
+          const cardText = card.textContent || '';
+          const priceMatches = cardText.match(/\$(\d+(?:\.\d{2})?)/g) || [];
+          if (priceMatches.length >= 1) price = parseFloat(priceMatches[0].replace('$', ''));
+          if (priceMatches.length >= 2) listPrice = parseFloat(priceMatches[1].replace('$', ''));
+        }
+        
+        // Stock status - in ui-status element with tooltip
+        let stockStatus = null;
+        let storeLocation = null;
+        const statusEl = card.querySelector('[data-testid="status"]');
+        if (statusEl) {
+          // Stock text is in h5
+          const stockText = statusEl.querySelector('h5');
+          if (stockText) stockStatus = stockText.textContent.trim();
+          
+          // Store location is in the tooltip span
+          const locationEl = statusEl.querySelector('[class*="qxsbke"]');
+          if (locationEl) storeLocation = locationEl.textContent.trim();
+        }
+        
+        // Quantity per vehicle
+        let qtyPerVehicle = 1;
+        const qtyEl = card.querySelector('[data-testid="Quantity per vehicle"]');
+        if (qtyEl) {
+          const qtyMatch = qtyEl.textContent.match(/(\d+)/);
+          if (qtyMatch) qtyPerVehicle = parseInt(qtyMatch[1]);
+        }
+        
+        // Additional specs
+        let partType = null;
+        const typeEl = card.querySelector('[data-testid="Type"]');
+        if (typeEl) {
+          const typeMatch = typeEl.textContent.match(/Type:\s*(.+)/);
+          if (typeMatch) partType = typeMatch[1].trim();
+        }
+        
+        // Only add if we have meaningful data
+        if (partNumber || description || price) {
+          extractedParts.push({
+            part_number: partNumber || 'Unknown',
+            brand: brand,
+            description: description,
+            price: price,
+            list_price: listPrice,
+            retail_price: retailPrice,
+            stock_status: stockStatus || 'Unknown',
+            store_location: storeLocation,
+            part_type: partType,
+            quantity_per_vehicle: qtyPerVehicle
+          });
+        }
+      } catch (e) {
+        console.error('Error extracting part:', e);
+      }
+    });
+    
+    return extractedParts;
+  });
+  
+  return parts;
+}
+
+/**
+ * Extract parts data directly from the DOM using Playwright
+ * This is much faster than AI vision analysis
+ */
+async function extractViaDOM() {
+  try {
+    // PartsTech uses various structures - try to find vendor/supplier cards
+    // Common patterns: cards with supplier names, part rows with prices
+    
+    const results = await page.evaluate(() => {
+      const vendors = [];
+      
+      // Strategy 1: Look for vendor/supplier sections/cards
+      // PartsTech typically groups results by supplier
+      const vendorSelectors = [
+        '[data-testid*="supplier"]',
+        '[data-testid*="vendor"]',
+        '[class*="supplier-card"]',
+        '[class*="vendor-card"]',
+        '[class*="SupplierCard"]',
+        '[class*="VendorCard"]',
+        '.supplier-section',
+        '.vendor-section',
+        '[class*="results-group"]',
+        '[class*="ResultsGroup"]'
+      ];
+      
+      let vendorCards = [];
+      for (const selector of vendorSelectors) {
+        const found = document.querySelectorAll(selector);
+        if (found.length > 0) {
+          vendorCards = Array.from(found);
+          break;
+        }
+      }
+      
+      // Strategy 2: If no vendor cards, look for a results table/list
+      if (vendorCards.length === 0) {
+        // Try to find individual part rows and group them
+        const partRowSelectors = [
+          '[data-testid*="part-row"]',
+          '[data-testid*="product-row"]',
+          '[class*="part-row"]',
+          '[class*="product-row"]',
+          '[class*="PartRow"]',
+          '[class*="ProductRow"]',
+          'tr[class*="part"]',
+          'tr[class*="product"]',
+          '[class*="search-result-item"]',
+          '[class*="SearchResultItem"]'
+        ];
+        
+        let partRows = [];
+        for (const selector of partRowSelectors) {
+          const found = document.querySelectorAll(selector);
+          if (found.length > 0) {
+            partRows = Array.from(found);
+            break;
+          }
+        }
+        
+        if (partRows.length > 0) {
+          // Group parts - for now put them all under "Multiple Vendors"
+          const parts = partRows.map(row => extractPartFromElement(row)).filter(p => p);
+          if (parts.length > 0) {
+            vendors.push({
+              vendor: 'Search Results',
+              vendor_location: '',
+              parts: parts
+            });
+          }
+        }
+      } else {
+        // Process each vendor card
+        for (const card of vendorCards) {
+          const vendorName = extractVendorName(card);
+          const vendorLocation = extractVendorLocation(card);
+          
+          // Find parts within this vendor card
+          const partElements = card.querySelectorAll('[class*="part"], [class*="product"], [class*="item"], tr');
+          const parts = Array.from(partElements)
+            .map(el => extractPartFromElement(el))
+            .filter(p => p && p.part_number);
+          
+          if (parts.length > 0 || vendorName) {
+            vendors.push({
+              vendor: vendorName || 'Unknown Vendor',
+              vendor_location: vendorLocation || '',
+              parts: parts
+            });
+          }
+        }
+      }
+      
+      // Strategy 3: Generic extraction - look for any price elements and work backwards
+      if (vendors.length === 0) {
+        const priceElements = document.querySelectorAll('[class*="price"], [class*="Price"], [data-testid*="price"]');
+        const seenParts = new Set();
+        const genericParts = [];
+        
+        priceElements.forEach(priceEl => {
+          // Try to find the parent container that has part info
+          let container = priceEl.closest('[class*="card"], [class*="row"], [class*="item"], tr, li');
+          if (!container) container = priceEl.parentElement?.parentElement;
+          
+          if (container) {
+            const part = extractPartFromElement(container);
+            if (part && part.part_number && !seenParts.has(part.part_number)) {
+              seenParts.add(part.part_number);
+              genericParts.push(part);
+            }
+          }
+        });
+        
+        if (genericParts.length > 0) {
+          vendors.push({
+            vendor: 'Search Results',
+            vendor_location: '',
+            parts: genericParts
+          });
+        }
+      }
+      
+      return { vendors };
+      
+      // Helper functions (defined inside evaluate for access)
+      function extractVendorName(element) {
+        const selectors = [
+          '[class*="vendor-name"]',
+          '[class*="supplier-name"]',
+          '[class*="VendorName"]',
+          '[class*="SupplierName"]',
+          '[data-testid*="vendor-name"]',
+          '[data-testid*="supplier-name"]',
+          'h2', 'h3', 'h4',
+          '[class*="header"]',
+          '[class*="title"]'
+        ];
+        
+        for (const sel of selectors) {
+          const el = element.querySelector(sel);
+          if (el && el.textContent.trim()) {
+            const text = el.textContent.trim();
+            // Filter out generic text
+            if (text.length < 100 && !text.includes('$')) {
+              return text;
+            }
+          }
+        }
+        return null;
+      }
+      
+      function extractVendorLocation(element) {
+        const selectors = [
+          '[class*="location"]',
+          '[class*="address"]',
+          '[class*="store"]',
+          '[data-testid*="location"]'
+        ];
+        
+        for (const sel of selectors) {
+          const el = element.querySelector(sel);
+          if (el && el.textContent.trim()) {
+            return el.textContent.trim();
+          }
+        }
+        return null;
+      }
+      
+      function extractPartFromElement(element) {
+        const text = element.textContent || '';
+        
+        // Extract part number - usually alphanumeric, 4-20 chars
+        const partNumPatterns = [
+          /\b([A-Z]{1,3}\d{3,10}[A-Z]?)\b/i,  // Like SC1164, PH3614
+          /\b(\d{5,10})\b/,                     // Pure numeric
+          /\b([A-Z0-9]{2,4}[-\s]?[A-Z0-9]{3,10})\b/i  // With dash
+        ];
+        
+        let partNumber = null;
+        
+        // Try data attributes first
+        const partNumEl = element.querySelector('[data-testid*="part-number"], [class*="part-number"], [class*="partNumber"], [class*="sku"]');
+        if (partNumEl) {
+          partNumber = partNumEl.textContent.trim();
+        }
+        
+        // Try regex patterns
+        if (!partNumber) {
+          for (const pattern of partNumPatterns) {
+            const match = text.match(pattern);
+            if (match) {
+              partNumber = match[1];
+              break;
+            }
+          }
+        }
+        
+        // Extract brand
+        let brand = null;
+        const brandEl = element.querySelector('[class*="brand"], [class*="Brand"], [data-testid*="brand"], [class*="manufacturer"]');
+        if (brandEl) {
+          brand = brandEl.textContent.trim();
+        }
+        
+        // Extract price - look for dollar amounts
+        const pricePattern = /\$\s*(\d+(?:\.\d{2})?)/g;
+        const prices = [];
+        let match;
+        while ((match = pricePattern.exec(text)) !== null) {
+          prices.push(parseFloat(match[1]));
+        }
+        
+        // Try specific price elements
+        let price = null;
+        let listPrice = null;
+        
+        const priceEl = element.querySelector('[class*="price"]:not([class*="list"]):not([class*="msrp"]), [data-testid*="price"]');
+        if (priceEl) {
+          const priceMatch = priceEl.textContent.match(/\$?\s*(\d+(?:\.\d{2})?)/);
+          if (priceMatch) price = parseFloat(priceMatch[1]);
+        }
+        
+        const listPriceEl = element.querySelector('[class*="list-price"], [class*="listPrice"], [class*="msrp"], [class*="retail"]');
+        if (listPriceEl) {
+          const listMatch = listPriceEl.textContent.match(/\$?\s*(\d+(?:\.\d{2})?)/);
+          if (listMatch) listPrice = parseFloat(listMatch[1]);
+        }
+        
+        // Fallback to first/second price found
+        if (!price && prices.length > 0) price = prices[0];
+        if (!listPrice && prices.length > 1) listPrice = prices[1];
+        
+        // Extract stock status
+        let stockStatus = null;
+        const stockEl = element.querySelector('[class*="stock"], [class*="availability"], [class*="inventory"], [data-testid*="stock"]');
+        if (stockEl) {
+          stockStatus = stockEl.textContent.trim();
+        } else {
+          // Look for stock keywords in text
+          const stockPatterns = [
+            /in stock\s*\(?\d*\)?/i,
+            /(\d+)\s*available/i,
+            /out of stock/i,
+            /backorder/i,
+            /not available/i
+          ];
+          for (const pattern of stockPatterns) {
+            const stockMatch = text.match(pattern);
+            if (stockMatch) {
+              stockStatus = stockMatch[0];
+              break;
+            }
+          }
+        }
+        
+        // Extract description
+        let description = null;
+        const descEl = element.querySelector('[class*="description"], [class*="title"], [class*="name"]:not([class*="brand"]):not([class*="vendor"])');
+        if (descEl) {
+          description = descEl.textContent.trim();
+        }
+        
+        // Only return if we have at least a part number or price
+        if (partNumber || price) {
+          return {
+            part_number: partNumber || 'Unknown',
+            brand: brand,
+            description: description,
+            price: price,
+            list_price: listPrice,
+            stock_status: stockStatus || 'Unknown',
+            position: null,
+            quantity_per_vehicle: 1
+          };
+        }
+        
+        return null;
+      }
+    });
+    
+    if (results.vendors && results.vendors.length > 0) {
+      const totalParts = results.vendors.reduce((sum, v) => sum + v.parts.length, 0);
+      return {
+        success: true,
+        vendors: results.vendors,
+        total_vendors: results.vendors.length,
+        total_parts: totalParts
+      };
+    }
+    
+    return { success: false, vendors: [], message: 'No vendor/part elements found in DOM' };
+    
+  } catch (error) {
+    console.error('❌ DOM extraction error:', error.message);
+    return { success: false, vendors: [], message: error.message };
+  }
+}
+
+/**
+ * Main orchestrator: Search PartsTech with VIN and search term
+ * @param {string} vin - Vehicle Identification Number
+ * @param {string} searchTerm - What to search (e.g., "Brake Pads", "Oil Filter")
+ * @param {Object} options - { mode: 'manual' | 'ai' }
+ */
+async function searchPartsTech(vin, searchTerm, options = { mode: 'manual' }) {
+  const startTime = Date.now();
+  
+  console.log('='.repeat(60));
+  console.log('PARTSTECH SEARCH');
+  console.log(`VIN: ${vin}`);
+  console.log(`Search: ${searchTerm}`);
+  console.log(`Mode: ${options.mode}`);
+  console.log('='.repeat(60));
+
+  try {
+    // Step 1: Login
+    const loginResult = await loginToPartsTech();
+    if (!loginResult.success) {
+      return { success: false, message: loginResult.message };
+    }
+
+    // Step 2: Load vehicle by VIN
+    const vehicleResult = await loadVehicleByVIN(vin);
+    if (!vehicleResult.success) {
+      return { success: false, message: vehicleResult.message };
+    }
+
+    // Step 3: Search for parts
+    const searchResult = await searchParts(searchTerm);
+    if (!searchResult.success) {
+      return { success: false, message: searchResult.message };
+    }
+
+    // Step 4: Extract all vendor results
+    const extractResult = await extractAllVendorResults(options.mode);
+    
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    return {
+      success: true,
+      vehicle: currentVehicle,
+      search_term: searchTerm,
+      mode: options.mode,
+      vendors: extractResult.vendors || [],
+      total_vendors: extractResult.total_vendors || 0,
+      total_parts_found: extractResult.total_parts || 0,
+      duration_seconds: parseFloat(duration),
+      timestamp: new Date().toISOString()
+    };
+
+  } catch (error) {
+    console.error('❌ Search error:', error.message);
+    return { success: false, message: error.message };
+  }
+}
+
+/**
+ * Clean up browser resources
+ */
+async function cleanup() {
+  if (browser) {
+    console.log('🧹 Closing browser...');
+    await browser.close();
+    browser = null;
+    context = null;
+    page = null;
+    isLoggedIn = false;
+    currentVehicle = null;
+    console.log('✅ Browser closed');
+  }
+}
+
+/**
+ * Check if session is active
+ */
+function isSessionActive() {
+  return isLoggedIn && browser !== null;
+}
+
+// Graceful shutdown
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
+
+module.exports = {
+  // Main function
+  searchPartsTech,
+  
+  // Individual workflow steps (for testing)
+  loginToPartsTech,
+  loadVehicleByVIN,
+  searchParts,
+  extractAllVendorResults,
+  
+  // Utilities
+  cleanup,
+  isSessionActive,
+  dismissAlerts
+};
