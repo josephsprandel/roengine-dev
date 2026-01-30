@@ -571,8 +571,8 @@ function groupPartsByVendor(parts) {
   // Map vendor account IDs to names
   const vendorNames = {
     '1': 'PartsTech Catalog',
-    '70468': 'O\'Reilly Auto Parts',
-    '139607': 'SSF Auto Parts',
+    '70468': 'SSF Auto Parts',
+    '139607': 'O\'Reilly Auto Parts',
     '56978': 'AutoZone',
     '57020': 'Crow-Burlingame',
     '150404': 'NAPA Auto Parts',
