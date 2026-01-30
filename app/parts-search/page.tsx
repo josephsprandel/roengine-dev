@@ -27,6 +27,11 @@ interface Part {
   stock_status: string;
   position?: string;
   quantity_per_vehicle?: number;
+  images?: Array<{
+    preview?: string;
+    medium?: string;
+    full?: string;
+  }>;
 }
 
 interface Vendor {
@@ -361,9 +366,28 @@ export default function PartsSearchPage() {
                       key={partIndex}
                       className="flex items-start gap-4 p-4 border rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900"
                     >
-                      {/* Part Image Placeholder */}
-                      <div className="w-16 h-16 bg-slate-200 dark:bg-slate-700 rounded flex items-center justify-center flex-shrink-0">
-                        <Package className="h-8 w-8 text-slate-400" />
+                      {/* Part Image */}
+                      <div className="w-16 h-16 bg-slate-200 dark:bg-slate-700 rounded flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        {part.images && part.images.length > 0 && part.images[0].preview ? (
+                          <img
+                            src={part.images[0].preview}
+                            alt={part.part_number}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Fallback to placeholder if image fails to load
+                              e.currentTarget.style.display = 'none';
+                              const parent = e.currentTarget.parentElement;
+                              if (parent) {
+                                const icon = document.createElement('div');
+                                icon.className = 'flex items-center justify-center w-full h-full';
+                                icon.innerHTML = '<svg class="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>';
+                                parent.appendChild(icon);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <Package className="h-8 w-8 text-slate-400" />
+                        )}
                       </div>
 
                       {/* Part Info */}
