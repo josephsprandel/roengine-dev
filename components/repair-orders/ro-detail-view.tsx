@@ -682,7 +682,9 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
       })
 
       if (!partsResponse.ok) {
-        throw new Error('Failed to generate parts list')
+        const errorText = await partsResponse.text()
+        console.error('Parts API Error:', errorText)
+        throw new Error(`Failed to generate parts list: ${errorText}`)
       }
 
       const { servicesWithParts: generatedParts } = await partsResponse.json()
