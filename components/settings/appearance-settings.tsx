@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useTheme } from "next-themes"
 import { Card } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -9,7 +10,6 @@ import { Check, Moon, Sun, Monitor } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type ColorTheme = "default" | "ocean" | "forest" | "sunset" | "ruby" | "violet"
-type Mode = "light" | "dark" | "system"
 
 interface ThemeOption {
   id: ColorTheme
@@ -86,25 +86,29 @@ const themes: ThemeOption[] = [
 ]
 
 export function AppearanceSettings() {
+  const { theme, setTheme } = useTheme()
   const [colorTheme, setColorTheme] = useState<ColorTheme>("default")
-  const [mode, setMode] = useState<Mode>("system")
   const [reducedMotion, setReducedMotion] = useState(false)
   const [compactMode, setCompactMode] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
-  // Load saved preferences
+  // Wait for mount to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Load saved color theme preference
   useEffect(() => {
     const savedTheme = localStorage.getItem("ro-color-theme") as ColorTheme | null
-    const savedMode = localStorage.getItem("ro-mode") as Mode | null
     const savedReducedMotion = localStorage.getItem("ro-reduced-motion")
     const savedCompactMode = localStorage.getItem("ro-compact-mode")
 
     if (savedTheme) setColorTheme(savedTheme)
-    if (savedMode) setMode(savedMode)
     if (savedReducedMotion) setReducedMotion(savedReducedMotion === "true")
     if (savedCompactMode) setCompactMode(savedCompactMode === "true")
   }, [])
 
-  // Apply theme changes
+  // Apply color theme changes
   useEffect(() => {
     const root = document.documentElement
 
@@ -120,27 +124,6 @@ export function AppearanceSettings() {
     localStorage.setItem("ro-color-theme", colorTheme)
   }, [colorTheme])
 
-  // Apply mode changes
-  useEffect(() => {
-    const root = document.documentElement
-
-    if (mode === "dark") {
-      root.classList.add("dark")
-    } else if (mode === "light") {
-      root.classList.remove("dark")
-    } else {
-      // System preference
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
-      if (prefersDark) {
-        root.classList.add("dark")
-      } else {
-        root.classList.remove("dark")
-      }
-    }
-
-    localStorage.setItem("ro-mode", mode)
-  }, [mode])
-
   // Save other preferences
   useEffect(() => {
     localStorage.setItem("ro-reduced-motion", String(reducedMotion))
@@ -149,6 +132,11 @@ export function AppearanceSettings() {
   useEffect(() => {
     localStorage.setItem("ro-compact-mode", String(compactMode))
   }, [compactMode])
+
+  // Avoid hydration mismatch
+  if (!mounted) {
+    return null
+  }
 
   return (
     <div className="space-y-6">
@@ -204,25 +192,25 @@ export function AppearanceSettings() {
 
         <div className="flex gap-3">
           <Button
-            variant={mode === "light" ? "default" : "outline"}
+            variant={theme === "light" ? "default" : "outline"}
             className="flex-1 h-auto py-4 flex flex-col items-center gap-2"
-            onClick={() => setMode("light")}
+            onClick={() => setTheme("light")}
           >
             <Sun size={20} />
             <span>Light</span>
           </Button>
           <Button
-            variant={mode === "dark" ? "default" : "outline"}
+            variant={theme === "dark" ? "default" : "outline"}
             className="flex-1 h-auto py-4 flex flex-col items-center gap-2"
-            onClick={() => setMode("dark")}
+            onClick={() => setTheme("dark")}
           >
             <Moon size={20} />
             <span>Dark</span>
           </Button>
           <Button
-            variant={mode === "system" ? "default" : "outline"}
+            variant={theme === "system" ? "default" : "outline"}
             className="flex-1 h-auto py-4 flex flex-col items-center gap-2"
-            onClick={() => setMode("system")}
+            onClick={() => setTheme("system")}
           >
             <Monitor size={20} />
             <span>System</span>
