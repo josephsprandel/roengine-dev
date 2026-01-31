@@ -187,11 +187,9 @@ export async function POST(request: NextRequest) {
             zip,
             customer_type,
             notes,
-            shopware_id,
-            last_synced_at,
             created_at,
             updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW(), NOW())
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
           ON CONFLICT (customer_name, phone_primary) 
           DO UPDATE SET
             phone_secondary = EXCLUDED.phone_secondary,
@@ -203,8 +201,6 @@ export async function POST(request: NextRequest) {
             zip = EXCLUDED.zip,
             customer_type = EXCLUDED.customer_type,
             notes = EXCLUDED.notes,
-            shopware_id = EXCLUDED.shopware_id,
-            last_synced_at = NOW(),
             updated_at = NOW()
           RETURNING (xmax = 0) AS inserted
         `, [
@@ -218,8 +214,7 @@ export async function POST(request: NextRequest) {
           state.trim() || null,
           zipCode.trim() || null,
           customerType.toLowerCase(),
-          notes.trim() || null,
-          shopwareId.trim() || null
+          notes.trim() || null
         ]);
         
         // Check if it was an insert or update
@@ -277,7 +272,7 @@ export async function GET() {
         COUNT(*) as total_customers,
         COUNT(*) FILTER (WHERE customer_type = 'individual') as individual_customers,
         COUNT(*) FILTER (WHERE customer_type = 'business') as business_customers,
-        MAX(last_synced_at) as last_sync
+        MAX(updated_at) as last_sync
       FROM customers
     `);
 
