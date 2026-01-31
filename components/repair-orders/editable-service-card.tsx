@@ -90,6 +90,8 @@ function DraggableLineItem({
   onFindPart,
   onClickPart,
 }: DraggableLineItemProps) {
+  const [isDragEnabled, setIsDragEnabled] = useState(false)
+
   const handleUpdate = (field: keyof LineItem, value: string | number) => {
     const updated = { ...item, [field]: value }
     if (field === "quantity" || field === "unitPrice") {
@@ -100,21 +102,25 @@ function DraggableLineItem({
 
   return (
     <div
+      draggable={isDragEnabled}
+      onDragStart={(e) => {
+        if (isDragEnabled) {
+          onDragStart(e, index)
+        }
+      }}
       onDragOver={(e) => onDragOver(e, index)}
+      onDragEnd={() => {
+        setIsDragEnabled(false)
+        onDragEnd()
+      }}
       className={`flex items-center gap-2 p-2 rounded-lg border border-border bg-card transition-all ${
         isDragging ? "opacity-50 scale-95" : ""
       }`}
     >
       <div 
-        draggable
-        onDragStart={(e) => {
-          e.stopPropagation()
-          onDragStart(e, index)
-        }}
-        onDragEnd={(e) => {
-          e.stopPropagation()
-          onDragEnd()
-        }}
+        onMouseDown={() => setIsDragEnabled(true)}
+        onMouseUp={() => setIsDragEnabled(false)}
+        onMouseLeave={() => setIsDragEnabled(false)}
         className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
       >
         <GripVertical size={14} />
