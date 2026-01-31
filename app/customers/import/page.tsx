@@ -173,6 +173,24 @@ export default function CustomerImportPage() {
                         <p className="text-sm text-green-800 dark:text-green-200">
                           {result.message}
                         </p>
+                        {result.detectedColumns && result.detectedColumns.length > 0 && (
+                          <details className="mt-3">
+                            <summary className="text-sm text-blue-700 cursor-pointer font-medium">
+                              Detected CSV columns (click to view)
+                            </summary>
+                            <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded text-xs">
+                              <p className="font-medium mb-2">Your CSV has these columns:</p>
+                              <ul className="list-disc ml-5 space-y-1">
+                                {result.detectedColumns.map((col: string, idx: number) => (
+                                  <li key={idx} className="text-blue-800 dark:text-blue-200">{col}</li>
+                                ))}
+                              </ul>
+                              <p className="mt-3 text-amber-700">
+                                ⚠️ None of these match the expected column names. Please check the supported columns list below or contact support.
+                              </p>
+                            </div>
+                          </details>
+                        )}
                         {result.errors && result.errors.length > 0 && (
                           <details className="mt-3">
                             <summary className="text-sm text-amber-700 cursor-pointer">

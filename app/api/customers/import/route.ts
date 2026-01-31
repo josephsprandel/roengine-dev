@@ -62,8 +62,14 @@ export async function POST(request: NextRequest) {
     
     // DEBUG: Log first record's column names
     if (records.length > 0) {
-      console.log('[Customer Import] CSV Column Names:', Object.keys(records[0] as Record<string, any>));
+      const columnNames = Object.keys(records[0] as Record<string, any>);
+      console.log('[Customer Import] CSV Column Names:', columnNames);
       console.log('[Customer Import] First Record Sample:', records[0]);
+      
+      // Return column names in response if no customers are imported (helps with debugging)
+      if (columnNames.length > 0) {
+        console.log('[Customer Import] Detected columns:', columnNames.join(', '));
+      }
     }
     
     // Begin transaction
@@ -224,6 +230,9 @@ export async function POST(request: NextRequest) {
     
     console.log(`[Customer Import] Success: ${imported} new, ${updated} updated, ${skipped} skipped, ${errors.length} errors`);
     
+    // If all records were skipped, include column names to help debug
+    const detectedColumns = records.length > 0 ? Object.keys(records[0] as Record<string, any>) : [];
+    
     return NextResponse.json({ 
       success: true, 
       imported,
@@ -231,7 +240,8 @@ export async function POST(request: NextRequest) {
       skipped,
       errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
       total: records.length,
-      message: `Successfully processed ${records.length} customers: ${imported} new, ${updated} updated${skipped > 0 ? `, ${skipped} skipped` : ''}${errors.length > 0 ? `, ${errors.length} errors` : ''}` 
+      message: `Successfully processed ${records.length} customers: ${imported} new, ${updated} updated${skipped > 0 ? `, ${skipped} skipped` : ''}${errors.length > 0 ? `, ${errors.length} errors` : ''}`,
+      detectedColumns: skipped === records.length ? detectedColumns : undefined // Only include if all skipped
     });
     
   } catch (error: any) {
