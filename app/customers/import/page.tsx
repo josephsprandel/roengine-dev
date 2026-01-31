@@ -240,21 +240,21 @@ export default function CustomerImportPage() {
               
               <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200 dark:border-blue-800">
                 <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
-                  Supported Column Names:
+                  Supported Column Names (ShopWare Format):
                 </p>
                 <div className="grid grid-cols-2 gap-2 text-xs text-blue-800 dark:text-blue-200">
-                  <div>• Customer Name or Name</div>
-                  <div>• Primary Phone or Phone</div>
-                  <div>• Secondary Phone or Alt Phone</div>
-                  <div>• Mobile Phone or Mobile</div>
-                  <div>• Email or Email Address</div>
-                  <div>• Address or Street Address</div>
+                  <div>• First Name + Last Name (combined)</div>
+                  <div>• Phone</div>
+                  <div>• Other phones (comma-separated)</div>
+                  <div>• Email</div>
+                  <div>• Address</div>
                   <div>• City</div>
                   <div>• State</div>
-                  <div>• Zip Code or ZIP</div>
-                  <div>• Customer Type or Type</div>
-                  <div>• Company Name or Company</div>
-                  <div>• Tax ID or TaxID</div>
+                  <div>• Zip</div>
+                  <div>• Customer Notes</div>
+                  <div>• Customer ID</div>
+                  <div>• Company Name (optional)</div>
+                  <div>• Tax ID (optional)</div>
                 </div>
               </div>
             </Card>

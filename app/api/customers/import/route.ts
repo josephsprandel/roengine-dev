@@ -82,39 +82,56 @@ export async function POST(request: NextRequest) {
     
     for (const record of records) {
       try {
-        // Get customer name (required field)
-        const customerName = (record as any)['Customer Name'] || 
-                             (record as any).Name || 
-                             (record as any).customer_name;
+        // ShopWare format: First Name + Last Name
+        const firstName = (record as any)['First Name'] || '';
+        const lastName = (record as any)['Last Name'] || '';
+        
+        // Build customer name from First Name + Last Name
+        let customerName = '';
+        if (firstName && lastName) {
+          customerName = `${firstName.trim()} ${lastName.trim()}`;
+        } else if (firstName) {
+          customerName = firstName.trim();
+        } else if (lastName) {
+          customerName = lastName.trim();
+        } else {
+          // Fallback to other name formats
+          customerName = (record as any)['Customer Name'] || 
+                        (record as any).Name || 
+                        (record as any).customer_name || 
+                        '';
+        }
         
         if (!customerName || customerName.trim().length === 0) {
           skipped++;
           continue; // Skip records without customer name
         }
         
-        // Extract phone numbers
-        const phonePrimary = (record as any)['Primary Phone'] || 
-                            (record as any).Phone || 
+        // Extract phone numbers - ShopWare format
+        const phonePrimary = (record as any).Phone || 
+                            (record as any)['Primary Phone'] || 
                             (record as any).phone_primary || 
                             '';
         
-        const phoneSecondary = (record as any)['Secondary Phone'] || 
+        // Parse "Other phones" field (may contain multiple phones separated by commas)
+        const otherPhones = (record as any)['Other phones'] || '';
+        const phoneNumbers = otherPhones.split(',').map((p: string) => p.trim()).filter((p: string) => p);
+        const phoneSecondary = phoneNumbers[0] || 
+                              (record as any)['Secondary Phone'] || 
                               (record as any)['Alt Phone'] || 
-                              (record as any).phone_secondary || 
                               '';
-        
-        const phoneMobile = (record as any)['Mobile Phone'] || 
+        const phoneMobile = phoneNumbers[1] || 
+                           (record as any)['Mobile Phone'] || 
                            (record as any).Mobile || 
-                           (record as any).phone_mobile || 
                            '';
         
-        // Extract email
+        // Extract email - ShopWare format
         const email = (record as any).Email || 
                      (record as any)['Email Address'] || 
                      (record as any).email || 
                      null;
         
-        // Extract address fields
+        // Extract address fields - ShopWare format
         const address = (record as any).Address || 
                        (record as any)['Street Address'] || 
                        (record as any).address || 
@@ -122,12 +139,12 @@ export async function POST(request: NextRequest) {
         
         const city = (record as any).City || (record as any).city || '';
         const state = (record as any).State || (record as any).state || '';
-        const zipCode = (record as any)['Zip Code'] || 
+        const zipCode = (record as any).Zip || 
+                       (record as any)['Zip Code'] || 
                        (record as any).ZIP || 
-                       (record as any).zip_code || 
                        '';
         
-        // Customer type
+        // Customer type - default to individual
         const customerType = (record as any)['Customer Type'] || 
                             (record as any).Type || 
                             'individual';
@@ -144,16 +161,15 @@ export async function POST(request: NextRequest) {
                      (record as any).tax_id || 
                      null;
         
-        // Notes
-        const notes = (record as any).Notes || 
+        // Notes - ShopWare format
+        const notes = (record as any)['Customer Notes'] || 
+                     (record as any).Notes || 
                      (record as any).Comments || 
-                     (record as any).notes || 
                      '';
         
         // ShopWare customer ID
         const shopwareId = (record as any)['Customer ID'] || 
                           (record as any).ID || 
-                          (record as any).shopware_id || 
                           '';
         
         // UPSERT: Insert new or update existing based on name + phone combination
