@@ -182,6 +182,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [expandedServices, setExpandedServices] = useState<Set<string>>(new Set())
+  const [dragEnabledIndex, setDragEnabledIndex] = useState<number | null>(null)
   
   // AI Recommendation states
   const [aiDialogOpen, setAiDialogOpen] = useState(false)
@@ -812,8 +813,10 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     setDragOverIndex(null)
   }, [dragIndex, dragOverIndex])
 
-  const dragHandleProps = useMemo(() => ({
-    onMouseDown: (e: React.MouseEvent) => e.stopPropagation(),
+  const createDragHandleProps = useCallback((index: number) => ({
+    onMouseDown: () => setDragEnabledIndex(index),
+    onMouseUp: () => setDragEnabledIndex(null),
+    onMouseLeave: () => setDragEnabledIndex(null),
   }), [])
 
   const toggleServiceExpanded = useCallback((serviceId: string) => {
@@ -1087,10 +1090,17 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
             {services.map((service, index) => (
               <div
                 key={service.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, index)}
+                draggable={dragEnabledIndex === index}
+                onDragStart={(e) => {
+                  if (dragEnabledIndex === index) {
+                    handleDragStart(e, index)
+                  }
+                }}
                 onDragOver={(e) => handleDragOver(e, index)}
-                onDragEnd={handleDragEnd}
+                onDragEnd={() => {
+                  setDragEnabledIndex(null)
+                  handleDragEnd()
+                }}
                 className={`transition-all ${dragOverIndex === index ? "border-t-2 border-primary" : ""}`}
               >
                 <EditableServiceCard
@@ -1099,7 +1109,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
                   onRemove={() => removeService(service.id)}
                   isDragging={dragIndex === index}
                   roTechnician="Unassigned"
-                  dragHandleProps={dragHandleProps}
+                  dragHandleProps={createDragHandleProps(index)}
                 />
               </div>
             ))}
