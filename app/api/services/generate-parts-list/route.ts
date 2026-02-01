@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { checkInventory } from '@/lib/parts/check-inventory'
+import { getPreferredVendorForVehicle, type VendorPreference } from '@/lib/parts/get-preferred-vendor'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
@@ -24,6 +25,9 @@ export async function POST(request: NextRequest) {
     console.log('=== GENERATING PARTS LIST ===')
     console.log('Services:', services.length)
     console.log('Vehicle:', `${vehicle.year} ${vehicle.make} ${vehicle.model}`)
+    console.log('[DEBUG] Vehicle VIN:', vehicle.vin)
+    console.log('[DEBUG] Vehicle VIN type:', typeof vehicle.vin)
+    console.log('[DEBUG] Full vehicle object:', JSON.stringify(vehicle, null, 2))
 
     // Validate inputs
     if (!services || services.length === 0) {
@@ -40,6 +44,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // CRITICAL: Validate VIN for PartsTech vehicle filtering
+    if (!vehicle.vin || typeof vehicle.vin !== 'string' || vehicle.vin.length !== 17) {
+      console.error('[DEBUG] ⚠️ INVALID OR MISSING VIN!')
+      console.error('[DEBUG] VIN value:', JSON.stringify(vehicle.vin))
+      console.error('[DEBUG] This will cause PartsTech to return generic/wrong parts!')
+      // Don't fail - continue but log warning
+    }
+
     // Initialize Gemini AI
     if (!process.env.GOOGLE_AI_API_KEY) {
       return NextResponse.json(
@@ -54,14 +66,16 @@ export async function POST(request: NextRequest) {
     /**
      * Build Gemini Prompt
      * 
-     * Goal: Generate generic parts descriptions (not brand-specific)
+     * Goal: Generate generic parts descriptions for SCHEDULED MAINTENANCE only
      * Why: We'll search PartsTech with generic terms to get multiple options
      * 
-     * Example:
-     * - Good: "oil filter"
-     * - Bad: "Fram PH3614" (too specific)
+     * Key distinctions:
+     * - Maintenance WITH parts: oil changes, filter replacements, fluid flushes
+     * - Labor-only maintenance: tire rotation, inspections → empty parts array
+     * - Repairs (out of scope): brake pads, battery replacement → empty parts array
+     * - Shop supplies: brake cleaner, grease → never include
      */
-    const prompt = `You are an expert automotive service writer.
+    const prompt = `You are an expert automotive service writer for SCHEDULED MAINTENANCE.
 
 VEHICLE: ${vehicle.year} ${vehicle.make} ${vehicle.model}${vehicle.engine ? ' ' + vehicle.engine : ''}
 
@@ -70,7 +84,110 @@ ${services.map((s: any, i: number) =>
   `${i + 1}. ${s.service_name}${s.service_description ? ': ' + s.service_description : ''}`
 ).join('\n')}
 
-For each service, list the parts needed. Use GENERIC descriptions (NOT brand names or part numbers).
+CRITICAL: YOU ARE GENERATING PARTS FOR SCHEDULED MAINTENANCE ONLY
+
+Scheduled maintenance = Services listed in the vehicle's owner's manual maintenance schedule.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+RULES FOR PARTS GENERATION:
+
+1. MAINTENANCE WITH PARTS (Generate parts for these):
+   - Oil changes → oil filter + engine oil
+   - Air filter replacement → air filter
+   - Cabin air filter replacement → cabin air filter
+   - Spark plug replacement → spark plugs
+   - Coolant flush → coolant
+   - Transmission service → transmission fluid + filter (if applicable)
+   - Differential service → differential fluid
+   - Fuel filter replacement → fuel filter
+   - PCV valve replacement → PCV valve
+   - Drive belt replacement → drive belt
+   
+   Parts = filters, fluids, plugs, belts - items being REPLACED per maintenance schedule
+
+2. LABOR-ONLY MAINTENANCE (NO parts - return empty array):
+   - Tire rotation (just labor)
+   - Brake inspection (inspection only - NOT brake pad replacement)
+   - Battery test/inspection (test only - NOT battery replacement)
+   - Exhaust inspection
+   - Fluid level checks (checking only - NOT filling/flushing)
+   - Visual inspections
+   - Lubrication services (grease already on shelf)
+   
+   For these services, return empty parts array: "parts": []
+
+3. REPAIRS ARE OUT OF SCOPE (NO parts - return empty array):
+   This system handles SCHEDULED MAINTENANCE only.
+   
+   DO NOT generate parts for REPAIRS:
+   - Brake pad replacement (repair, not maintenance)
+   - Brake rotor replacement (repair)
+   - Battery replacement (repair)
+   - Starter, alternator, water pump (repairs)
+   - Suspension components (repairs)
+   
+   Brake inspection is maintenance. Brake pad replacement is repair.
+   Battery test is maintenance. Battery replacement is repair.
+
+4. SHOP SUPPLIES EXCLUSION:
+   DO NOT include consumables/supplies:
+   - Brake cleaner, penetrating spray
+   - Anti-seize lubricant, dielectric grease
+   - Shop towels, disposal fees
+   - Gasket sealant, thread locker
+   - Wheel weights, valve stems
+   - Lug nuts, wheel locks
+   
+   These are overhead, not line items.
+
+5. DECISION LOGIC:
+   - Service name contains "replacement" or "change" or "flush" → Include parts
+   - Service name contains "inspection" or "check" or "test" or "rotation" → NO parts
+   - If uncertain, ask: "Is this in the owner's manual maintenance schedule?" 
+     → YES = may need parts, NO = don't include
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PART DESCRIPTION FORMAT - CRITICAL FOR SEARCH:
+
+Use SIMPLE, GENERIC part names. PartsTech searches require basic terminology.
+
+✅ CORRECT DESCRIPTIONS (Generic - 2-3 words max):
+- "oil filter"
+- "air filter"
+- "cabin air filter"
+- "spark plug"
+- "engine oil 0w20"
+- "coolant"
+- "transmission fluid"
+- "brake fluid"
+- "fuel filter"
+- "PCV valve"
+- "drive belt"
+
+❌ WRONG DESCRIPTIONS (Too specific - breaks search):
+- "spin-on type oil filter" ✗
+- "cartridge-style oil filter" ✗
+- "premium synthetic oil filter" ✗
+- "engine air cleaner element" ✗
+- "iridium spark plug" ✗
+- "extended life coolant" ✗
+
+WHY: 
+- PartsTech filters by vehicle compatibility automatically
+- Adding descriptors ("spin-on", "cartridge", "premium") breaks search
+- Vehicle-specific details come from PartsTech, not your description
+
+RULE: Use only the base part category name (2-3 words maximum)
+
+Examples:
+- Need: Oil filter → Description: "oil filter"
+- Need: Air filter → Description: "air filter"  
+- Need: Spark plugs → Description: "spark plug"
+- Need: 0W-20 oil → Description: "engine oil 0w20" (spec OK, type NOT)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Return JSON in this EXACT format:
 {
@@ -89,34 +206,36 @@ Return JSON in this EXACT format:
           "quantity": 5,
           "unit": "quarts",
           "notes": "Use manufacturer recommended grade"
-        },
-        {
-          "description": "oil drain plug gasket",
-          "quantity": 1,
-          "unit": "each",
-          "notes": "Replace every oil change"
         }
       ]
+    },
+    {
+      "serviceName": "Tire rotation",
+      "parts": []
+    },
+    {
+      "serviceName": "Brake inspection",
+      "parts": []
     }
   ]
 }
 
-IMPORTANT RULES:
+IMPORTANT FORMATTING RULES:
 1. Use GENERIC descriptions only (e.g., "oil filter" NOT "Fram PH3614")
 2. Include quantities and units (each, quarts, gallons, etc.)
-3. Include common consumables (gaskets, clips, o-rings, fasteners)
-4. Be specific about fluid specs (0W-20, DOT 3, ATF+4, etc.)
-5. For brake services, specify front/rear if different
-6. For tire services, include related items (valve stems, weights)
-7. Return ONLY valid JSON, no markdown, no explanation
+3. Be specific about fluid specs (0W-20, DOT 3, ATF+4, etc.)
+4. Return ONLY valid JSON, no markdown, no explanation
+5. ALWAYS return empty parts array [] for inspections, rotations, and tests
 
-Service-specific guidance:
-- Oil change: filter, oil (specify grade), drain plug gasket, oil disposal fee
-- Air filter: engine air filter (specify if cabin filter is separate)
-- Tire rotation: valve stems (if needed), wheel weights, tire disposal
-- Brake service: pads/shoes, brake cleaner, anti-seize, brake fluid (if flush)
-- Coolant service: coolant (specify type), distilled water (if needed)
-- Transmission service: transmission fluid (specify type), filter (if serviceable), gasket
+Return ONLY parts that are:
+1. Installed during scheduled maintenance
+2. Listed in maintenance schedule
+3. Consumable items (filters, fluids, plugs)
+
+Return EMPTY parts array for:
+1. Inspections (even if they might lead to repairs later)
+2. Labor-only services (rotations, checks, tests)
+3. Repairs (not scheduled maintenance)
 `
 
     // Call Gemini AI
@@ -145,41 +264,32 @@ Service-specific guidance:
 
     console.log('✓ Generated parts for', partsList.services.length, 'services')
 
-    // For each part, check inventory FIRST, then fall back to PartsTech (parallel for speed)
-    console.log('Checking inventory and pricing...')
+    // Get preferred vendor for this vehicle based on its make/origin
+    let preferredVendor: VendorPreference | null = null
+    try {
+      preferredVendor = await getPreferredVendorForVehicle(vehicle.make)
+      console.log(`✓ Preferred vendor for ${vehicle.make}: ${preferredVendor.preferred_vendor} (${preferredVendor.vehicle_origin})`)
+    } catch (vendorError) {
+      console.log('⚠️ Could not get preferred vendor, using default sorting')
+    }
+
+    /**
+     * CORRECTED FLOW: PartsTech FIRST for vehicle compatibility
+     * 
+     * OLD (BROKEN): Check inventory first → Returns generic parts that don't fit vehicle
+     * NEW (FIXED): Call PartsTech first → Get vehicle-compatible parts → Cross-reference with inventory
+     * 
+     * This ensures we ONLY show parts that fit the specific vehicle.
+     */
+    console.log('Looking up vehicle-compatible parts via PartsTech...')
     
     const servicesWithPricing = await Promise.all(
       partsList.services.map(async (service: any) => {
         const partsWithPricing = await Promise.all(
           service.parts.map(async (part: any) => {
             try {
-              // STEP 1: Check inventory first (fast, local database)
-              const inventoryParts = await checkInventory(part.description)
-              
-              // STEP 2: If found in inventory, return inventory options
-              if (inventoryParts.length > 0) {
-                console.log(`✓ Found ${inventoryParts.length} inventory matches for "${part.description}"`)
-                return {
-                  ...part,
-                  source: 'inventory',
-                  pricingOptions: inventoryParts.map(inv => ({
-                    partNumber: inv.partNumber,
-                    description: inv.description,
-                    brand: inv.vendor,
-                    vendor: inv.vendor,
-                    cost: inv.cost,
-                    retailPrice: inv.price,
-                    inStock: true,
-                    quantity: inv.quantityAvailable,
-                    location: inv.location,
-                    binLocation: inv.binLocation,
-                    isInventory: true // Flag for UI styling
-                  }))
-                }
-              }
-              
-              // STEP 3: Not in inventory, search PartsTech as fallback
-              console.log(`⚠️ Not in inventory, searching PartsTech for "${part.description}"`)
+              // STEP 1: Call PartsTech FIRST to get vehicle-compatible parts
+              console.log(`🔍 PartsTech lookup for "${part.description}" (VIN: ${vehicle.vin})`)
               const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
               const searchResponse = await fetch(`${baseUrl}/api/parts/search`, {
                 method: 'POST',
@@ -191,53 +301,137 @@ Service-specific guidance:
                 })
               })
 
-              if (!searchResponse.ok) {
+              let partstechParts: any[] = []
+              let compatiblePartNumbers: string[] = []
+
+              if (searchResponse.ok) {
+                const searchData = await searchResponse.json()
+                
+                // Extract all vehicle-compatible parts from PartsTech
+                partstechParts = searchData.data?.vendors
+                  ?.flatMap((v: any) => 
+                    v.parts.map((p: any) => ({
+                      partNumber: p.part_number,
+                      description: p.description,
+                      brand: p.brand,
+                      vendor: v.vendor,
+                      cost: p.price || 0,
+                      retailPrice: p.list_price || p.retail_price || p.price * 1.4 || 0,
+                      inStock: p.quantity_available > 0,
+                      quantity: p.quantity_available || 0,
+                      images: p.images || [],
+                      isInventory: false
+                    }))
+                  ) || []
+                
+                // Get list of compatible part numbers for inventory cross-reference
+                compatiblePartNumbers = partstechParts.map(p => p.partNumber?.toUpperCase())
+                console.log(`✓ PartsTech returned ${partstechParts.length} compatible parts for "${part.description}"`)
+                if (partstechParts.length > 0) {
+                  console.log(`  First 3 compatible: ${compatiblePartNumbers.slice(0, 3).join(', ')}`)
+                }
+              } else {
                 console.log(`⚠️ PartsTech search failed for "${part.description}"`)
-                return {
-                  ...part,
-                  source: 'none',
-                  pricingOptions: []
+              }
+
+              // STEP 2: Check inventory for COMPATIBLE parts only
+              // This finds inventory items that match PartsTech's vehicle-compatible part numbers
+              let inventoryMatches: any[] = []
+              if (compatiblePartNumbers.length > 0) {
+                const allInventory = await checkInventory(part.description)
+                
+                // Filter inventory to only parts that PartsTech says are compatible
+                inventoryMatches = allInventory.filter(inv => 
+                  compatiblePartNumbers.includes(inv.partNumber?.toUpperCase())
+                )
+                
+                if (inventoryMatches.length > 0) {
+                  console.log(`✓ Found ${inventoryMatches.length} COMPATIBLE parts in inventory for "${part.description}"`)
+                  console.log(`  In-stock compatible: ${inventoryMatches.map(p => p.partNumber).join(', ')}`)
+                } else if (allInventory.length > 0) {
+                  console.log(`⚠️ Inventory has ${allInventory.length} "${part.description}" but NONE match vehicle compatibility`)
+                  console.log(`  Inventory has: ${allInventory.map(p => p.partNumber).join(', ')}`)
+                  console.log(`  Vehicle needs: ${compatiblePartNumbers.slice(0, 5).join(', ')}...`)
                 }
               }
 
-              const searchData = await searchResponse.json()
+              // STEP 3: Build pricing options - prioritize inventory matches
+              let pricingOptions: any[] = []
 
-              // Extract pricing options (max 4: prefer 1 OEM + 3 aftermarket)
-              const allParts = searchData.data?.vendors
-                ?.flatMap((v: any) => 
-                  v.parts.map((p: any) => ({
-                    partNumber: p.part_number,
-                    description: p.description,
-                    brand: p.brand,
-                    vendor: v.vendor,
-                    cost: p.price || 0,
-                    retailPrice: p.list_price || p.retail_price || p.price * 1.4 || 0,
-                    inStock: p.quantity_available > 0,
-                    quantity: p.quantity_available || 0,
-                    images: p.images || [],
-                    isInventory: false
-                  }))
-                ) || []
+              // Add inventory matches first (flagged with isInventory: true)
+              if (inventoryMatches.length > 0) {
+                const inventoryOptions = inventoryMatches.map(inv => ({
+                  partNumber: inv.partNumber,
+                  description: inv.description,
+                  brand: inv.vendor,
+                  vendor: inv.vendor,
+                  cost: inv.cost,
+                  retailPrice: inv.price,
+                  inStock: true,
+                  quantity: inv.quantityAvailable,
+                  location: inv.location,
+                  binLocation: inv.binLocation,
+                  isInventory: true // Flag for UI styling - green highlight
+                }))
+                pricingOptions.push(...inventoryOptions)
+              }
 
-              // Separate OEM vs aftermarket
-              const oemParts = allParts.filter((p: any) => 
+              // Add PartsTech options (excluding any we already have from inventory)
+              const inventoryPartNumbers = inventoryMatches.map(p => p.partNumber?.toUpperCase())
+              const additionalPartsTech = partstechParts.filter(p => 
+                !inventoryPartNumbers.includes(p.partNumber?.toUpperCase())
+              )
+
+              // Separate OEM vs aftermarket for PartsTech results
+              const oemParts = additionalPartsTech.filter((p: any) => 
                 p.vendor?.toLowerCase().includes(vehicle.make?.toLowerCase() || '')
               )
-              const aftermarketParts = allParts.filter((p: any) => 
+              let aftermarketParts = additionalPartsTech.filter((p: any) => 
                 !p.vendor?.toLowerCase().includes(vehicle.make?.toLowerCase() || '')
               )
 
-              // Take top 1 OEM + top 3 aftermarket
-              const pricingOptions = [
-                ...oemParts.slice(0, 1),
-                ...aftermarketParts.slice(0, 3)
-              ]
+              // Sort aftermarket parts by preferred vendor (if configured)
+              if (preferredVendor && preferredVendor.preferred_vendor) {
+                const preferredName = preferredVendor.preferred_vendor.toLowerCase()
+                aftermarketParts = aftermarketParts.sort((a: any, b: any) => {
+                  const aIsPreferred = a.vendor?.toLowerCase().includes(preferredName)
+                  const bIsPreferred = b.vendor?.toLowerCase().includes(preferredName)
+                  
+                  // Preferred vendor first
+                  if (aIsPreferred && !bIsPreferred) return -1
+                  if (bIsPreferred && !aIsPreferred) return 1
+                  
+                  // Then sort by price
+                  return (a.cost || 0) - (b.cost || 0)
+                })
+                
+                const preferredCount = aftermarketParts.filter((p: any) => 
+                  p.vendor?.toLowerCase().includes(preferredName)
+                ).length
+                if (preferredCount > 0) {
+                  console.log(`  ✓ ${preferredCount} parts from preferred vendor (${preferredVendor.preferred_vendor})`)
+                }
+              }
 
-              console.log(`✓ Found ${pricingOptions.length} PartsTech options for "${part.description}"`)
+              // Add up to 1 OEM + 3 aftermarket from PartsTech (total max 4 non-inventory)
+              const maxNonInventory = 4 - pricingOptions.length
+              if (maxNonInventory > 0) {
+                const toAdd = [
+                  ...oemParts.slice(0, 1),
+                  ...aftermarketParts.slice(0, maxNonInventory - Math.min(oemParts.length, 1))
+                ]
+                pricingOptions.push(...toAdd)
+              }
+
+              const source = inventoryMatches.length > 0 
+                ? 'inventory+partstech' 
+                : (partstechParts.length > 0 ? 'partstech' : 'none')
+
+              console.log(`✓ Final options for "${part.description}": ${pricingOptions.length} (source: ${source})`)
 
               return {
                 ...part,
-                source: pricingOptions.length > 0 ? 'partstech' : 'none',
+                source,
                 pricingOptions
               }
             } catch (error: any) {

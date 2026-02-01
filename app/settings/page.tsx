@@ -8,7 +8,9 @@ import { ShopSettings } from "@/components/settings/shop-settings"
 import { UserSettings } from "@/components/settings/user-settings"
 import { BillingSettings } from "@/components/settings/billing-settings"
 import { AppearanceSettings } from "@/components/settings/appearance-settings"
-import { Settings, Database, Building2, Users, CreditCard, Palette } from "lucide-react"
+import { LaborRatesSettings } from "@/components/settings/labor-rates-settings"
+import { VendorPreferencesSettings } from "@/components/settings/vendor-preferences-settings"
+import { Settings, Database, Building2, Users, CreditCard, Palette, DollarSign, Package } from "lucide-react"
 
 export default function SettingsPage() {
   return (
@@ -57,6 +59,14 @@ export default function SettingsPage() {
                   <Palette size={16} />
                   Appearance
                 </TabsTrigger>
+                <TabsTrigger value="labor-rates" className="flex items-center gap-2 data-[state=active]:bg-background">
+                  <DollarSign size={16} />
+                  Labor Rates
+                </TabsTrigger>
+                <TabsTrigger value="vendor-preferences" className="flex items-center gap-2 data-[state=active]:bg-background">
+                  <Package size={16} />
+                  Vendor Preferences
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="data-sources">
@@ -77,6 +87,14 @@ export default function SettingsPage() {
 
               <TabsContent value="appearance">
                 <AppearanceSettings />
+              </TabsContent>
+
+              <TabsContent value="labor-rates">
+                <LaborRatesSettings />
+              </TabsContent>
+
+              <TabsContent value="vendor-preferences">
+                <VendorPreferencesSettings />
               </TabsContent>
             </Tabs>
           </div>

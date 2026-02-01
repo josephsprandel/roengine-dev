@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Building2, Clock, DollarSign, MapPin, Phone, Mail, Globe, Save } from "lucide-react"
+import { Building2, Clock, MapPin, Phone, Mail, Globe, Save } from "lucide-react"
 
 export function ShopSettings() {
   const [saving, setSaving] = useState(false)
@@ -128,52 +128,6 @@ export function ShopSettings() {
               </Select>
             </div>
           ))}
-        </div>
-      </Card>
-
-      {/* Labor Rates */}
-      <Card className="p-6 border-border">
-        <div className="flex items-center gap-3 mb-6">
-          <DollarSign size={20} className="text-accent" />
-          <h3 className="text-lg font-semibold text-foreground">Labor Rates</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="space-y-2">
-            <Label htmlFor="standard-rate">Standard Labor Rate</Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-              <Input id="standard-rate" defaultValue="125.00" className="pl-7" />
-            </div>
-            <p className="text-xs text-muted-foreground">Per hour, general repairs</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="diagnostic-rate">Diagnostic Rate</Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-              <Input id="diagnostic-rate" defaultValue="150.00" className="pl-7" />
-            </div>
-            <p className="text-xs text-muted-foreground">Per hour, diagnostic work</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="specialty-rate">Specialty Rate</Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-              <Input id="specialty-rate" defaultValue="175.00" className="pl-7" />
-            </div>
-            <p className="text-xs text-muted-foreground">Per hour, EV/hybrid/European</p>
-          </div>
-        </div>
-        <div className="mt-6 p-4 rounded-lg bg-muted/30 border border-border">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-foreground">Parts Markup</p>
-              <p className="text-sm text-muted-foreground">Default markup applied to parts cost</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Input defaultValue="35" className="w-20 text-right" />
-              <span className="text-muted-foreground">%</span>
-            </div>
-          </div>
         </div>
       </Card>
 

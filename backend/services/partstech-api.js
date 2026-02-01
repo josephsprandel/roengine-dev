@@ -184,6 +184,7 @@ async function ensureSession() {
  * Execute a GraphQL query against PartsTech API
  */
 async function graphqlQuery(query, variables, operationName, cookies) {
+  console.log(`[PARTSTECH] GraphQL Query: ${operationName}`, JSON.stringify(variables, null, 2));
   try {
     const response = await fetch(GRAPHQL_ENDPOINT, {
       method: 'POST',
@@ -423,6 +424,7 @@ async function getPartTypeFromSearch(searchTerm, cookies) {
  * Search for parts from a single vendor account
  */
 async function searchVendorParts(accountId, vehicleId, vin, partTypeIds, cookies) {
+  console.log(`[PARTSTECH] Searching Vendor ${accountId} for PartTypes ${partTypeIds} (Vehicle: ${vehicleId}, VIN: ${vin})`);
   const query = `
     query GetProducts($searchInput: SearchInput!) {
       products(searchInput: $searchInput) {
@@ -478,6 +480,15 @@ async function searchVendorParts(accountId, vehicleId, vin, partTypeIds, cookies
 
     if (!data.products || !data.products.products) {
       return [];
+    }
+
+    // DEBUG: Log full raw product object to check for cross-reference fields
+    if (data.products.products.length > 0) {
+      console.log('═'.repeat(70));
+      console.log('[PARTSTECH DEBUG] RAW FIRST PRODUCT (checking for cross-ref fields):');
+      console.log(JSON.stringify(data.products.products[0], null, 2));
+      console.log('═'.repeat(70));
+      console.log('[PARTSTECH DEBUG] All keys in product object:', Object.keys(data.products.products[0]));
     }
 
     return data.products.products.map(p => {
@@ -609,12 +620,22 @@ function groupPartsByVendor(parts) {
 async function searchPartsTech(vin, searchTerm, options = { mode: 'manual' }) {
   const startTime = Date.now();
 
-  console.log('='.repeat(70));
-  console.log('PARTSTECH GRAPHQL API SEARCH');
-  console.log(`VIN: ${vin}`);
-  console.log(`Search: ${searchTerm}`);
-  console.log(`Mode: ${options.mode}`);
-  console.log('='.repeat(70));
+  console.log('═'.repeat(70));
+  console.log('[PARTSTECH DEBUG] ═══ SEARCH CALLED ═══');
+  console.log('[PARTSTECH DEBUG] VIN received:', vin);
+  console.log('[PARTSTECH DEBUG] VIN type:', typeof vin);
+  console.log('[PARTSTECH DEBUG] VIN length:', vin ? vin.length : 'N/A');
+  console.log('[PARTSTECH DEBUG] Search term:', searchTerm);
+  console.log('[PARTSTECH DEBUG] Mode:', options.mode);
+  console.log('[PARTSTECH DEBUG] Timestamp:', new Date().toISOString());
+  console.log('═'.repeat(70));
+
+  // CRITICAL: Validate VIN before proceeding
+  if (!vin || typeof vin !== 'string' || vin.length !== 17) {
+    console.error('[PARTSTECH DEBUG] ❌ INVALID VIN! Cannot filter by vehicle.');
+    console.error('[PARTSTECH DEBUG] VIN value:', JSON.stringify(vin));
+    // Still try to search but log warning
+  }
 
   try {
     // Step 1: Ensure we have a valid session
@@ -661,11 +682,21 @@ async function searchPartsTech(vin, searchTerm, options = { mode: 'manual' }) {
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
 
-    console.log('='.repeat(70));
-    console.log(`✅ Search completed in ${duration}s`);
-    console.log(`   Parts: ${filteredParts.length}`);
-    console.log(`   Vendors: ${vendorGroups.length}`);
-    console.log('='.repeat(70));
+    console.log('═'.repeat(70));
+    console.log('[PARTSTECH DEBUG] ═══ SEARCH COMPLETE ═══');
+    console.log(`[PARTSTECH DEBUG] Duration: ${duration}s`);
+    console.log(`[PARTSTECH DEBUG] Vehicle decoded: ${vehicle.year} ${vehicle.make} ${vehicle.model}`);
+    console.log(`[PARTSTECH DEBUG] Vehicle ID: ${vehicle.id}`);
+    console.log(`[PARTSTECH DEBUG] Part type: ${partType.name} (ID: ${partType.id})`);
+    console.log(`[PARTSTECH DEBUG] Total parts found: ${filteredParts.length}`);
+    console.log(`[PARTSTECH DEBUG] Vendors with results: ${vendorGroups.length}`);
+    if (filteredParts.length > 0) {
+      console.log('[PARTSTECH DEBUG] First 5 part numbers:');
+      filteredParts.slice(0, 5).forEach((p, i) => {
+        console.log(`  ${i + 1}. ${p.part_number} - ${p.brand} - ${p.description?.substring(0, 50)}`);
+      });
+    }
+    console.log('═'.repeat(70));
 
     return {
       success: true,
@@ -742,6 +773,7 @@ module.exports = {
   getVehicleByVIN,
   getPartTypeFromSearch,
   searchAllVendors,
+  graphqlQuery,
   
   // Utilities
   cleanup,

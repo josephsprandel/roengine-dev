@@ -195,6 +195,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   const [partsDialogOpen, setPartsDialogOpen] = useState(false)
   const [servicesWithParts, setServicesWithParts] = useState<any[]>([])
   const [generatingParts, setGeneratingParts] = useState(false)
+  const [loadingStep, setLoadingStep] = useState<string>('')
 
   // ALL useMemo and useCallback MUST ALSO BE AT THE TOP
   const totals = useMemo(() => {
@@ -663,7 +664,12 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     setAiDialogOpen(false)
 
     try {
-      // Step 1: Generate parts list via AI
+      // Step 1: Analyzing services
+      setLoadingStep('Analyzing services...')
+      await new Promise(resolve => setTimeout(resolve, 300))
+
+      // Step 2: Generating parts list with AI
+      setLoadingStep('Generating parts list with AI...')
       const partsResponse = await fetch('/api/services/generate-parts-list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -688,10 +694,16 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         throw new Error(`Failed to generate parts list: ${errorText}`)
       }
 
+      // Step 3: Looking up pricing
+      setLoadingStep('Looking up pricing...')
       const { servicesWithParts: generatedParts } = await partsResponse.json()
       console.log('✓ Parts generated for', generatedParts.length, 'services')
 
-      // Step 2: Show parts selection modal
+      // Step 4: Preparing selection
+      setLoadingStep('Preparing selection...')
+      await new Promise(resolve => setTimeout(resolve, 200))
+
+      // Done - Show parts selection modal
       setServicesWithParts(generatedParts)
       setPartsDialogOpen(true)
 
@@ -700,6 +712,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
       showToast(error.message || 'Failed to generate parts list', 'error')
     } finally {
       setGeneratingParts(false)
+      setLoadingStep('')
     }
   }, [selectedAiServices, workOrder, showToast])
 
@@ -936,6 +949,32 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   const isApproved = workOrder.state === "approved"
   const isCompleted = workOrder.state === "completed"
   const isCancelled = workOrder.state === "cancelled"
+
+  // Parts Generation Loader Component
+  function PartsGenerationLoader({ 
+    isOpen, 
+    currentStep 
+  }: { 
+    isOpen: boolean; 
+    currentStep: string;
+  }) {
+    return (
+      <Dialog open={isOpen}>
+        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+          <DialogHeader className="sr-only">
+            <DialogTitle>Generating Parts List</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center justify-center py-8 space-y-4">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <div className="text-center space-y-2">
+              <p className="text-lg font-medium">Generating Parts List</p>
+              <p className="text-sm text-muted-foreground">{currentStep}</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -1318,6 +1357,12 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         onClose={() => setPartsDialogOpen(false)}
         servicesWithParts={servicesWithParts}
         onConfirm={handleConfirmPartsSelection}
+      />
+
+      {/* Parts Generation Loading Dialog */}
+      <PartsGenerationLoader 
+        isOpen={generatingParts}
+        currentStep={loadingStep}
       />
     </div>
   )
