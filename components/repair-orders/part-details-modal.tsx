@@ -22,8 +22,8 @@ interface AutocompleteSuggestion {
   part_number?: string
   description?: string
   vendor?: string
-  cost?: number
-  price?: number
+  cost?: number | string  // PostgreSQL DECIMAL can return as string
+  price?: number | string
   quantity_available?: number
   field?: string
 }
@@ -267,7 +267,7 @@ export function PartDetailsModal({ isOpen, onClose, lineItem, onSave, roNumber }
 
   // Handle autocomplete selection - auto-fill related fields
   const handleVendorSelect = (suggestion: AutocompleteSuggestion) => {
-    setVendor(suggestion.value)
+    setVendor(suggestion.value || "")
     // Optionally fill other fields if available
     if (suggestion.part_number && !partNumber) {
       setPartNumber(suggestion.part_number)
@@ -278,7 +278,7 @@ export function PartDetailsModal({ isOpen, onClose, lineItem, onSave, roNumber }
   }
 
   const handleDescriptionSelect = (suggestion: AutocompleteSuggestion) => {
-    setDescription(suggestion.value)
+    setDescription(suggestion.value || "")
     // Auto-fill related fields
     if (suggestion.part_number) {
       setPartNumber(suggestion.part_number)
@@ -286,13 +286,19 @@ export function PartDetailsModal({ isOpen, onClose, lineItem, onSave, roNumber }
     if (suggestion.vendor) {
       setVendor(suggestion.vendor)
     }
-    if (suggestion.cost !== undefined) {
-      handleCostChange(suggestion.cost)
+    if (suggestion.cost !== undefined && suggestion.cost !== null) {
+      // Parse cost as number (PostgreSQL DECIMAL returns string)
+      const costValue = typeof suggestion.cost === 'string' 
+        ? parseFloat(suggestion.cost) 
+        : suggestion.cost
+      if (!isNaN(costValue)) {
+        handleCostChange(costValue)
+      }
     }
   }
 
   const handlePartNumberSelect = (suggestion: AutocompleteSuggestion) => {
-    setPartNumber(suggestion.value)
+    setPartNumber(suggestion.value || "")
     // Auto-fill related fields
     if (suggestion.description) {
       setDescription(suggestion.description)
@@ -300,8 +306,14 @@ export function PartDetailsModal({ isOpen, onClose, lineItem, onSave, roNumber }
     if (suggestion.vendor) {
       setVendor(suggestion.vendor)
     }
-    if (suggestion.cost !== undefined) {
-      handleCostChange(suggestion.cost)
+    if (suggestion.cost !== undefined && suggestion.cost !== null) {
+      // Parse cost as number (PostgreSQL DECIMAL returns string)
+      const costValue = typeof suggestion.cost === 'string' 
+        ? parseFloat(suggestion.cost) 
+        : suggestion.cost
+      if (!isNaN(costValue)) {
+        handleCostChange(costValue)
+      }
     }
   }
 
