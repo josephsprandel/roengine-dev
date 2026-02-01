@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Building2, Clock, MapPin, Phone, Mail, Globe, Save, Loader2, AlertCircle, Plus, X } from "lucide-react"
+import { Building2, Clock, MapPin, Phone, Mail, Globe, Save, Loader2, AlertCircle, Plus, X, Upload, ImageIcon, Trash2 } from "lucide-react"
+import Image from "next/image"
 
 // All 50 US States
 const US_STATES = [
@@ -85,6 +86,7 @@ interface ShopProfile {
   services_description: string
   tags: string[]
   parts_markup_percent: number
+  logo_url?: string | null
 }
 
 interface OperatingHours {
@@ -118,6 +120,7 @@ export function ShopSettings() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [newTag, setNewTag] = useState("")
+  const [uploadingLogo, setUploadingLogo] = useState(false)
 
   useEffect(() => {
     fetchShopProfile()
@@ -217,6 +220,67 @@ export function ShopSettings() {
     return `${hour - 12}:00 PM`
   }
 
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      setUploadingLogo(true)
+      setError(null)
+
+      const formData = new FormData()
+      formData.append("logo", file)
+
+      const response = await fetch("/api/settings/shop-logo", {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to upload logo")
+      }
+
+      // Update profile with new logo URL
+      setProfile({ ...profile, logo_url: data.logo_url })
+      alert("Logo uploaded successfully!")
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setUploadingLogo(false)
+      // Reset the input
+      e.target.value = ""
+    }
+  }
+
+  async function handleLogoDelete() {
+    if (!confirm("Are you sure you want to remove the shop logo?")) return
+
+    try {
+      setUploadingLogo(true)
+      setError(null)
+
+      const response = await fetch("/api/settings/shop-logo", {
+        method: "DELETE",
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to remove logo")
+      }
+
+      // Clear logo from profile
+      setProfile({ ...profile, logo_url: null })
+      alert("Logo removed successfully!")
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -247,6 +311,78 @@ export function ShopSettings() {
           {error}
         </div>
       )}
+
+      {/* Shop Logo */}
+      <Card className="p-6 border-border">
+        <div className="flex items-center gap-3 mb-6">
+          <ImageIcon size={20} className="text-accent" />
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">Shop Logo</h3>
+            <p className="text-sm text-muted-foreground">
+              Upload your shop logo for invoices, estimates, and the header
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex items-start gap-6">
+          {/* Logo Preview */}
+          <div className="flex-shrink-0">
+            <div className="w-32 h-32 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-muted/30 overflow-hidden">
+              {profile.logo_url ? (
+                <Image
+                  src={profile.logo_url}
+                  alt="Shop Logo"
+                  width={128}
+                  height={128}
+                  className="w-full h-full object-contain"
+                  unoptimized
+                />
+              ) : (
+                <div className="text-center p-4">
+                  <ImageIcon size={32} className="mx-auto text-muted-foreground mb-2" />
+                  <span className="text-xs text-muted-foreground">No logo</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Upload Controls */}
+          <div className="flex-1 space-y-4">
+            <div>
+              <Label htmlFor="logo-upload" className="block mb-2">
+                Upload Logo
+              </Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  id="logo-upload"
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml"
+                  onChange={handleLogoUpload}
+                  disabled={uploadingLogo}
+                  className="flex-1"
+                />
+                {uploadingLogo && <Loader2 size={20} className="animate-spin text-muted-foreground" />}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Accepted formats: PNG, JPEG, GIF, WebP, SVG. Max size: 5MB
+              </p>
+            </div>
+
+            {profile.logo_url && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogoDelete}
+                disabled={uploadingLogo}
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 size={14} className="mr-2" />
+                Remove Logo
+              </Button>
+            )}
+          </div>
+        </div>
+      </Card>
 
       {/* Shop Information */}
       <Card className="p-6 border-border">
