@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { checkInventory } from '@/lib/parts/check-inventory'
 import { getPreferredVendorForVehicle, type VendorPreference } from '@/lib/parts/get-preferred-vendor'
+import { query } from '@/lib/db'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
@@ -355,10 +356,139 @@ Return EMPTY parts array for:
                 }
               }
 
-              // STEP 3: Build pricing options - prioritize inventory matches
+              // STEP 3: AI FLUID MATCHING - Check if inventory fluids match the needed spec
+              const fluidKeywords = ['oil', 'coolant', 'fluid', 'antifreeze', 'brake fluid', 'transmission fluid', 'differential']
+              const isFluid = fluidKeywords.some(keyword => 
+                part.description.toLowerCase().includes(keyword)
+              )
+
+              let aiInventoryMatch: any = null
+
+              if (isFluid && partstechParts.length > 0) {
+                console.log(`🧪 FLUID DETECTED: "${part.description}" - checking inventory for spec match`)
+                
+                try {
+                  // Get in-stock fluids that might match (broader search than part-number matching)
+                  const inventoryFluids = await query(`
+                    SELECT 
+                      part_number,
+                      description,
+                      vendor,
+                      price as retail_price,
+                      cost,
+                      quantity_available,
+                      location,
+                      bin_location
+                    FROM parts_inventory
+                    WHERE (
+                      LOWER(description) ILIKE $1
+                      OR LOWER(description) ILIKE '%motor oil%'
+                      OR LOWER(description) ILIKE '%engine oil%'
+                      OR LOWER(description) ILIKE '%synthetic oil%'
+                      OR LOWER(description) ILIKE '%coolant%'
+                      OR LOWER(description) ILIKE '%antifreeze%'
+                      OR LOWER(description) ILIKE '%brake fluid%'
+                      OR LOWER(description) ILIKE '%transmission fluid%'
+                      OR LOWER(description) ILIKE '%atf%'
+                      OR LOWER(description) ILIKE '%differential%'
+                      OR LOWER(description) ILIKE '%gear oil%'
+                    )
+                    AND quantity_available > 0
+                    ORDER BY price ASC
+                    LIMIT 20
+                  `, [`%${part.description.split(' ')[0]}%`])
+
+                  if (inventoryFluids.rows.length > 0) {
+                    console.log(`  Found ${inventoryFluids.rows.length} potential inventory fluids`)
+                    
+                    // Ask AI to match inventory fluid to PartsTech spec
+                    const matchPrompt = `You are matching a needed fluid part to in-stock inventory.
+
+NEEDED PART:
+- Description: ${part.description}
+- Quantity: ${part.quantity || 1} ${part.unit || 'unit(s)'}
+
+PARTSTECH OPTIONS (what we would order from vendor):
+${partstechParts.slice(0, 5).map((p: any, i: number) => 
+  `${i+1}. ${p.description} - $${(p.retailPrice || 0).toFixed(2)} - ${p.vendor}`
+).join('\n')}
+
+IN-STOCK INVENTORY (available NOW, no wait):
+${inventoryFluids.rows.map((inv: any, i: number) => 
+  `${i+1}. ${inv.description} - $${parseFloat(inv.retail_price || 0).toFixed(2)} - Qty: ${inv.quantity_available} - Location: ${inv.location || 'N/A'}`
+).join('\n')}
+
+TASK:
+If ANY in-stock item meets the SPECIFICATION, select it over ordering.
+Match by spec (5W-30 = 5W-30, 0W-20 = 0W-20, DOT 3 = DOT 3, etc.)
+Ignore brand differences (Mobil vs Valvoline vs Pennzoil - all OK if spec matches)
+
+Return JSON ONLY:
+{
+  "useInventory": true or false,
+  "selectedInventoryIndex": number (1-based index from IN-STOCK list) or null,
+  "reason": "Brief explanation of why this part was selected"
+}
+
+IMPORTANT:
+- Prioritize in-stock over ordering (saves time and shipping)
+- Match by specification (viscosity/grade), NOT by brand
+- If quantity is insufficient, still prefer in-stock if spec matches
+- If NO in-stock item matches the spec, set useInventory: false`
+
+                    const matchResult = await model.generateContent(matchPrompt)
+                    const matchText = matchResult.response.text()
+                      .replace(/```json\n?/g, '')
+                      .replace(/```\n?/g, '')
+                      .trim()
+                    
+                    try {
+                      const matchData = JSON.parse(matchText)
+                      
+                      if (matchData.useInventory && matchData.selectedInventoryIndex) {
+                        const selectedInv = inventoryFluids.rows[matchData.selectedInventoryIndex - 1]
+                        if (selectedInv) {
+                          aiInventoryMatch = {
+                            partNumber: selectedInv.part_number,
+                            description: selectedInv.description,
+                            brand: selectedInv.vendor || 'AutoHouse Inventory',
+                            vendor: 'AutoHouse Inventory',
+                            cost: parseFloat(selectedInv.cost || 0),
+                            retailPrice: parseFloat(selectedInv.retail_price || 0),
+                            inStock: true,
+                            quantity: selectedInv.quantity_available,
+                            location: selectedInv.location,
+                            binLocation: selectedInv.bin_location,
+                            isInventory: true,
+                            matchReason: matchData.reason,
+                            source: 'ai-inventory-match'
+                          }
+                          console.log(`  ✓ AI MATCHED: Using "${selectedInv.description}" from inventory`)
+                          console.log(`    Reason: ${matchData.reason}`)
+                        }
+                      } else {
+                        console.log(`  ✗ AI says no inventory match: ${matchData.reason}`)
+                      }
+                    } catch (parseErr) {
+                      console.log(`  ⚠️ Failed to parse AI match response:`, matchText.substring(0, 100))
+                    }
+                  } else {
+                    console.log(`  No fluids in inventory for matching`)
+                  }
+                } catch (fluidErr: any) {
+                  console.log(`  ⚠️ Fluid matching error: ${fluidErr.message}`)
+                }
+              }
+
+              // STEP 4: Build pricing options - prioritize AI inventory match, then regular inventory, then PartsTech
               let pricingOptions: any[] = []
 
-              // Add inventory matches first (flagged with isInventory: true)
+              // If AI found an inventory match for fluid, use it first
+              if (aiInventoryMatch) {
+                pricingOptions.push(aiInventoryMatch)
+              }
+
+              // Add other inventory matches (not already added by AI match)
               if (inventoryMatches.length > 0) {
                 const inventoryOptions = inventoryMatches.map(inv => ({
                   partNumber: inv.partNumber,
