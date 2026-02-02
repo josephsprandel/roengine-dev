@@ -15,7 +15,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { checkInventory } from '@/lib/parts/check-inventory'
 import { getPreferredVendorForVehicle, type VendorPreference } from '@/lib/parts/get-preferred-vendor'
-import { isFluidPart, findFluidInInventory } from '@/lib/parts/check-inventory-fluids'
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
@@ -289,59 +288,7 @@ Return EMPTY parts array for:
         const partsWithPricing = await Promise.all(
           service.parts.map(async (part: any) => {
             try {
-              // DETERMINE PART TYPE: Fluid vs Filter/Hard Part
-              const partIsFluid = isFluidPart(part.description)
-              
-              /**
-               * INVENTORY-FIRST FLOW FOR FLUIDS
-               * 
-               * Fluids (oil, coolant, brake fluid, ATF) are spec-based, not vehicle-specific.
-               * If we have 0W-20 in stock, it works for ANY vehicle needing 0W-20.
-               * No need to validate with PartsTech - the spec IS the compatibility.
-               */
-              if (partIsFluid) {
-                console.log(`🧪 FLUID DETECTED: "${part.description}" - checking INVENTORY FIRST`)
-                
-                const inventoryFluids = await findFluidInInventory(part.description, part.quantity || 1)
-                
-                if (inventoryFluids.length > 0 && inventoryFluids[0].quantityAvailable >= (part.quantity || 1)) {
-                  console.log(`✓ Found "${part.description}" IN STOCK - using inventory, skipping PartsTech`)
-                  console.log(`  In-stock: ${inventoryFluids[0].description} (${inventoryFluids[0].quantityAvailable} available)`)
-                  
-                  // Return inventory fluid - no PartsTech call needed
-                  const pricingOptions = inventoryFluids.map(fluid => ({
-                    partNumber: fluid.partNumber,
-                    description: fluid.description,
-                    brand: fluid.vendor,
-                    vendor: fluid.vendor,
-                    cost: fluid.cost,
-                    retailPrice: fluid.price,
-                    inStock: true,
-                    quantity: fluid.quantityAvailable,
-                    location: fluid.location,
-                    binLocation: fluid.binLocation,
-                    isInventory: true
-                  }))
-                  
-                  return {
-                    ...part,
-                    source: 'inventory',
-                    pricingOptions
-                  }
-                } else {
-                  console.log(`⚠️ Fluid "${part.description}" NOT in stock or insufficient quantity`)
-                  console.log(`  Needed: ${part.quantity || 1}, Found: ${inventoryFluids[0]?.quantityAvailable || 0}`)
-                  console.log(`  Falling back to PartsTech for fluid...`)
-                  // Continue to PartsTech lookup below
-                }
-              }
-
-              /**
-               * PARTSTECH-FIRST FLOW FOR FILTERS/HARD PARTS
-               * 
-               * Filters, spark plugs, belts require vehicle-specific fitment.
-               * PartsTech validates compatibility - we can't just use any filter in stock.
-               */
+              // STEP 1: Call PartsTech FIRST to get vehicle-compatible parts
               console.log(`🔍 PartsTech lookup for "${part.description}" (VIN: ${vehicle.vin})`)
               const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
               const searchResponse = await fetch(`${baseUrl}/api/parts/search`, {
