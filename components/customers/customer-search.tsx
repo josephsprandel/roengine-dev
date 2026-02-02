@@ -9,6 +9,7 @@ import { Search, Phone, Mail, MapPin, Plus, Loader2, Upload, Trash2 } from "luci
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { useAuth } from "@/contexts/auth-context"
+import { Pagination, PaginationInfo } from "@/components/ui/pagination"
 import { CustomerCreateDialog } from "./customer-create-dialog"
 
 interface Customer {
@@ -39,13 +40,20 @@ export function CustomerSearch({ onSelectCustomer }: { onSelectCustomer?: (id: s
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalCustomers, setTotalCustomers] = useState(0)
+  const itemsPerPage = 50
 
   const fetchCustomers = async () => {
     setLoading(true)
     setError(null)
     
     try {
-      const params = new URLSearchParams({ limit: "50" })
+      const offset = (currentPage - 1) * itemsPerPage
+      const params = new URLSearchParams({
+        limit: itemsPerPage.toString(),
+        offset: offset.toString()
+      })
       if (searchTerm) {
         params.set("search", searchTerm)
       }
@@ -57,6 +65,7 @@ export function CustomerSearch({ onSelectCustomer }: { onSelectCustomer?: (id: s
 
       const data = await response.json()
       setCustomers(data.customers)
+      setTotalCustomers(data.pagination?.total || 0)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -65,11 +74,14 @@ export function CustomerSearch({ onSelectCustomer }: { onSelectCustomer?: (id: s
   }
 
   useEffect(() => {
-    const debounce = setTimeout(() => {
-      fetchCustomers()
-    }, 300)
+    fetchCustomers()
+  }, [searchTerm, currentPage])
 
-    return () => clearTimeout(debounce)
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    if (currentPage !== 1 && searchTerm) {
+      setCurrentPage(1)
+    }
   }, [searchTerm])
 
   const getCustomerInitials = (customer: Customer) => {
@@ -263,6 +275,23 @@ export function CustomerSearch({ onSelectCustomer }: { onSelectCustomer?: (id: s
           </Card>
         )}
       </div>
+
+      {/* Pagination */}
+      {!loading && customers.length > 0 && (
+        <div className="flex items-center justify-between">
+          <PaginationInfo
+            currentPage={currentPage}
+            totalPages={Math.ceil(totalCustomers / itemsPerPage)}
+            totalItems={totalCustomers}
+            itemsPerPage={itemsPerPage}
+          />
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil(totalCustomers / itemsPerPage)}
+            onPageChange={setCurrentPage}
+          />
+        </div>
+      )}
 
       {/* Create Dialog */}
       <CustomerCreateDialog

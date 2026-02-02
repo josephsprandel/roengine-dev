@@ -9,6 +9,7 @@ import { Plus, Download, ChevronRight, Search, Loader2, Trash2 } from "lucide-re
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { useAuth } from "@/contexts/auth-context"
+import { Pagination, PaginationInfo } from "@/components/ui/pagination"
 
 interface WorkOrder {
   id: string
@@ -41,13 +42,20 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalWorkOrders, setTotalWorkOrders] = useState(0)
+  const itemsPerPage = 50
 
   const fetchWorkOrders = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const params = new URLSearchParams({ limit: "50" })
+      const offset = (currentPage - 1) * itemsPerPage
+      const params = new URLSearchParams({
+        limit: itemsPerPage.toString(),
+        offset: offset.toString()
+      })
       
       if (selectedFilter !== "all") {
         params.set("state", selectedFilter)
@@ -64,20 +72,24 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
 
       const data = await response.json()
       setWorkOrders(data.work_orders || [])
+      setTotalWorkOrders(data.pagination?.total || 0)
     } catch (err: any) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [searchTerm, selectedFilter])
+  }, [searchTerm, selectedFilter, currentPage])
 
   useEffect(() => {
-    const debounce = setTimeout(() => {
-      fetchWorkOrders()
-    }, 300)
-
-    return () => clearTimeout(debounce)
+    fetchWorkOrders()
   }, [fetchWorkOrders])
+
+  // Reset to page 1 when search or filter changes
+  useEffect(() => {
+    if (currentPage !== 1) {
+      setCurrentPage(1)
+    }
+  }, [searchTerm, selectedFilter])
 
 
   // Count work orders by state
@@ -312,6 +324,23 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
               Create First RO
             </Button>
           </Card>
+        )}
+
+        {/* Pagination */}
+        {!loading && workOrders.length > 0 && (
+          <div className="flex items-center justify-between">
+            <PaginationInfo
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalWorkOrders / itemsPerPage)}
+              totalItems={totalWorkOrders}
+              itemsPerPage={itemsPerPage}
+            />
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(totalWorkOrders / itemsPerPage)}
+              onPageChange={setCurrentPage}
+            />
+          </div>
         )}
       </div>
 
