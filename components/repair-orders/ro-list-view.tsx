@@ -5,8 +5,10 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Plus, Download, ChevronRight, Search, Loader2 } from "lucide-react"
+import { Plus, Download, ChevronRight, Search, Loader2, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+import { useAuth } from "@/contexts/auth-context"
 
 interface WorkOrder {
   id: string
@@ -33,6 +35,7 @@ interface WorkOrder {
 
 export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void }) {
   const router = useRouter()
+  const { hasPermission } = useAuth()
   const [selectedFilter, setSelectedFilter] = useState<string>("all")
   const [searchTerm, setSearchTerm] = useState("")
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
@@ -233,7 +236,35 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
                       <p className="text-sm text-muted-foreground">{wo.customer_name}</p>
                       <p className="text-xs text-muted-foreground">{wo.phone_primary}</p>
                     </div>
-                    <ChevronRight className="text-muted-foreground group-hover:text-accent transition-colors" size={20} />
+                    <div className="flex items-center gap-1">
+                      {hasPermission('delete_ro') && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-800 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            if (!confirm(`Delete ${wo.ro_number}? It can be restored from the recycle bin.`)) return
+                            
+                            const res = await fetch(`/api/work-orders/${wo.id}/delete`, {
+                              method: 'DELETE',
+                              headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
+                            })
+                            
+                            if (res.ok) {
+                              toast.success('Repair order deleted')
+                              fetchWorkOrders()
+                            } else {
+                              const error = await res.json()
+                              toast.error(error.error || 'Failed to delete')
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <ChevronRight className="text-muted-foreground group-hover:text-accent transition-colors" size={20} />
+                    </div>
                   </div>
 
                   {/* Details */}

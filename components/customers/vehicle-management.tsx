@@ -4,7 +4,9 @@ import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Clock, Loader2, Edit2 } from "lucide-react"
+import { Plus, Clock, Loader2, Edit2, Trash2 } from "lucide-react"
+import { toast } from "sonner"
+import { useAuth } from "@/contexts/auth-context"
 import { VehicleCreateDialog } from "./vehicle-create-dialog"
 import { VehicleEditDialog } from "./vehicle-edit-dialog"
 
@@ -29,18 +31,13 @@ interface Vehicle {
 }
 
 export function VehicleManagement({ customerId }: { customerId: string }) {
+  const { hasPermission } = useAuth()
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
-
-  const showToast = (message: string, type: "success" | "error") => {
-    setToast({ message, type })
-    setTimeout(() => setToast(null), 3500)
-  }
 
   const handleVehicleClick = (vehicle: Vehicle) => {
     setSelectedVehicle(vehicle)
@@ -51,7 +48,7 @@ export function VehicleManagement({ customerId }: { customerId: string }) {
     setVehicles((prev) =>
       prev.map((v) => (v.id === updatedVehicle.id ? updatedVehicle : v))
     )
-    showToast("Vehicle updated successfully", "success")
+    toast.success("Vehicle updated successfully")
   }
 
   const fetchVehicles = async () => {
@@ -108,8 +105,34 @@ export function VehicleManagement({ customerId }: { customerId: string }) {
               className="p-4 border-border cursor-pointer hover:bg-muted/50 transition-colors group relative"
               onClick={() => handleVehicleClick(vehicle)}
             >
-              {/* Edit icon on hover */}
-              <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+              {/* Actions on hover */}
+              <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {hasPermission('delete_vehicle') && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-red-600 hover:text-red-800 hover:bg-red-50"
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      if (!confirm(`Delete ${vehicle.year} ${vehicle.make} ${vehicle.model}? It can be restored from the recycle bin.`)) return
+                      
+                      const res = await fetch(`/api/vehicles/${vehicle.id}/delete`, {
+                        method: 'DELETE',
+                        headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
+                      })
+                      
+                      if (res.ok) {
+                        toast.success('Vehicle deleted')
+                        fetchVehicles()
+                      } else {
+                        const error = await res.json()
+                        toast.error(error.error || 'Failed to delete')
+                      }
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                )}
                 <Edit2 size={16} className="text-muted-foreground" />
               </div>
               <div className="flex items-start justify-between gap-4">
@@ -199,19 +222,6 @@ export function VehicleManagement({ customerId }: { customerId: string }) {
         vehicle={selectedVehicle}
         onSuccess={handleVehicleUpdated}
       />
-
-      {/* Toast */}
-      {toast && (
-        <div
-          className={`fixed top-6 right-6 z-50 rounded-md px-4 py-3 text-sm shadow-lg border ${
-            toast.type === "success"
-              ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20"
-              : "bg-destructive/10 text-destructive border-destructive/20"
-          }`}
-        >
-          {toast.message}
-        </div>
-      )}
     </div>
   )
 }

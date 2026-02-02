@@ -5,8 +5,10 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Search, Phone, Mail, MapPin, Plus, Loader2, Upload } from "lucide-react"
+import { Search, Phone, Mail, MapPin, Plus, Loader2, Upload, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+import { useAuth } from "@/contexts/auth-context"
 import { CustomerCreateDialog } from "./customer-create-dialog"
 
 interface Customer {
@@ -31,6 +33,7 @@ interface Customer {
 
 export function CustomerSearch({ onSelectCustomer }: { onSelectCustomer?: (id: string) => void }) {
   const router = useRouter()
+  const { hasPermission } = useAuth()
   const [searchTerm, setSearchTerm] = useState("")
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
@@ -197,15 +200,43 @@ export function CustomerSearch({ onSelectCustomer }: { onSelectCustomer?: (id: s
 
                 {/* Right side */}
                 <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                  <Badge
-                    className={
-                      customer.customer_type === "business"
-                        ? "bg-purple-500/20 text-purple-700 dark:text-purple-400"
-                        : "bg-green-500/20 text-green-700 dark:text-green-400"
-                    }
-                  >
-                    {customer.is_active ? "Active" : "Inactive"}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    {hasPermission('delete_customer') && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-800 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          if (!confirm(`Delete ${customer.customer_name}? It can be restored from the recycle bin.`)) return
+                          
+                          const res = await fetch(`/api/customers/${customer.id}/delete`, {
+                            method: 'DELETE',
+                            headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
+                          })
+                          
+                          if (res.ok) {
+                            toast.success('Customer deleted')
+                            fetchCustomers()
+                          } else {
+                            const error = await res.json()
+                            toast.error(error.error || 'Failed to delete')
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Badge
+                      className={
+                        customer.customer_type === "business"
+                          ? "bg-purple-500/20 text-purple-700 dark:text-purple-400"
+                          : "bg-green-500/20 text-green-700 dark:text-green-400"
+                      }
+                    >
+                      {customer.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
 
                   <p className="text-xs text-muted-foreground text-right">
                     Added
