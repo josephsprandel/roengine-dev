@@ -23,6 +23,8 @@ interface PartWithPricing {
     isInventory?: boolean
     location?: string
     binLocation?: string
+    matchReason?: string  // AI's reason for selecting this inventory item
+    source?: string       // 'ai-inventory-match' | 'inventory' | 'partstech'
   }>
   selectedOption?: any
 }
@@ -167,6 +169,18 @@ export function PartsSelectionModal({
                                     {option.description && option.description !== part.description && (
                                       <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
                                         {option.description}
+                                      </p>
+                                    )}
+                                    {/* AI Match Reason - show why this inventory item was selected */}
+                                    {option.matchReason && option.source === 'ai-inventory-match' && (
+                                      <p className="text-xs text-green-600 dark:text-green-400 mt-1 italic">
+                                        🤖 {option.matchReason}
+                                      </p>
+                                    )}
+                                    {/* Location for inventory items */}
+                                    {option.isInventory && option.location && (
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        📍 {option.location}{option.binLocation ? ` / ${option.binLocation}` : ''}
                                       </p>
                                     )}
                                   </div>
