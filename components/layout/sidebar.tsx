@@ -1,11 +1,31 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Menu, X, Wrench, LayoutDashboard, Users, MessageSquare, Settings, Zap, BarChart3, Package } from "lucide-react"
 import { cn } from "@/lib/utils"
+import Image from "next/image"
 
 export function Sidebar() {
   const [isOpen, setIsOpen] = useState(true)
+  const [shopLogo, setShopLogo] = useState<string | null>(null)
+  const [shopName, setShopName] = useState<string>("RO Engine")
+
+  useEffect(() => {
+    // Fetch shop profile to get logo
+    fetch('/api/settings/shop-profile')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.profile) {
+          if (data.profile.logo_url) {
+            setShopLogo(data.profile.logo_url)
+          }
+          if (data.profile.shop_name) {
+            setShopName(data.profile.shop_name)
+          }
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const navItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/" },
@@ -37,11 +57,21 @@ export function Sidebar() {
       >
         {/* Logo */}
         <div className="flex items-center gap-3 px-6 py-8 border-b border-sidebar-border">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-sidebar-primary to-blue-600 flex items-center justify-center">
-            <Wrench size={24} className="text-sidebar-primary-foreground" />
-          </div>
+          {shopLogo ? (
+            <Image
+              src={shopLogo}
+              alt={shopName}
+              width={40}
+              height={40}
+              className="w-10 h-10 rounded-lg object-contain"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-sidebar-primary to-blue-600 flex items-center justify-center">
+              <Wrench size={24} className="text-sidebar-primary-foreground" />
+            </div>
+          )}
           <div>
-            <h1 className="font-bold text-lg text-sidebar-foreground">RO Engine</h1>
+            <h1 className="font-bold text-lg text-sidebar-foreground">{shopName}</h1>
             <p className="text-xs text-sidebar-accent-foreground">AI Powered</p>
           </div>
         </div>
@@ -52,12 +82,7 @@ export function Sidebar() {
             <a
               key={item.label}
               href={item.href}
-              className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-sm font-medium",
-                item.active
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              )}
+              className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >
               <item.icon size={18} />
               <span className="flex-1">{item.label}</span>

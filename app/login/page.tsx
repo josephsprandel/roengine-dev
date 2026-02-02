@@ -6,13 +6,14 @@
  * Simple login form for user authentication.
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { AlertCircle, Loader2 } from 'lucide-react'
+import { AlertCircle, Loader2, Wrench } from 'lucide-react'
+import Image from 'next/image'
 
 export default function LoginPage() {
   const { login, isLoading: authLoading } = useAuth()
@@ -21,6 +22,25 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [shopLogo, setShopLogo] = useState<string | null>(null)
+  const [shopName, setShopName] = useState<string>("RO Engine")
+
+  // Fetch shop profile on mount
+  useEffect(() => {
+    fetch('/api/settings/shop-profile')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.profile) {
+          if (data.profile.logo_url) {
+            setShopLogo(data.profile.logo_url)
+          }
+          if (data.profile.shop_name) {
+            setShopName(data.profile.shop_name)
+          }
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -49,19 +69,20 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="h-8 w-8 text-primary"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 6v6l4 2" />
-            </svg>
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 overflow-hidden">
+            {shopLogo ? (
+              <Image
+                src={shopLogo}
+                alt={shopName}
+                width={64}
+                height={64}
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <Wrench className="h-8 w-8 text-primary" />
+            )}
           </div>
-          <CardTitle className="text-2xl font-bold">RO Engine</CardTitle>
+          <CardTitle className="text-2xl font-bold">{shopName}</CardTitle>
           <CardDescription>
             Sign in to your account to continue
           </CardDescription>
