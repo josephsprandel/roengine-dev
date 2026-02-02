@@ -3,6 +3,8 @@ import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 import { ThemeInitializer } from "@/components/theme-initializer"
+import { AuthProvider } from "@/contexts/auth-context"
+import { Toaster } from "sonner"
 import "./globals.css"
 
 const geistSans = Geist({ subsets: ["latin"] })
@@ -57,7 +59,10 @@ export default function RootLayout({
           storageKey="ro-mode"
         >
           <ThemeInitializer />
-          {children}
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+          <Toaster position="top-right" richColors />
         </ThemeProvider>
       </body>
     </html>

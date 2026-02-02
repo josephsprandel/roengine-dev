@@ -10,7 +10,9 @@ import { BillingSettings } from "@/components/settings/billing-settings"
 import { AppearanceSettings } from "@/components/settings/appearance-settings"
 import { LaborRatesSettings } from "@/components/settings/labor-rates-settings"
 import { VendorPreferencesSettings } from "@/components/settings/vendor-preferences-settings"
-import { Settings, Database, Building2, Users, CreditCard, Palette, DollarSign, Package } from "lucide-react"
+import { RolesSettings } from "@/components/settings/roles-settings"
+import { UsersSettings } from "@/components/settings/users-settings"
+import { Settings, Database, Building2, Users, CreditCard, Palette, DollarSign, Package, Shield, UserCog } from "lucide-react"
 
 export default function SettingsPage() {
   return (
@@ -78,7 +80,26 @@ export default function SettingsPage() {
               </TabsContent>
 
               <TabsContent value="users">
-                <UserSettings />
+                <Tabs defaultValue="users-list" className="space-y-6">
+                  <TabsList className="bg-muted/30">
+                    <TabsTrigger value="users-list" className="flex items-center gap-2">
+                      <UserCog size={14} />
+                      Users
+                    </TabsTrigger>
+                    <TabsTrigger value="roles" className="flex items-center gap-2">
+                      <Shield size={14} />
+                      Roles & Permissions
+                    </TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="users-list">
+                    <UsersSettings />
+                  </TabsContent>
+                  
+                  <TabsContent value="roles">
+                    <RolesSettings />
+                  </TabsContent>
+                </Tabs>
               </TabsContent>
 
               <TabsContent value="billing">
