@@ -144,7 +144,8 @@ export async function POST(
       extracted.high_mileage || false,
       extracted.product_name || null,
       extracted.container_size || null,
-      extracted.confidence_score || 0
+      extracted.confidence_score || 0,
+      'gemini_vision' // extraction_method
     ])
 
     console.log(`  ✓ Saved fluid_specifications (ID: ${specResult.rows[0].id})`)
