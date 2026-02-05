@@ -19,8 +19,11 @@ export interface Part {
   bin_location: string | null
   category: string
   notes: string | null
+  approvals: string | null
+  shopware_id: string | null
   last_synced_at: string | null
   last_updated: string
+  created_at: string
 }
 
 function getStockStatus(qty: number, reorderPoint: number) {

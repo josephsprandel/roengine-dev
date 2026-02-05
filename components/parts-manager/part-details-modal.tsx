@@ -69,7 +69,7 @@ export function PartDetailsModal({ part, open, onClose, onSave }: PartDetailsMod
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-start justify-between">
             <div>
@@ -271,6 +271,25 @@ export function PartDetailsModal({ part, open, onClose, onSave }: PartDetailsMod
             </div>
           </div>
 
+          {/* Approvals & Certifications */}
+          {(formData.approvals || isEditing) && (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="approvals">Approvals & Certifications</Label>
+                <Input
+                  id="approvals"
+                  value={formData.approvals || ''}
+                  onChange={(e) => updateField('approvals', e.target.value)}
+                  disabled={!isEditing}
+                  placeholder="e.g., API SN, ACEA A3/B4, GM dexos1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Industry certifications and approvals (especially for engine oils)
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Notes */}
           <div className="space-y-4">
             <div>
@@ -291,12 +310,26 @@ export function PartDetailsModal({ part, open, onClose, onSave }: PartDetailsMod
             <div className="pt-4 border-t border-border">
               <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">
                 <div>
+                  <span className="font-medium">Part ID:</span>{' '}
+                  {formData.id}
+                </div>
+                {formData.shopware_id && (
+                  <div>
+                    <span className="font-medium">ShopWare ID:</span>{' '}
+                    {formData.shopware_id}
+                  </div>
+                )}
+                <div>
+                  <span className="font-medium">Created:</span>{' '}
+                  {formData.created_at ? new Date(formData.created_at).toLocaleString() : 'N/A'}
+                </div>
+                <div>
                   <span className="font-medium">Last Updated:</span>{' '}
-                  {new Date(formData.last_updated || '').toLocaleString()}
+                  {formData.last_updated ? new Date(formData.last_updated).toLocaleString() : 'N/A'}
                 </div>
                 {formData.last_synced_at && (
-                  <div>
-                    <span className="font-medium">Last Synced:</span>{' '}
+                  <div className="col-span-2">
+                    <span className="font-medium">Last Synced from ShopWare:</span>{' '}
                     {new Date(formData.last_synced_at).toLocaleString()}
                   </div>
                 )}

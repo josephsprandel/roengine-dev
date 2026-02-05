@@ -4,19 +4,17 @@ import { query } from '@/lib/db'
 interface UpdatePartData {
   part_number?: string
   description?: string
-  category?: string
-  subcategory?: string
-  manufacturer?: string
+  vendor?: string
   cost?: number
-  list_price?: number
-  core_charge?: number
-  stock_quantity?: number
-  min_stock?: number
-  max_stock?: number
+  price?: number
+  quantity_on_hand?: number
+  quantity_available?: number
+  reorder_point?: number
   location?: string
+  bin_location?: string
+  category?: string
   notes?: string
-  superseded_by?: string
-  image_url?: string
+  approvals?: string
 }
 
 export async function PATCH(
@@ -44,19 +42,17 @@ export async function PATCH(
     const fieldMapping: Record<string, string> = {
       part_number: 'part_number',
       description: 'description',
-      category: 'category',
-      subcategory: 'subcategory',
-      manufacturer: 'manufacturer',
+      vendor: 'vendor',
       cost: 'cost',
-      list_price: 'list_price',
-      core_charge: 'core_charge',
-      stock_quantity: 'stock_quantity',
-      min_stock: 'min_stock',
-      max_stock: 'max_stock',
+      price: 'price',
+      quantity_on_hand: 'quantity_on_hand',
+      quantity_available: 'quantity_available',
+      reorder_point: 'reorder_point',
       location: 'location',
+      bin_location: 'bin_location',
+      category: 'category',
       notes: 'notes',
-      superseded_by: 'superseded_by',
-      image_url: 'image_url',
+      approvals: 'approvals',
     }
 
     // Build SET clause dynamically
@@ -75,8 +71,8 @@ export async function PATCH(
       )
     }
 
-    // Add updated_at timestamp
-    updates.push(`updated_at = NOW()`)
+    // Add last_updated timestamp
+    updates.push(`last_updated = NOW()`)
     values.push(partId) // Last parameter is the part ID
 
     const sql = `

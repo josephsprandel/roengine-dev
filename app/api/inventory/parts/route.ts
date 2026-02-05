@@ -68,8 +68,11 @@ export async function GET(request: NextRequest) {
         bin_location,
         category,
         notes,
+        approvals,
+        shopware_id,
         last_synced_at,
-        last_updated
+        last_updated,
+        created_at
       FROM parts_inventory
       WHERE 1=1
     `;
