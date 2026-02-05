@@ -272,23 +272,21 @@ export function PartDetailsModal({ part, open, onClose, onSave }: PartDetailsMod
           </div>
 
           {/* Approvals & Certifications */}
-          {(formData.approvals || isEditing) && (
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="approvals">Approvals & Certifications</Label>
-                <Input
-                  id="approvals"
-                  value={formData.approvals || ''}
-                  onChange={(e) => updateField('approvals', e.target.value)}
-                  disabled={!isEditing}
-                  placeholder="e.g., API SN, ACEA A3/B4, GM dexos1"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Industry certifications and approvals (especially for engine oils)
-                </p>
-              </div>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="approvals">Approvals & Certifications</Label>
+              <Input
+                id="approvals"
+                value={formData.approvals || ''}
+                onChange={(e) => updateField('approvals', e.target.value)}
+                disabled={!isEditing}
+                placeholder="e.g., API SN, ACEA A3/B4, GM dexos1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Industry certifications and approvals (especially for engine oils)
+              </p>
             </div>
-          )}
+          </div>
 
           {/* Notes */}
           <div className="space-y-4">
