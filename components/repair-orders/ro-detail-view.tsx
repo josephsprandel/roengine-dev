@@ -225,6 +225,9 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   const [aiServices, setAiServices] = useState<any[]>([])
   const [selectedAiServices, setSelectedAiServices] = useState<any[]>([])
   const [aiSource, setAiSource] = useState<string | null>(null)
+  const [variantSelectorOpen, setVariantSelectorOpen] = useState(false)
+  const [availableVariants, setAvailableVariants] = useState<any[]>([])
+  const [selectedVariant, setSelectedVariant] = useState<any | null>(null)
 
   // Parts generation states
   const [partsDialogOpen, setPartsDialogOpen] = useState(false)
@@ -555,25 +558,16 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
        * 
        * Strategy: Show variant selector BEFORE saving to database
        * Why: Don't save irrelevant data (2.0L recommendations for 1.5L car)
-       * 
-       * TODO: Implement variant selector UI component
-       * - Show dialog: "This vehicle has multiple engines. Select yours:"
-       * - List each variant with engine_displacement and transmission_type
-       * - User selects correct variant
-       * - THEN save only those recommendations
-       * 
-       * For now: Auto-select first variant (temporary)
        */
       if (data.multiple_variants) {
         console.log('[DEBUG] Multiple variants detected:', data.variants?.length)
-        // TODO: Show variant selector dialog
-        // Temporary: Use first variant
-        setAiServices(data.variants[0]?.services || [])
-        setSelectedAiServices(data.variants[0]?.services || [])
-        setAiSource(data.source)
+        console.log('[DEBUG] Variants:', data.variants)
         
-        // Save first variant's recommendations
-        await saveRecommendationsToDatabase(data.variants[0]?.services || [])
+        // Store variants and show selector dialog
+        setAvailableVariants(data.variants || [])
+        setAiSource(data.source)
+        setAiDialogOpen(false) // Close loading dialog
+        setVariantSelectorOpen(true) // Open variant selector
       } else {
         // Single variant - auto-save immediately
         setAiServices(data.services || [])
@@ -1716,6 +1710,102 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         isOpen={generatingParts}
         currentStep={loadingStep}
       />
+
+      {/* Variant Selector Dialog */}
+      <Dialog open={variantSelectorOpen} onOpenChange={setVariantSelectorOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Select Engine Variant</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              This vehicle has multiple engine options. Select the one that matches your vehicle:
+            </p>
+          </DialogHeader>
+
+          <div className="space-y-3 mt-4">
+            {availableVariants.map((variant, index) => (
+              <div
+                key={index}
+                className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                  selectedVariant === variant
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                }`}
+                onClick={() => setSelectedVariant(variant)}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-1">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      selectedVariant === variant
+                        ? 'border-primary bg-primary'
+                        : 'border-muted-foreground'
+                    }`}>
+                      {selectedVariant === variant && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-white" />
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-lg mb-2">
+                      {variant.engine_displacement} {variant.engine_type}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Transmission:</span>
+                        <span className="ml-2 font-medium">{variant.transmission_type || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Services:</span>
+                        <span className="ml-2 font-medium">{variant.services?.length || 0} maintenance items</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-2 mt-6">
+            <Button
+              onClick={async () => {
+                if (!selectedVariant) {
+                  showToast('Please select an engine variant', 'error')
+                  return
+                }
+                
+                console.log('[DEBUG] Variant selected:', selectedVariant)
+                
+                // Load services from selected variant
+                setAiServices(selectedVariant.services || [])
+                setSelectedAiServices(selectedVariant.services || [])
+                
+                // Save selected variant's recommendations to database
+                await saveRecommendationsToDatabase(selectedVariant.services || [])
+                
+                // Close variant selector and open main AI dialog
+                setVariantSelectorOpen(false)
+                setAiDialogOpen(true)
+                
+                // Reset selection for next time
+                setSelectedVariant(null)
+              }}
+              className="flex-1"
+              disabled={!selectedVariant}
+            >
+              Continue with Selected Variant
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setVariantSelectorOpen(false)
+                setSelectedVariant(null)
+                setAvailableVariants([])
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
