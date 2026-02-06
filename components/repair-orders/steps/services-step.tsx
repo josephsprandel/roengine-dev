@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Search, Plus, X, Sparkles, GripVertical } from "lucide-react"
+import { MagnifyingGlassIcon as Search, PlusIcon as Plus, XMarkIcon as X, SparklesIcon as Sparkles, Bars3CenterLeftIcon as GripVertical } from "@heroicons/react/24/outline"
 import type { ServiceData, VehicleData, LineItem } from "../ro-creation-wizard"
 import { EditableServiceCard, createLineItem } from "../editable-service-card"
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Menu, X, Wrench, LayoutDashboard, Users, MessageSquare, Settings, Zap, BarChart3, Package, Trash2 } from "lucide-react"
+import { Bars3Icon as Menu, XMarkIcon as X, WrenchIcon as Wrench, HomeIcon as LayoutDashboard, UsersIcon as Users, ChatBubbleBottomCenterTextIcon as MessageSquare, Cog6ToothIcon as Settings, BoltIcon as Zap, BarChartIcon as BarChart3, CubeIcon as Package, TrashIcon as Trash2 } from "@heroicons/react/24/outline"
 import { cn } from "@/lib/utils"
 import Image from "next/image"
 

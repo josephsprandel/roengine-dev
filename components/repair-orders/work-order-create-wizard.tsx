@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Search, Phone, Mail, Plus, Loader2, ChevronRight, ChevronLeft, Check } from "lucide-react"
+import { MagnifyingGlassIcon as Search, PhoneIcon as Phone, EnvelopeIcon as Mail, PlusIcon as Plus, ArrowPathIcon as Loader2, ChevronRightIcon as ChevronRight, ChevronLeftIcon as ChevronLeft, CheckIcon as Check } from "@heroicons/react/24/outline"
 import { CustomerCreateDialog } from "@/components/customers/customer-create-dialog"
 import { VehicleCreateDialog } from "@/components/customers/vehicle-create-dialog"
 

@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Package, AlertTriangle, ShoppingCart, Truck, Users, RotateCcw, Plus, Search, Filter, ExternalLink, Camera } from "lucide-react"
+import { CubeIcon as Package, ExclamationTriangleIcon as AlertTriangle, ShoppingCartIcon as ShoppingCart, TruckIcon as Truck, UsersIcon as Users, ArrowPathIcon as RotateCcw, PlusIcon as Plus, MagnifyingGlassIcon as Search, FunnelIcon as Filter, ArrowTopRightOnSquareIcon as ExternalLink, PhotoIcon as Camera } from "@heroicons/react/24/outline"
 import { PartsInventoryTab } from "./tabs/parts-inventory-tab"
 import { PurchaseOrdersTab } from "./tabs/purchase-orders-tab"
 import { ReceivingTab } from "./tabs/receiving-tab"

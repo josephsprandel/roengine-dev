@@ -12,7 +12,7 @@ import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { RotateCcw, Trash2, AlertCircle, Clock, Wrench, Users, Car } from 'lucide-react'
+import { ArrowPathIcon as RotateCcw, TrashIcon as Trash2, ExclamationCircleIcon as AlertCircle, ClockIcon as Clock, WrenchIcon as Wrench, UsersIcon as Users, TruckIcon as Car } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth-context'
 

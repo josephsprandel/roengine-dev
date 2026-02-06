@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2, Shield, Loader2 } from 'lucide-react'
+import { PlusIcon as Plus, PencilIcon as Pencil, TrashIcon as Trash2, ShieldCheckIcon as Shield, ArrowPathIcon as Loader2 } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 
 interface Permission {

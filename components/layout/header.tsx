@@ -1,6 +1,6 @@
 "use client"
 
-import { Bell, Clock, AlertCircle, Zap } from "lucide-react"
+import { BellIcon as Bell, ClockIcon as Clock, ExclamationCircleIcon as AlertCircle, BoltIcon as Zap } from "@heroicons/react/24/outline"
 import { Button } from "@/components/ui/button"
 import { GlobalSearch } from "@/components/layout/global-search"
 

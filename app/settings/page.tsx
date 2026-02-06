@@ -12,7 +12,7 @@ import { LaborRatesSettings } from "@/components/settings/labor-rates-settings"
 import { VendorPreferencesSettings } from "@/components/settings/vendor-preferences-settings"
 import { RolesSettings } from "@/components/settings/roles-settings"
 import { UsersSettings } from "@/components/settings/users-settings"
-import { Settings, Database, Building2, Users, CreditCard, Palette, DollarSign, Package, Shield, UserCog } from "lucide-react"
+import { Cog6ToothIcon as Settings, CircleStackIcon as Database, BuildingOfficeIcon as Building2, UsersIcon as Users, CreditCardIcon as CreditCard, PaletteIcon as Palette, CurrencyDollarIcon as DollarSign, CubeIcon as Package, ShieldCheckIcon as Shield, Cog6ToothIcon as UserCog } from "@heroicons/react/24/outline"
 
 export default function SettingsPage() {
   return (

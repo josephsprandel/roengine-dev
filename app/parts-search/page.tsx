@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Search, Car, Package, DollarSign, AlertCircle } from 'lucide-react';
+import { ArrowPathIcon as Loader2, MagnifyingGlassIcon as Search, TruckIcon as Car, CubeIcon as Package, CurrencyDollarIcon as DollarSign, ExclamationCircleIcon as AlertCircle } from '@heroicons/react/24/outline';
 
 interface Vehicle {
   vin: string;

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Upload, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { ArrowUpTrayIcon as Upload, ExclamationCircleIcon as AlertCircle, CheckCircleIcon as CheckCircle, ArrowPathIcon as Loader2 } from '@heroicons/react/24/outline';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 

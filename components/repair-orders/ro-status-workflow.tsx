@@ -3,7 +3,7 @@
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Check, AlertCircle, Clock, CheckCircle2 } from "lucide-react"
+import { CheckIcon as Check, ExclamationCircleIcon as AlertCircle, ClockIcon as Clock, CheckCircleIcon as CheckCircle2 } from "@heroicons/react/24/outline"
 
 export function ROStatusWorkflow() {
   const stages = [

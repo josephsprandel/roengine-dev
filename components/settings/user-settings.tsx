@@ -16,7 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { UserPlus, Shield, Mail, MoreHorizontal, Trash2, Edit } from "lucide-react"
+import { UserPlusIcon as UserPlus, ShieldCheckIcon as Shield, EnvelopeIcon as Mail, EllipsisHorizontalIcon as MoreHorizontal, TrashIcon as Trash2, PencilIcon as Edit } from "@heroicons/react/24/outline"
 import {
   DropdownMenu,
   DropdownMenuContent,

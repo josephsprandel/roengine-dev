@@ -2,7 +2,7 @@
 
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, FileText, Phone, Edit2 } from "lucide-react"
+import { Plus, FileText as DocumentTextIcon, Phone as PhoneIcon, PencilSquareIcon as Edit2 } from "@heroicons/react/24/outline"
 import { useRouter } from "next/navigation"
 
 export function QuickActions() {

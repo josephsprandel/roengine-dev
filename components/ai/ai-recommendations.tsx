@@ -5,7 +5,7 @@ import type React from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Zap, TrendingUp, AlertTriangle, Target, Lightbulb } from "lucide-react"
+import { BoltIcon as Zap, ArrowUpIcon as TrendingUp, ExclamationTriangleIcon as AlertTriangle, CheckBadgeIcon as Target, LightBulbIcon as Lightbulb } from "@heroicons/react/24/outline"
 
 interface Recommendation {
   id: string

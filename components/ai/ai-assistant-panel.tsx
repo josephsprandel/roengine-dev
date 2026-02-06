@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Send, Sparkles, Mic, Copy, ThumbsUp, ThumbsDown, X } from "lucide-react"
+import { PaperAirplaneIcon as Send, SparklesIcon as Sparkles, MicrophoneIcon as Mic, DocumentDuplicateIcon as Copy, HandThumbUpIcon as ThumbsUp, HandThumbDownIcon as ThumbsDown, XMarkIcon as X } from "@heroicons/react/24/outline"
 
 interface Message {
   id: string

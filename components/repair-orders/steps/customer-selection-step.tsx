@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Search, Plus, Check, Phone, Mail, User, Loader2 } from "lucide-react"
+import { MagnifyingGlassIcon as Search, PlusIcon as Plus, CheckIcon as Check, PhoneIcon as Phone, EnvelopeIcon as Mail, UserIcon as User, ArrowPathIcon as Loader2 } from "@heroicons/react/24/outline"
 import type { CustomerData } from "../ro-creation-wizard"
 
 interface CustomerSelectionStepProps {

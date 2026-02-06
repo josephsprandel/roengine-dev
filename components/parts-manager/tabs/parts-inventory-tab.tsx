@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Download, Upload, Loader2 } from "lucide-react"
+import { MagnifyingGlassIcon as Search, ArrowDownTrayIcon as Download, ArrowUpTrayIcon as Upload, ArrowPathIcon as Loader2 } from "@heroicons/react/24/outline"
 import Link from "next/link"
 import { DataTable } from "../data-table"
 import { columns, type Part } from "../columns"

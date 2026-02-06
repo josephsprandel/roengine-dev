@@ -2,7 +2,7 @@
 
 import { ColumnDef } from "@tanstack/react-table"
 import { Button } from "@/components/ui/button"
-import { ArrowUpDown } from "lucide-react"
+import { ArrowsUpDownIcon as ArrowUpDown } from "@heroicons/react/24/outline"
 
 export interface Part {
   id: number

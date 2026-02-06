@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Sparkles, Copy, Send, Edit2 } from "lucide-react"
+import { SparklesIcon as Sparkles, DocumentDuplicateIcon as Copy, PaperAirplaneIcon as Send, PencilSquareIcon as Edit2 } from "@heroicons/react/24/outline"
 
 export function AIEstimateGenerator() {
   const [estimate, setEstimate] = useState({

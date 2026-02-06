@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Save, X, Loader2, Package, DollarSign, MapPin, Tag } from "lucide-react"
+import { CheckIcon as Save, XMarkIcon as X, ArrowPathIcon as Loader2, CubeIcon as Package, CurrencyDollarIcon as DollarSign, MapPinIcon as MapPin, TagIcon as Tag } from "@heroicons/react/24/outline"
 import type { Part } from "./columns"
 
 interface PartDetailsModalProps {

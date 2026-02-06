@@ -1,7 +1,7 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { TrendingUp, AlertTriangle, Clock, DollarSign } from "lucide-react"
+import { ArrowUpIcon as TrendingUp, ExclamationTriangleIcon as AlertTriangle, ClockIcon as Clock, CurrencyDollarIcon as DollarSign } from "@heroicons/react/24/outline"
 
 export function MetricsGrid() {
   const metrics = [

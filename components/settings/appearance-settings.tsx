@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
-import { Check, Moon, Sun, Monitor } from "lucide-react"
+import { CheckIcon as Check, MoonIcon as Moon, SunIcon as Sun, ComputerDesktopIcon as Monitor } from "@heroicons/react/24/outline"
 import { cn } from "@/lib/utils"
 
 type ColorTheme = "default" | "ocean" | "forest" | "sunset" | "ruby" | "violet"

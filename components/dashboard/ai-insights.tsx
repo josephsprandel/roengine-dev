@@ -1,7 +1,7 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { Zap, TrendingUp, AlertCircle } from "lucide-react"
+import { BoltIcon as Zap, ArrowUpIcon as TrendingUp, ExclamationCircleIcon as AlertCircle } from "@heroicons/react/24/outline"
 import { Badge } from "@/components/ui/badge"
 
 export function AIInsights() {

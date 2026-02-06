@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { AlertCircle, Loader2, Wrench } from 'lucide-react'
+import { ExclamationCircleIcon as AlertCircle, ArrowPathIcon as Loader2, WrenchIcon as Wrench } from '@heroicons/react/24/outline'
 import Image from 'next/image'
 
 export default function LoginPage() {

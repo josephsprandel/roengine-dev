@@ -3,7 +3,7 @@ import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Sparkles, Brain, Zap, MessageSquare, TrendingUp } from "lucide-react"
+import { SparklesIcon as Sparkles, LightBulbIcon as Brain, BoltIcon as Zap, ChatBubbleBottomCenterTextIcon as MessageSquare, ArrowUpIcon as TrendingUp } from "@heroicons/react/24/outline"
 import { AIRecommendations } from "@/components/ai/ai-recommendations"
 import { AIEstimateGenerator } from "@/components/ai/ai-estimate-generator"
 

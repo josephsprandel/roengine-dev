@@ -4,7 +4,7 @@ import { useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { User, Car, Wrench, Clock, DollarSign, FileText, Phone, Mail } from "lucide-react"
+import { UserIcon as User, TruckIcon as Car, WrenchIcon as Wrench, ClockIcon as Clock, CurrencyDollarIcon as DollarSign, DocumentTextIcon as FileText, PhoneIcon as Phone, EnvelopeIcon as Mail } from "@heroicons/react/24/outline"
 import type { CustomerData, VehicleData, ServiceData } from "../ro-creation-wizard"
 
 interface ReviewStepProps {

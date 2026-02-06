@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { AlertCircle, Check } from 'lucide-react'
+import { ExclamationCircleIcon as AlertCircle, CheckIcon as Check } from '@heroicons/react/24/outline'
 
 interface PartWithPricing {
   description: string

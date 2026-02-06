@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Search, Loader2 } from "lucide-react"
+import { MagnifyingGlassIcon as Search, ArrowPathIcon as Loader2 } from "@heroicons/react/24/outline"
 
 interface InventoryPart {
   id: number

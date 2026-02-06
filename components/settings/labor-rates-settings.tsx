@@ -13,7 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
-import { DollarSign, Pencil, Trash2, Plus, Loader2, AlertCircle } from "lucide-react"
+import { CurrencyDollarIcon as DollarSign, PencilIcon as Pencil, TrashIcon as Trash2, PlusIcon as Plus, ArrowPathIcon as Loader2, ExclamationCircleIcon as AlertCircle } from "@heroicons/react/24/outline"
 
 interface LaborRate {
   id: number

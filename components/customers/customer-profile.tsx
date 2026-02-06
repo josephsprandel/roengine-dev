@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Edit2, Mail, Phone, MessageSquare, MapPin, Calendar, DollarSign, Loader2 } from "lucide-react"
+import { ArrowLeftIcon as ArrowLeft, PencilSquareIcon as Edit2, EnvelopeIcon as Mail, PhoneIcon as Phone, ChatBubbleBottomCenterTextIcon as MessageSquare, MapPinIcon as MapPin, CalendarIcon as Calendar, CurrencyDollarIcon as DollarSign, ArrowPathIcon as Loader2 } from "@heroicons/react/24/outline"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { VehicleManagement } from "./vehicle-management"
 

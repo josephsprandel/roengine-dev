@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2, User, Loader2, Mail, Calendar } from 'lucide-react'
+import { PlusIcon as Plus, PencilIcon as Pencil, TrashIcon as Trash2, UserIcon as User, ArrowPathIcon as Loader2, EnvelopeIcon as Mail, CalendarIcon as Calendar } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 
 interface Role {

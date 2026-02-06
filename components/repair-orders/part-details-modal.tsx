@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Loader2 } from "lucide-react"
+import { ArrowPathIcon as Loader2 } from "@heroicons/react/24/outline"
 import type { LineItem } from "./ro-creation-wizard"
 
 interface PartDetailsModalProps {

@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { MoreVertical, MessageSquare, CheckCircle2, Clock, AlertCircle, Loader2 } from "lucide-react"
+import { EllipsisVerticalIcon as MoreVertical, ChatBubbleBottomCenterTextIcon as MessageSquare, CheckCircleIcon as CheckCircle2, ClockIcon as Clock, ExclamationCircleIcon as AlertCircle, ArrowPathIcon as Loader2 } from "@heroicons/react/24/outline"
 import { useRouter } from "next/navigation"
 
 interface RepairOrder {

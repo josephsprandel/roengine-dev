@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Package, Pencil, Trash2, Plus, Loader2, AlertCircle, Car, Globe2, Sparkles } from "lucide-react"
+import { CubeIcon as Package, PencilIcon as Pencil, TrashIcon as Trash2, PlusIcon as Plus, ArrowPathIcon as Loader2, ExclamationCircleIcon as AlertCircle, TruckIcon as Car, GlobeAltIcon as Globe2, SparklesIcon as Sparkles } from "@heroicons/react/24/outline"
 
 interface VendorPreference {
   id: number

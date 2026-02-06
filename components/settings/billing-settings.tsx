@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { CreditCard, Download, Zap, Check, ArrowUpRight } from "lucide-react"
+import { CreditCardIcon as CreditCard, ArrowDownTrayIcon as Download, BoltIcon as Zap, CheckIcon as Check, ArrowTopRightOnSquareIcon as ArrowUpRight } from "@heroicons/react/24/outline"
 
 export function BillingSettings() {
   const currentPlan = {
