@@ -1,5 +1,5 @@
 import * as React from "react"
-import { ChevronLeftIcon as ChevronLeft, ChevronRightIcon as ChevronRight, ChevronDoubleLeftIcon as ChevronsLeft, ChevronDoubleRightIcon as ChevronsRight, EllipsisHorizontalIcon as MoreHorizontal } from "@heroicons/react/24/outline"
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, MoreHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 

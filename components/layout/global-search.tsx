@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { MagnifyingGlassIcon as Search, MicrophoneIcon as Mic, MicrophoneIcon as MicOff, ArrowPathIcon as Loader2 } from '@heroicons/react/24/outline'
+import { Search, Mic, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
