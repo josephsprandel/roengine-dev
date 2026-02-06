@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { BuildingOfficeIcon as Building2, ClockIcon as Clock, MapPinIcon as MapPin, PhoneIcon as Phone, EnvelopeIcon as Mail, GlobeAltIcon as Globe, CheckIcon as Save, ArrowPathIcon as Loader2, ExclamationCircleIcon as AlertCircle, PlusIcon as Plus, XMarkIcon as X, ArrowUpTrayIcon as Upload, PhotoIcon as ImageIcon, TrashIcon as Trash2 } from "@heroicons/react/24/outline"
+import { BuildingOfficeIcon as Building2, ClockIcon as Clock, MapPinIcon as MapPin, PhoneIcon as Phone, EnvelopeIcon as Mail, GlobeAltIcon, CheckIcon as Save, ArrowPathIcon as Loader2, ExclamationCircleIcon as AlertCircle, PlusIcon as Plus, XMarkIcon as X, ArrowUpTrayIcon as Upload, PhotoIcon, TrashIcon as Trash2 } from "@heroicons/react/24/outline"
 import Image from "next/image"
 
 // All 50 US States
