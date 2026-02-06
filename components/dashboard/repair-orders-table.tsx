@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { MoreVertical, MessageSquare, CheckCircle2, Clock, AlertCircle, Loader2 } from "lucide-react"
+import { DotsThreeVertical, ChatCircle, CheckCircle, Clock, WarningCircle, CircleNotch } from "@phosphor-icons/react"
 import { useRouter } from "next/navigation"
 
 interface RepairOrder {
@@ -81,11 +81,11 @@ export function RepairOrdersTable() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "awaiting_approval":
-        return <AlertCircle size={14} />
+        return <WarningCircle size={14} />
       case "in_progress":
         return <Clock size={14} />
       case "ready":
-        return <CheckCircle2 size={14} />
+        return <CheckCircle size={14} />
       default:
         return null
     }
@@ -111,7 +111,7 @@ export function RepairOrdersTable() {
             {loading ? (
               <tr>
                 <td colSpan={8} className="px-6 py-8 text-center">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                  <CircleNotch className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   <p className="text-sm text-muted-foreground mt-2">Loading repair orders...</p>
                 </td>
               </tr>
@@ -151,7 +151,7 @@ export function RepairOrdersTable() {
                       className="text-muted-foreground hover:text-accent"
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <MessageSquare size={16} />
+                      <ChatCircle size={16} />
                     </Button>
                     <Button
                       variant="ghost"
@@ -159,7 +159,7 @@ export function RepairOrdersTable() {
                       className="text-muted-foreground hover:text-foreground"
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <MoreVertical size={16} />
+                      <DotsThreeVertical size={16} />
                     </Button>
                   </div>
                 </td>

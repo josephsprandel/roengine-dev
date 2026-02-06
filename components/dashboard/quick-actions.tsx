@@ -2,7 +2,7 @@
 
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, FileText, Phone, Edit2 } from "lucide-react"
+import { Plus, FileText, Phone, PencilSimple } from "@phosphor-icons/react"
 import { useRouter } from "next/navigation"
 
 export function QuickActions() {
@@ -12,7 +12,7 @@ export function QuickActions() {
     { icon: Plus, label: "Create New RO", color: "text-blue-500", onClick: () => router.push('/repair-orders/new') },
     { icon: FileText, label: "Generate Estimate", color: "text-purple-500" },
     { icon: Phone, label: "Send SMS Update", color: "text-green-500" },
-    { icon: Edit2, label: "Edit Active RO", color: "text-orange-500" },
+    { icon: PencilSimple, label: "Edit Active RO", color: "text-orange-500" },
   ]
 
   return (

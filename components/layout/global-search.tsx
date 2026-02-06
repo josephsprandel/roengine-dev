@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Search, Mic, MicOff, Loader2 } from 'lucide-react'
+import { MagnifyingGlass, Microphone, MicrophoneSlash, CircleNotch } from '@phosphor-icons/react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
@@ -238,7 +238,7 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
   return (
     <form onSubmit={handleSubmit} className={`relative flex items-center ${className || ''}`}>
       <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           ref={inputRef}
           type="text"
@@ -276,11 +276,11 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
           size="icon"
         >
           {isProcessing ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
+            <CircleNotch className="w-5 h-5 animate-spin" />
           ) : isListening ? (
-            <MicOff className="w-5 h-5" />
+            <MicrophoneSlash className="w-5 h-5" />
           ) : (
-            <Mic className="w-5 h-5" />
+            <Microphone className="w-5 h-5" />
           )}
         </Button>
       )}

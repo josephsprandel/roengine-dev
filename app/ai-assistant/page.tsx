@@ -3,7 +3,7 @@ import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Sparkles, Brain, Zap, MessageSquare, TrendingUp } from "lucide-react"
+import { Sparkle, Brain, Lightning, ChatCircle, TrendUp } from "@phosphor-icons/react"
 import { AIRecommendations } from "@/components/ai/ai-recommendations"
 import { AIEstimateGenerator } from "@/components/ai/ai-estimate-generator"
 
@@ -15,17 +15,17 @@ export default function AIAssistantPage() {
       description: "Analyze vehicle history, service patterns, and customer data",
     },
     {
-      icon: TrendingUp,
+      icon: TrendUp,
       title: "Predictive Insights",
       description: "Identify upsell opportunities and maintenance needs",
     },
     {
-      icon: MessageSquare,
+      icon: ChatCircle,
       title: "Auto-Messaging",
       description: "Generate personalized customer communications",
     },
     {
-      icon: Zap,
+      icon: Lightning,
       title: "Workflow Optimization",
       description: "Suggest efficiency improvements and scheduling",
     },
@@ -42,7 +42,7 @@ export default function AIAssistantPage() {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <div className="p-3 rounded-lg bg-gradient-to-br from-accent to-blue-600">
-                  <Sparkles size={24} className="text-accent-foreground" />
+                  <Sparkle size={24} className="text-accent-foreground" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-bold text-foreground">RO Engine AI Assistant</h1>

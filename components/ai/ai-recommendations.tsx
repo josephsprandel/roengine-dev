@@ -5,7 +5,7 @@ import type React from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Zap, TrendingUp, AlertTriangle, Target, Lightbulb } from "lucide-react"
+import { Lightning, TrendUp, Warning, Target, Lightbulb } from "@phosphor-icons/react"
 
 interface Recommendation {
   id: string
@@ -25,7 +25,7 @@ export function AIRecommendations() {
       title: "Upsell Opportunity",
       description: "John Mitchell has high approval rate. Recommend premium diagnostic upgrade to RO-4521.",
       action: "Generate Estimate",
-      icon: <TrendingUp size={20} />,
+      icon: <TrendUp size={20} />,
       priority: "high",
     },
     {
@@ -43,7 +43,7 @@ export function AIRecommendations() {
       title: "Maintenance Alert",
       description: "Mike Chen's Ford F-150 is overdue for transmission service (95,400 miles).",
       action: "Schedule Service",
-      icon: <AlertTriangle size={20} />,
+      icon: <Warning size={20} />,
       priority: "medium",
     },
     {
@@ -85,7 +85,7 @@ export function AIRecommendations() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-          <Zap size={20} className="text-accent" />
+          <Lightning size={20} className="text-accent" />
           AI Recommendations
         </h2>
         <Badge className="bg-accent text-accent-foreground">4 Active</Badge>

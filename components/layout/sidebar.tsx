@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Menu, X, Wrench, LayoutDashboard, Users, MessageSquare, Settings, Zap, BarChart3, Package, Trash2 } from "lucide-react"
+import { List, X, Wrench, SquaresFour, Users, ChatCircle, Gear, Lightning, ChartBar, Package, Trash } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
 import Image from "next/image"
 
@@ -28,15 +28,15 @@ export function Sidebar() {
   }, [])
 
   const navItems = [
-    { icon: LayoutDashboard, label: "Dashboard", href: "/" },
+    { icon: SquaresFour, label: "Dashboard", href: "/" },
     { icon: Wrench, label: "Repair Orders", href: "/repair-orders" },
     { icon: Users, label: "Customers", href: "/customers" },
     { icon: Package, label: "Parts Manager", href: "/parts-manager" },
-    { icon: MessageSquare, label: "Communications", href: "#" },
-    { icon: BarChart3, label: "Analytics", href: "#" },
-    { icon: Zap, label: "AI Assistant", href: "/ai-assistant", beta: true },
-    { icon: Trash2, label: "Recycle Bin", href: "/recycle-bin" },
-    { icon: Settings, label: "Settings", href: "/settings" },
+    { icon: ChatCircle, label: "Communications", href: "#" },
+    { icon: ChartBar, label: "Analytics", href: "#" },
+    { icon: Lightning, label: "AI Assistant", href: "/ai-assistant", beta: true },
+    { icon: Trash, label: "Recycle Bin", href: "/recycle-bin" },
+    { icon: Gear, label: "Settings", href: "/settings" },
   ]
 
   return (
@@ -46,13 +46,13 @@ export function Sidebar() {
         onClick={() => setIsOpen(!isOpen)}
         className="fixed left-4 top-4 z-40 lg:hidden p-2 rounded-lg bg-sidebar text-sidebar-foreground border border-sidebar-border hover:bg-sidebar-accent"
       >
-        {isOpen ? <X size={20} /> : <Menu size={20} />}
+        {isOpen ? <X size={20} /> : <List size={20} />}
       </button>
 
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:static inset-y-0 left-0 z-30 w-64 bg-sidebar border-r border-sidebar-border transition-transform duration-300 lg:translate-x-0 flex flex-col",
+          "fixed lg:static inset-y-0 left-0 z-30 w-64 bg-slate-100 dark:bg-slate-900 border-r border-sidebar-border transition-transform duration-300 lg:translate-x-0 flex flex-col",
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >

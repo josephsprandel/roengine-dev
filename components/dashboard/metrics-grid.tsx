@@ -1,7 +1,7 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { TrendingUp, AlertTriangle, Clock, DollarSign } from "lucide-react"
+import { TrendUp, Warning, Clock, CurrencyDollar } from "@phosphor-icons/react"
 
 export function MetricsGrid() {
   const metrics = [
@@ -10,8 +10,8 @@ export function MetricsGrid() {
       value: "$12,450",
       change: "+12.5%",
       positive: true,
-      icon: DollarSign,
-      gradient: "from-green-500/20 to-emerald-500/20",
+      icon: CurrencyDollar,
+      iconColor: "text-green-600 dark:text-green-400",
     },
     {
       label: "Open Repair Orders",
@@ -19,23 +19,23 @@ export function MetricsGrid() {
       change: "+3 this hour",
       positive: true,
       icon: Clock,
-      gradient: "from-blue-500/20 to-cyan-500/20",
+      iconColor: "text-blue-600 dark:text-blue-400",
     },
     {
       label: "Awaiting Customer Approval",
       value: "8",
       change: "-2 from yesterday",
       positive: true,
-      icon: AlertTriangle,
-      gradient: "from-amber-500/20 to-orange-500/20",
+      icon: Warning,
+      iconColor: "text-amber-600 dark:text-amber-400",
     },
     {
       label: "Avg Completion Time",
       value: "2.4 hrs",
       change: "-8.2% vs avg",
       positive: true,
-      icon: TrendingUp,
-      gradient: "from-purple-500/20 to-pink-500/20",
+      icon: TrendUp,
+      iconColor: "text-purple-600 dark:text-purple-400",
     },
   ]
 
@@ -44,16 +44,15 @@ export function MetricsGrid() {
       {metrics.map((metric, idx) => {
         const Icon = metric.icon
         return (
-          <Card key={idx} className="relative overflow-hidden border-border">
-            <div className={`absolute inset-0 bg-gradient-to-br ${metric.gradient} opacity-50`} />
-            <div className="relative p-6 space-y-4">
+          <Card key={idx} className="bg-slate-50 dark:bg-slate-900/50 border-border shadow-sm">
+            <div className="p-6 space-y-4">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground mb-1">{metric.label}</p>
                   <h3 className="text-2xl font-bold text-foreground">{metric.value}</h3>
                 </div>
                 <div className="p-2 rounded-lg bg-card/50 border border-border">
-                  <Icon size={20} className="text-muted-foreground" />
+                  <Icon size={20} className={metric.iconColor} />
                 </div>
               </div>
               <p className="text-xs font-medium text-green-600 dark:text-green-400">{metric.change}</p>
