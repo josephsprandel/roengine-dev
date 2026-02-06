@@ -1,7 +1,11 @@
 {
-  "name": "my-v0-project",
+  "name": "roengine-dev",
   "version": "0.1.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/josephsprandel/roengine-dev.git"
+  },
   "scripts": {
     "build": "next build",
     "dev": "next dev",
