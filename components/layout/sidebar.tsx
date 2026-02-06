@@ -46,7 +46,7 @@ export function Sidebar() {
         onClick={() => setIsOpen(!isOpen)}
         className="fixed left-4 top-4 z-40 lg:hidden p-2 rounded-md bg-sidebar text-sidebar-foreground border border-sidebar-border hover:bg-sidebar-accent transition-colors"
       >
-        {isOpen ? <X size={20} /> : <Menu size={20} />}
+        {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </button>
 
       {/* Sidebar */}
@@ -72,7 +72,7 @@ export function Sidebar() {
               />
             ) : (
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-sidebar-primary to-sidebar-primary/60 flex items-center justify-center ring-2 ring-sidebar-primary/30">
-                <Wrench size={22} className="text-sidebar-primary-foreground" />
+                <Wrench className="w-6 h-6 text-sidebar-primary-foreground" />
               </div>
             )}
             <div>
@@ -99,7 +99,7 @@ export function Sidebar() {
                 animationDelay: `${idx * 30}ms`,
               }}
             >
-              <item.icon size={18} className="flex-shrink-0 transition-transform group-hover:scale-110" />
+              <item.icon className="w-4.5 h-4.5 flex-shrink-0 transition-transform group-hover:scale-110" />
               <span className="flex-1">{item.label}</span>
               {item.beta && (
                 <span className="text-xs px-2 py-0.5 rounded-full bg-gradient-to-r from-sidebar-primary/30 to-sidebar-primary/10 text-sidebar-primary font-semibold">β</span>
