@@ -177,18 +177,18 @@ export async function POST(request: NextRequest) {
             source,
             created_at,
             updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::integer, $10, NOW(), NOW())
           RETURNING id
         `, [
           vehicle_id,
           service.service_name,
-          service.reason || `Due at ${service.mileage_interval?.toLocaleString()} miles`,
+          service.reason || `Due at ${service.mileage_interval?.toLocaleString() || 'N/A'} miles`,
           priority,
           estimatedCost,
           JSON.stringify(laborItems),
           JSON.stringify(partsItems),
           'awaiting_approval',
-          service.mileage_interval,
+          service.mileage_interval || null,  // Explicitly pass null instead of undefined
           'ai_generated'
         ])
 
