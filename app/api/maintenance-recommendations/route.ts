@@ -420,10 +420,16 @@ CRITICAL RULES:
 `
 
     // Call Gemini AI
-    console.log('=== Calling Gemini AI ===')
+    console.log('\n' + '='.repeat(80))
+    console.log('=== CALLING GEMINI AI ===')
+    console.log('='.repeat(80))
+    console.log('Timestamp:', new Date().toISOString())
     console.log('VIN:', hasVIN ? vin : 'N/A')
     console.log('Y/M/M:', hasYMM ? `${year} ${make} ${model}` : 'N/A')
     console.log('Mileage:', mileage)
+    console.log('\n--- PROMPT BEING SENT TO GEMINI ---')
+    console.log(prompt)
+    console.log('--- END PROMPT ---\n')
 
     const result = await geminiModel.generateContent(prompt)
     const response = await result.response
@@ -431,9 +437,15 @@ CRITICAL RULES:
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(1)
 
-    console.log('=== Gemini Response Received ===')
+    console.log('\n' + '='.repeat(80))
+    console.log('=== GEMINI RESPONSE RECEIVED ===')
+    console.log('='.repeat(80))
+    console.log('Timestamp:', new Date().toISOString())
     console.log('Duration:', duration, 'seconds')
     console.log('Response length:', text.length, 'characters')
+    console.log('\n--- RAW GEMINI RESPONSE ---')
+    console.log(text)
+    console.log('--- END RESPONSE ---\n')
 
     /**
      * Parse Gemini Response
