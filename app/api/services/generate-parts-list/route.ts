@@ -413,6 +413,7 @@ Return EMPTY parts array for:
                       p.price as retail_price,
                       p.cost,
                       p.quantity_available,
+                      p.qty_per_package,
                       p.location,
                       p.bin_location,
                       f.fluid_type,
@@ -634,30 +635,48 @@ IMPORTANT:
               // Priority 1: Spec-matched inventory fluids (from fluid_specifications table)
               if (specMatchedInventory.length > 0) {
                 console.log(`  ✓ Adding ${specMatchedInventory.length} spec-matched inventory items`)
-                const specOptions = specMatchedInventory.map((inv: any) => ({
-                  partNumber: inv.part_number,
-                  description: inv.description,
-                  brand: inv.vendor || 'AutoHouse Inventory',
-                  vendor: 'AutoHouse Inventory',
-                  cost: parseFloat(inv.cost || 0),
-                  retailPrice: parseFloat(inv.retail_price || 0),
-                  inStock: true,
-                  quantity: inv.quantity_available,
-                  location: inv.location,
-                  binLocation: inv.bin_location,
-                  isInventory: true,
-                  isSpecMatched: true,
-                  hasOemMatch: inv.hasOemMatch,
-                  matchedOemApprovals: inv.matchedOemApprovals || [],
-                  viscosity: inv.viscosity,
-                  apiClass: inv.api_service_class,
-                  aceaClass: inv.acea_class,
-                  confidenceScore: inv.confidence_score,
-                  source: 'spec-matched-inventory',
-                  matchReason: inv.hasOemMatch 
-                    ? `Meets ${vehicle.make} OEM specs: ${inv.matchedOemApprovals.join(', ')}`
-                    : `Verified specs: ${inv.viscosity || ''} ${inv.api_service_class || ''}`.trim()
-                }))
+                const specOptions = specMatchedInventory.map((inv: any) => {
+                  const qtyPerPackage = inv.qty_per_package || 1
+                  const neededQty = part.quantity || 1
+                  
+                  // Calculate packages needed: CEIL(needed / per_package)
+                  // Example: Need 4 spark plugs, sold as 4-pack → CEIL(4/4) = 1 package
+                  // Example: Need 5 quarts oil, sold in 1-quart bottles → CEIL(5/1) = 5 bottles
+                  const packagesNeeded = Math.ceil(neededQty / qtyPerPackage)
+                  const actualQtyReceived = packagesNeeded * qtyPerPackage
+                  
+                  if (qtyPerPackage > 1) {
+                    console.log(`    Package calc: Need ${neededQty}, sold as ${qtyPerPackage}-pack → Order ${packagesNeeded} package(s) = ${actualQtyReceived} units`)
+                  }
+                  
+                  return {
+                    partNumber: inv.part_number,
+                    description: inv.description,
+                    brand: inv.vendor || 'AutoHouse Inventory',
+                    vendor: 'AutoHouse Inventory',
+                    cost: parseFloat(inv.cost || 0),
+                    retailPrice: parseFloat(inv.retail_price || 0),
+                    inStock: true,
+                    quantity: inv.quantity_available,
+                    qtyPerPackage: qtyPerPackage,
+                    packagesNeeded: packagesNeeded,
+                    actualQtyReceived: actualQtyReceived,
+                    location: inv.location,
+                    binLocation: inv.bin_location,
+                    isInventory: true,
+                    isSpecMatched: true,
+                    hasOemMatch: inv.hasOemMatch,
+                    matchedOemApprovals: inv.matchedOemApprovals || [],
+                    viscosity: inv.viscosity,
+                    apiClass: inv.api_service_class,
+                    aceaClass: inv.acea_class,
+                    confidenceScore: inv.confidence_score,
+                    source: 'spec-matched-inventory',
+                    matchReason: inv.hasOemMatch 
+                      ? `Meets ${vehicle.make} OEM specs: ${inv.matchedOemApprovals.join(', ')}`
+                      : `Verified specs: ${inv.viscosity || ''} ${inv.api_service_class || ''}`.trim()
+                  }
+                })
                 pricingOptions.push(...specOptions)
               }
 
