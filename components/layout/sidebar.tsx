@@ -12,19 +12,36 @@ export function Sidebar() {
 
   useEffect(() => {
     // Fetch shop profile to get logo
-    fetch('/api/settings/shop-profile')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data?.profile) {
-          if (data.profile.logo_url) {
-            setShopLogo(data.profile.logo_url)
+    const fetchShopProfile = () => {
+      fetch('/api/settings/shop-profile')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data?.profile) {
+            if (data.profile.logo_url) {
+              // Add cache-busting timestamp to force reload
+              setShopLogo(`${data.profile.logo_url}?t=${Date.now()}`)
+            } else {
+              setShopLogo(null)
+            }
+            if (data.profile.shop_name) {
+              setShopName(data.profile.shop_name)
+            }
           }
-          if (data.profile.shop_name) {
-            setShopName(data.profile.shop_name)
-          }
-        }
-      })
-      .catch(() => {})
+        })
+        .catch(() => {})
+    }
+
+    fetchShopProfile()
+
+    // Listen for logo update events
+    const handleLogoUpdate = () => {
+      fetchShopProfile()
+    }
+    window.addEventListener('shop-logo-updated', handleLogoUpdate)
+    
+    return () => {
+      window.removeEventListener('shop-logo-updated', handleLogoUpdate)
+    }
   }, [])
 
   const navItems = [
@@ -65,6 +82,7 @@ export function Sidebar() {
               width={40}
               height={40}
               className="w-10 h-10 rounded-lg object-contain"
+              unoptimized
             />
           ) : (
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-sidebar-primary to-blue-600 flex items-center justify-center">

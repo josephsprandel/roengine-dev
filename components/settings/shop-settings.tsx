@@ -242,8 +242,12 @@ export function ShopSettings() {
         throw new Error(data.error || "Failed to upload logo")
       }
 
-      // Update profile with new logo URL
-      setProfile({ ...profile, logo_url: data.logo_url })
+      // Update profile with new logo URL (add cache-busting timestamp)
+      setProfile({ ...profile, logo_url: `${data.logo_url}?t=${Date.now()}` })
+      
+      // Dispatch event to update sidebar
+      window.dispatchEvent(new Event('shop-logo-updated'))
+      
       alert("Logo uploaded successfully!")
     } catch (err: any) {
       setError(err.message)
@@ -273,6 +277,10 @@ export function ShopSettings() {
 
       // Clear logo from profile
       setProfile({ ...profile, logo_url: null })
+      
+      // Dispatch event to update sidebar
+      window.dispatchEvent(new Event('shop-logo-updated'))
+      
       alert("Logo removed successfully!")
     } catch (err: any) {
       setError(err.message)
@@ -336,6 +344,7 @@ export function ShopSettings() {
                   height={128}
                   className="w-full h-full object-contain"
                   unoptimized
+                  key={profile.logo_url}
                 />
               ) : (
                 <div className="text-center p-4">
