@@ -7,9 +7,17 @@ import { QuickActions } from "./quick-actions"
 
 export function Dashboard() {
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-8 bg-gradient-to-br from-background via-background to-card/5 min-h-screen">
+      {/* Header section with visual hierarchy */}
+      <div className="space-y-2">
+        <h1 className="text-4xl md:text-5xl font-bold text-foreground tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground font-medium">Welcome back. Here's your shop performance at a glance.</p>
+      </div>
+
       {/* Metrics */}
-      <MetricsGrid />
+      <div>
+        <MetricsGrid />
+      </div>
 
       {/* Quick actions and AI insights */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -20,9 +28,9 @@ export function Dashboard() {
       </div>
 
       {/* Main content */}
-      <div className="space-y-4">
+      <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-bold text-foreground mb-4">Active Repair Orders</h2>
+          <h2 className="text-2xl font-bold text-foreground mb-4 tracking-tight">Active Repair Orders</h2>
           <RepairOrdersTable />
         </div>
       </div>

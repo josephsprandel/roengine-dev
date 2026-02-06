@@ -11,7 +11,8 @@ export function MetricsGrid() {
       change: "+12.5%",
       positive: true,
       icon: DollarSign,
-      gradient: "from-green-500/20 to-emerald-500/20",
+      accentColor: "text-emerald-400",
+      borderColor: "border-emerald-500/20",
     },
     {
       label: "Open Repair Orders",
@@ -19,7 +20,8 @@ export function MetricsGrid() {
       change: "+3 this hour",
       positive: true,
       icon: Clock,
-      gradient: "from-blue-500/20 to-cyan-500/20",
+      accentColor: "text-cyan-400",
+      borderColor: "border-cyan-500/20",
     },
     {
       label: "Awaiting Customer Approval",
@@ -27,7 +29,8 @@ export function MetricsGrid() {
       change: "-2 from yesterday",
       positive: true,
       icon: AlertTriangle,
-      gradient: "from-amber-500/20 to-orange-500/20",
+      accentColor: "text-orange-400",
+      borderColor: "border-orange-500/20",
     },
     {
       label: "Avg Completion Time",
@@ -35,28 +38,40 @@ export function MetricsGrid() {
       change: "-8.2% vs avg",
       positive: true,
       icon: TrendingUp,
-      gradient: "from-purple-500/20 to-pink-500/20",
+      accentColor: "text-purple-400",
+      borderColor: "border-purple-500/20",
     },
   ]
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
       {metrics.map((metric, idx) => {
         const Icon = metric.icon
         return (
-          <Card key={idx} className="relative overflow-hidden border-border">
-            <div className={`absolute inset-0 bg-gradient-to-br ${metric.gradient} opacity-50`} />
+          <Card
+            key={idx}
+            className={`relative overflow-hidden border ${metric.borderColor} bg-gradient-to-br from-card to-card/80 hover:border-opacity-100 transition-all duration-300 hover:shadow-lg group`}
+          >
+            {/* Accent line top */}
+            <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${metric.accentColor} opacity-50 group-hover:opacity-100 transition-opacity`} />
+            
+            {/* Background gradient accent */}
+            <div className={`absolute -top-12 -right-12 w-24 h-24 rounded-full ${metric.accentColor} opacity-5 group-hover:opacity-10 transition-opacity`} />
+            
             <div className="relative p-6 space-y-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">{metric.label}</p>
-                  <h3 className="text-2xl font-bold text-foreground">{metric.value}</h3>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">{metric.label}</p>
+                  <h3 className="text-3xl font-bold text-foreground">{metric.value}</h3>
                 </div>
-                <div className="p-2 rounded-lg bg-card/50 border border-border">
-                  <Icon size={20} className="text-muted-foreground" />
+                <div className={`p-3 rounded-lg bg-gradient-to-br from-card to-card/60 border ${metric.borderColor} group-hover:border-opacity-100 transition-all`}>
+                  <Icon size={20} className={metric.accentColor} />
                 </div>
               </div>
-              <p className="text-xs font-medium text-green-600 dark:text-green-400">{metric.change}</p>
+              <div className="flex items-center gap-2">
+                <div className="h-0.5 flex-1 bg-gradient-to-r from-muted to-transparent" />
+                <p className="text-xs font-semibold text-emerald-400">{metric.change}</p>
+              </div>
             </div>
           </Card>
         )
