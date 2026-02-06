@@ -372,8 +372,38 @@ Return EMPTY parts array for:
                 console.log(`🧪 FLUID DETECTED: "${part.description}" - checking inventory with spec matching`)
                 
                 try {
-                  // STEP 3A: Check fluid_specifications table for spec-matched inventory
+                  // STEP 3A: Map part description to specific fluid type
+                  // CRITICAL: Only search for the SPECIFIC fluid type needed
+                  const partDescLowerForType = part.description.toLowerCase()
+                  let fluidTypeFilter: string[] = []
+                  
+                  if (partDescLowerForType.includes('engine oil') || partDescLowerForType.includes('motor oil')) {
+                    fluidTypeFilter = ['engine_oil']
+                    console.log(`  → Searching for ENGINE OIL only`)
+                  } else if (partDescLowerForType.includes('transmission')) {
+                    fluidTypeFilter = ['transmission_fluid']
+                    console.log(`  → Searching for TRANSMISSION FLUID only`)
+                  } else if (partDescLowerForType.includes('coolant') || partDescLowerForType.includes('antifreeze')) {
+                    fluidTypeFilter = ['coolant', 'antifreeze']
+                    console.log(`  → Searching for COOLANT/ANTIFREEZE only`)
+                  } else if (partDescLowerForType.includes('brake')) {
+                    fluidTypeFilter = ['brake_fluid']
+                    console.log(`  → Searching for BRAKE FLUID only`)
+                  } else if (partDescLowerForType.includes('differential') || partDescLowerForType.includes('gear oil')) {
+                    fluidTypeFilter = ['differential_oil', 'gear_oil']
+                    console.log(`  → Searching for DIFFERENTIAL/GEAR OIL only`)
+                  } else if (partDescLowerForType.includes('power steering')) {
+                    fluidTypeFilter = ['power_steering_fluid']
+                    console.log(`  → Searching for POWER STEERING FLUID only`)
+                  } else {
+                    // Unknown fluid type - search by description only
+                    fluidTypeFilter = []
+                    console.log(`  → Unknown fluid type, searching by description only`)
+                  }
+                  
+                  // STEP 3B: Check fluid_specifications table for spec-matched inventory
                   // This queries items that have detailed specs extracted from labels
+                  // CRITICAL FIX: Only return fluids matching the SPECIFIC type requested
                   const specQuery = await query(`
                     SELECT 
                       p.id,
@@ -385,6 +415,7 @@ Return EMPTY parts array for:
                       p.quantity_available,
                       p.location,
                       p.bin_location,
+                      f.fluid_type,
                       f.viscosity,
                       f.api_service_class,
                       f.acea_class,
@@ -399,15 +430,19 @@ Return EMPTY parts array for:
                     WHERE p.quantity_available > 0
                       AND p.spec_verified = true
                       AND (
-                        LOWER(p.description) ILIKE $1
-                        OR LOWER(f.product_name) ILIKE $1
-                        OR f.fluid_type IN ('engine_oil', 'transmission_fluid', 'coolant', 'brake_fluid', 'differential_oil')
+                        ${fluidTypeFilter.length > 0 
+                          ? `f.fluid_type = ANY($2)` 
+                          : `(LOWER(p.description) ILIKE $1 OR LOWER(f.product_name) ILIKE $1)`
+                        }
                       )
                     ORDER BY 
                       f.confidence_score DESC,
                       p.price ASC
                     LIMIT 10
-                  `, [`%${part.description.split(' ')[0]}%`])
+                  `, fluidTypeFilter.length > 0 
+                      ? [`%${part.description.split(' ')[0]}%`, fluidTypeFilter]
+                      : [`%${part.description.split(' ')[0]}%`]
+                  )
 
                   if (specQuery.rows.length > 0) {
                     console.log(`  ✓ Found ${specQuery.rows.length} spec-verified fluids in inventory`)
