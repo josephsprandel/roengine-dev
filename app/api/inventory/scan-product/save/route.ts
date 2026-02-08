@@ -89,9 +89,9 @@ export async function POST(request: NextRequest) {
       partId = existing.id
       console.log(`  📝 Updating existing part ID ${partId}`)
 
-      // Preserve financial data from ShopWare
-      const costPerQuart = existing.cost_per_quart || existing.cost || 0
-      const pricePerQuart = existing.price_per_quart || existing.price || 0
+      // Preserve financial data from ShopWare (parseFloat since pg returns strings for numeric)
+      const costPerQuart = parseFloat(existing.cost_per_quart) || parseFloat(existing.cost) || 0
+      const pricePerQuart = parseFloat(existing.price_per_quart) || parseFloat(existing.price) || 0
 
       await client.query(`
         UPDATE parts_inventory SET
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
           cost_per_quart = $10,
           price_per_quart = $11,
           margin_percent = CASE 
-            WHEN $11 > 0 THEN ROUND((($11 - $10) / $11 * 100)::numeric, 2)
+            WHEN $11::numeric > 0 THEN ROUND((($11::numeric - $10::numeric) / $11::numeric * 100)::numeric, 2)
             ELSE 0
           END,
           
