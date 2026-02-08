@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     // Initialize Gemini 3.0 Flash with structured output
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY)
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash-preview-05-20',
+      model: 'gemini-2.5-flash',
 
       systemInstruction: `You are an AI Product Data Extraction Agent for an automotive repair shop inventory system.
 
@@ -419,7 +419,7 @@ ${imageCount === 2 ? '- Combine information from BOTH photos for the most comple
       metadata: {
         photosProcessed: imageCount,
         extractionDate: new Date().toISOString(),
-        model: 'gemini-2.5-flash-preview-05-20'
+        model: 'gemini-2.5-flash'
       }
     })
 
