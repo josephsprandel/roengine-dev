@@ -190,6 +190,27 @@ Examples:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+OEM FLUID SPECIFICATIONS - CRITICAL:
+
+For ANY fluid part (engine oil, transmission fluid, coolant, brake fluid, etc.):
+- Look at the SERVICE DESCRIPTION for OEM fluid specification requirements
+- Extract the EXACT OEM spec code (e.g., "VCC RBS0-2AE", "dexos1 Gen 3", "WSS-M2C947-B1")
+- Include it in the "oemSpec" field using normalized format:
+  - Volvo VCC RBS0-2AE → "VOLVO-VCC-RBS0-2AE"
+  - GM dexos1 Gen 3 → "GM-DEXOS1-G3"
+  - Ford WSS-M2C947-B1 → "FORD-WSS-M2C947-B1"
+  - BMW LL-01 → "BMW-LL-01"
+  - VW 504 00 → "VW-504.00"
+  - MB 229.51 → "MB-229.51"
+  - Honda HTO-06 → "HONDA-HTO-06"
+  - Toyota TGMO → "TOYOTA-TGMO"
+  
+- If the service description mentions a specific OEM spec, you MUST include it
+- If no specific OEM spec is mentioned, use your knowledge of the vehicle to determine the correct OEM fluid spec
+- For ${vehicle.year} ${vehicle.make} ${vehicle.model}: Look up the EXACT factory-required fluid spec
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 Return JSON in this EXACT format:
 {
   "services": [
@@ -200,13 +221,15 @@ Return JSON in this EXACT format:
           "description": "oil filter",
           "quantity": 1,
           "unit": "each",
-          "notes": "Standard spin-on filter"
+          "notes": "Standard spin-on filter",
+          "oemSpec": null
         },
         {
-          "description": "engine oil 0w20 synthetic",
+          "description": "engine oil 0w20",
           "quantity": 5,
           "unit": "quarts",
-          "notes": "Use manufacturer recommended grade"
+          "notes": "Must meet Volvo VCC RBS0-2AE specification",
+          "oemSpec": "VOLVO-VCC-RBS0-2AE"
         }
       ]
     },
@@ -227,6 +250,7 @@ IMPORTANT FORMATTING RULES:
 3. Be specific about fluid specs (0W-20, DOT 3, ATF+4, etc.)
 4. Return ONLY valid JSON, no markdown, no explanation
 5. ALWAYS return empty parts array [] for inspections, rotations, and tests
+6. For fluids, ALWAYS include the "oemSpec" field with the normalized OEM code (or null if not a fluid)
 
 Return ONLY parts that are:
 1. Installed during scheduled maintenance
@@ -404,46 +428,71 @@ Return EMPTY parts array for:
                   // STEP 3B: Check fluid_specifications table for spec-matched inventory
                   // This queries items that have detailed specs extracted from labels
                   // CRITICAL FIX: Only return fluids matching the SPECIFIC type requested
-                  const specQuery = await query(`
-                    SELECT 
-                      p.id,
-                      p.part_number,
-                      p.description,
-                      p.vendor,
-                      p.price as retail_price,
-                      p.cost,
-                      p.quantity_available,
-                      p.qty_per_package,
-                      p.location,
-                      p.bin_location,
-                      f.fluid_type,
-                      f.viscosity,
-                      f.api_service_class,
-                      f.acea_class,
-                      f.ilsac_class,
-                      f.oem_approvals,
-                      f.low_saps,
-                      f.high_mileage,
-                      f.confidence_score,
-                      f.product_name
-                    FROM parts_inventory p
-                    INNER JOIN fluid_specifications f ON p.id = f.inventory_id
-                    WHERE p.quantity_available > 0
-                      AND p.spec_verified = true
-                      AND (
-                        ${fluidTypeFilter.length > 0 
-                          ? `f.fluid_type = ANY($2)` 
-                          : `(LOWER(p.description) ILIKE $1 OR LOWER(f.product_name) ILIKE $1)`
-                        }
-                      )
-                    ORDER BY 
-                      f.confidence_score DESC,
-                      p.price ASC
-                    LIMIT 10
-                  `, fluidTypeFilter.length > 0 
-                      ? [`%${part.description.split(' ')[0]}%`, fluidTypeFilter]
-                      : [`%${part.description.split(' ')[0]}%`]
-                  )
+                  const specQuery = fluidTypeFilter.length > 0
+                    ? await query(`
+                      SELECT 
+                        p.id,
+                        p.part_number,
+                        p.description,
+                        p.vendor,
+                        p.price as retail_price,
+                        p.cost,
+                        p.quantity_available,
+                        p.qty_per_package,
+                        p.location,
+                        p.bin_location,
+                        f.fluid_type,
+                        f.viscosity,
+                        f.api_service_class,
+                        f.acea_class,
+                        f.ilsac_class,
+                        f.oem_approvals,
+                        f.low_saps,
+                        f.high_mileage,
+                        f.confidence_score,
+                        f.product_name
+                      FROM parts_inventory p
+                      INNER JOIN fluid_specifications f ON p.id = f.inventory_id
+                      WHERE p.quantity_available > 0
+                        AND p.spec_verified = true
+                        AND f.fluid_type = ANY($1::text[])
+                      ORDER BY 
+                        f.confidence_score DESC,
+                        p.price ASC
+                      LIMIT 10
+                    `, [fluidTypeFilter])
+                    : await query(`
+                      SELECT 
+                        p.id,
+                        p.part_number,
+                        p.description,
+                        p.vendor,
+                        p.price as retail_price,
+                        p.cost,
+                        p.quantity_available,
+                        p.qty_per_package,
+                        p.location,
+                        p.bin_location,
+                        f.fluid_type,
+                        f.viscosity,
+                        f.api_service_class,
+                        f.acea_class,
+                        f.ilsac_class,
+                        f.oem_approvals,
+                        f.low_saps,
+                        f.high_mileage,
+                        f.confidence_score,
+                        f.product_name
+                      FROM parts_inventory p
+                      INNER JOIN fluid_specifications f ON p.id = f.inventory_id
+                      WHERE p.quantity_available > 0
+                        AND p.spec_verified = true
+                        AND (LOWER(p.description) ILIKE $1 OR LOWER(f.product_name) ILIKE $1)
+                      ORDER BY 
+                        f.confidence_score DESC,
+                        p.price ASC
+                      LIMIT 10
+                    `, [`%${part.description.split(' ')[0]}%`])
 
                   if (specQuery.rows.length > 0) {
                     console.log(`  ✓ Found ${specQuery.rows.length} spec-verified fluids in inventory`)
@@ -464,7 +513,13 @@ Return EMPTY parts array for:
                     if (specMatchedInventory.length > 0) {
                       console.log(`  ✓ ${specMatchedInventory.length} items match viscosity/spec requirements`)
                       
-                      // Check for OEM approval matches (e.g., GM dexos for GM vehicles)
+                      // Extract specific OEM spec from Gemini's oemSpec field
+                      const specificOemSpec = part.oemSpec || null
+                      if (specificOemSpec) {
+                        console.log(`  🎯 OEM SPEC REQUIRED: ${specificOemSpec}`)
+                      }
+                      
+                      // Check for OEM approval matches - SPECIFIC spec first, then prefix fallback
                       const vehicleMake = vehicle.make?.toLowerCase()
                       const makeToOemPrefix: Record<string, string[]> = {
                         'gm': ['GM-DEXOS'],
@@ -487,35 +542,61 @@ Return EMPTY parts array for:
                       const oemPrefixes = makeToOemPrefix[vehicleMake || ''] || []
                       
                       specMatchedInventory = specMatchedInventory.map((inv: any) => {
-                        let oemMatch = false
+                        let exactOemMatch = false
+                        let prefixOemMatch = false
                         let matchedApprovals: string[] = []
                         
-                        if (oemPrefixes.length > 0 && inv.oem_approvals) {
-                          const approvals = Array.isArray(inv.oem_approvals) ? inv.oem_approvals : []
+                        const approvals = Array.isArray(inv.oem_approvals) ? inv.oem_approvals : []
+                        
+                        // Priority 1: EXACT OEM spec match (e.g., "VOLVO-VCC-RBS0-2AE")
+                        if (specificOemSpec && approvals.length > 0) {
+                          const specNormalized = specificOemSpec.toUpperCase().replace(/[\s]/g, '')
+                          matchedApprovals = approvals.filter((code: string) => {
+                            const codeNormalized = code.toUpperCase().replace(/[\s]/g, '')
+                            return codeNormalized === specNormalized || 
+                                   codeNormalized.includes(specNormalized) || 
+                                   specNormalized.includes(codeNormalized)
+                          })
+                          exactOemMatch = matchedApprovals.length > 0
+                        }
+                        
+                        // Priority 2: Prefix-based OEM match (e.g., any VOLVO- approval)
+                        if (!exactOemMatch && oemPrefixes.length > 0 && approvals.length > 0) {
                           matchedApprovals = approvals.filter((code: string) => 
                             oemPrefixes.some(prefix => code.startsWith(prefix))
                           )
-                          oemMatch = matchedApprovals.length > 0
+                          prefixOemMatch = matchedApprovals.length > 0
                         }
                         
                         return {
                           ...inv,
-                          hasOemMatch: oemMatch,
+                          hasOemMatch: exactOemMatch || prefixOemMatch,
+                          hasExactOemMatch: exactOemMatch,
                           matchedOemApprovals: matchedApprovals,
-                          specMatchScore: oemMatch ? 100 : 80 // Priority scoring
+                          requiredOemSpec: specificOemSpec,
+                          // Scoring: exact match > prefix match > viscosity only
+                          specMatchScore: exactOemMatch ? 100 : (prefixOemMatch ? 90 : 80)
                         }
                       })
                       
-                      // Sort by OEM match, then confidence, then price
+                      // Sort: exact OEM match first, then prefix match, then confidence, then price
                       specMatchedInventory.sort((a: any, b: any) => {
+                        if (a.hasExactOemMatch !== b.hasExactOemMatch) return b.hasExactOemMatch ? 1 : -1
                         if (a.hasOemMatch !== b.hasOemMatch) return b.hasOemMatch ? 1 : -1
                         if (a.confidence_score !== b.confidence_score) return (b.confidence_score || 0) - (a.confidence_score || 0)
                         return (a.retail_price || 0) - (b.retail_price || 0)
                       })
                       
-                      const oemMatchCount = specMatchedInventory.filter((i: any) => i.hasOemMatch).length
-                      if (oemMatchCount > 0) {
-                        console.log(`  ✓ ${oemMatchCount} items have OEM approval for ${vehicle.make}`)
+                      const exactCount = specMatchedInventory.filter((i: any) => i.hasExactOemMatch).length
+                      const prefixCount = specMatchedInventory.filter((i: any) => i.hasOemMatch && !i.hasExactOemMatch).length
+                      if (exactCount > 0) {
+                        console.log(`  ✅ ${exactCount} items EXACTLY match ${specificOemSpec}`)
+                      }
+                      if (prefixCount > 0) {
+                        console.log(`  ✓ ${prefixCount} items have other ${vehicle.make} OEM approvals`)
+                      }
+                      if (exactCount === 0 && prefixCount === 0 && specificOemSpec) {
+                        console.log(`  ⚠️ NO inventory items match ${specificOemSpec} - may need to order`)
                       }
                     }
                   }
@@ -672,9 +753,13 @@ IMPORTANT:
                     aceaClass: inv.acea_class,
                     confidenceScore: inv.confidence_score,
                     source: 'spec-matched-inventory',
-                    matchReason: inv.hasOemMatch 
-                      ? `Meets ${vehicle.make} OEM specs: ${inv.matchedOemApprovals.join(', ')}`
-                      : `Verified specs: ${inv.viscosity || ''} ${inv.api_service_class || ''}`.trim()
+                    hasExactOemMatch: inv.hasExactOemMatch || false,
+                    requiredOemSpec: inv.requiredOemSpec || null,
+                    matchReason: inv.hasExactOemMatch 
+                      ? `✅ Meets EXACT ${vehicle.make} spec: ${inv.matchedOemApprovals.join(', ')}`
+                      : inv.hasOemMatch 
+                        ? `Meets ${vehicle.make} OEM specs: ${inv.matchedOemApprovals.join(', ')}`
+                        : `Verified specs: ${inv.viscosity || ''} ${inv.api_service_class || ''}`.trim()
                   }
                 })
                 pricingOptions.push(...specOptions)
