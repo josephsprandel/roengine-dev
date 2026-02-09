@@ -289,6 +289,15 @@ Return EMPTY parts array for:
 
     console.log('✓ Generated parts for', partsList.services.length, 'services')
 
+    // Log OEM spec fields from Gemini for debugging
+    partsList.services.forEach((s: any) => {
+      s.parts.forEach((p: any) => {
+        if (p.oemSpec) {
+          console.log(`  🎯 Gemini OEM spec for "${p.description}": ${p.oemSpec}`)
+        }
+      })
+    })
+
     // Get preferred vendor for this vehicle based on its make/origin
     let preferredVendor: VendorPreference | null = null
     try {
@@ -631,11 +640,14 @@ Return EMPTY parts array for:
                       console.log(`  Found ${inventoryFluids.rows.length} potential inventory fluids (legacy)`)
                       
                       // Ask AI to match inventory fluid to PartsTech spec
-                      const matchPrompt = `You are matching a needed fluid part to in-stock inventory.
+                      const oemSpecNote = part.oemSpec 
+                        ? `\n\n⚠️ CRITICAL OEM REQUIREMENT: This vehicle REQUIRES fluid meeting ${part.oemSpec} specification.\n- ONLY select inventory items that meet this OEM spec\n- A generic ${part.description.match(/\\d+W-?\\d+/i)?.[0] || ''} is NOT sufficient if it doesn't meet ${part.oemSpec}\n- Look for "VCC" or "${part.oemSpec}" in the inventory description\n- If no in-stock item clearly meets ${part.oemSpec}, set useInventory: false`
+                        : ''
+                      const matchPrompt = `You are matching a needed fluid part to in-stock inventory for a ${vehicle.year} ${vehicle.make} ${vehicle.model}.
 
 NEEDED PART:
 - Description: ${part.description}
-- Quantity: ${part.quantity || 1} ${part.unit || 'unit(s)'}
+- Quantity: ${part.quantity || 1} ${part.unit || 'unit(s)'}${part.oemSpec ? `\n- REQUIRED OEM SPEC: ${part.oemSpec}` : ''}
 
 PARTSTECH OPTIONS (what we would order from vendor):
 ${partstechParts.slice(0, 5).map((p: any, i: number) => 
@@ -646,9 +658,10 @@ IN-STOCK INVENTORY (available NOW, no wait):
 ${inventoryFluids.rows.map((inv: any, i: number) => 
   `${i+1}. ${inv.description} - $${parseFloat(inv.retail_price || 0).toFixed(2)} - Qty: ${inv.quantity_available} - Location: ${inv.location || 'N/A'}`
 ).join('\n')}
+${oemSpecNote}
 
 TASK:
-If ANY in-stock item meets the SPECIFICATION, select it over ordering.
+If ANY in-stock item meets the FULL SPECIFICATION (including OEM requirements), select it over ordering.
 Match by spec (5W-30 = 5W-30, 0W-20 = 0W-20, DOT 3 = DOT 3, etc.)
 Ignore brand differences (Mobil vs Valvoline vs Pennzoil - all OK if spec matches)
 
@@ -660,10 +673,10 @@ Return JSON ONLY:
 }
 
 IMPORTANT:
-- Prioritize in-stock over ordering (saves time and shipping)
-- Match by specification (viscosity/grade), NOT by brand
+- ${part.oemSpec ? `OEM SPEC IS MANDATORY: Only select items that meet ${part.oemSpec}` : 'Prioritize in-stock over ordering (saves time and shipping)'}
+- Match by specification (viscosity/grade AND OEM approval), NOT by brand
 - If quantity is insufficient, still prefer in-stock if spec matches
-- If NO in-stock item matches the spec, set useInventory: false`
+- If NO in-stock item matches the ${part.oemSpec ? 'required OEM spec' : 'spec'}, set useInventory: false`
 
                       const matchResult = await model.generateContent(matchPrompt)
                       const matchText = matchResult.response.text()
