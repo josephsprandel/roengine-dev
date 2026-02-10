@@ -37,6 +37,8 @@ import { EditableServiceCard, createLineItem } from "./editable-service-card"
 import type { LineItemCategory } from "./editable-service-card"
 import { PartsSelectionModal } from "./parts-selection-modal"
 import { VehicleEditDialog } from "@/components/customers/vehicle-edit-dialog"
+import { useAIRecommendations } from "./hooks/useAIRecommendations"
+import { usePartsGeneration } from "./hooks/usePartsGeneration"
 
 // Workflow stages - MOVED OUTSIDE to prevent re-creation on every render
 const WORKFLOW_STAGES = [
@@ -95,7 +97,7 @@ function convertDbServicesToServiceData(dbServices: any[]): ServiceData[] {
         id: `${item.item_type?.[0] || 'i'}${item.id}`,
         description: item.description || '',
         quantity: parseFloat(item.item_type === 'labor' ? item.labor_hours || 0 : item.quantity || 1),
-        unitPrice: parseFloat(item.item_type === 'labor' ? item.labor_rate || 160 : item.unit_price || 0),
+        unitPrice: parseFloat(item.item_type === 'labor' ? item.labor_rate || 160 : item.unit_price || 0), // TODO: Move default labor_rate 160 to shop settings
         total: parseFloat(item.line_total || 0),
       }
 
@@ -219,22 +221,6 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     zip: "",
   })
   
-  // AI Recommendation states
-  const [aiDialogOpen, setAiDialogOpen] = useState(false)
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiServices, setAiServices] = useState<any[]>([])
-  const [selectedAiServices, setSelectedAiServices] = useState<any[]>([])
-  const [aiSource, setAiSource] = useState<string | null>(null)
-  const [variantSelectorOpen, setVariantSelectorOpen] = useState(false)
-  const [availableVariants, setAvailableVariants] = useState<any[]>([])
-  const [selectedVariant, setSelectedVariant] = useState<any | null>(null)
-
-  // Parts generation states
-  const [partsDialogOpen, setPartsDialogOpen] = useState(false)
-  const [servicesWithParts, setServicesWithParts] = useState<any[]>([])
-  const [generatingParts, setGeneratingParts] = useState(false)
-  const [loadingStep, setLoadingStep] = useState<string>('')
-
   // ALL useMemo and useCallback MUST ALSO BE AT THE TOP
   const totals = useMemo(() => {
     const initial = { parts: 0, labor: 0, sublets: 0, hazmat: 0, fees: 0, total: 0 }
@@ -263,6 +249,30 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     setToast({ message, type })
     setTimeout(() => setToast(null), 3500)
   }, [])
+
+  // AI Recommendations hook
+  const aiRecommendations = useAIRecommendations(workOrder)
+
+  // Reload services from database (used by parts generation hook)
+  const reloadServices = useCallback(async () => {
+    if (!workOrder?.id) return
+    const servicesResponse = await fetch(`/api/work-orders/${workOrder.id}/services`)
+    if (servicesResponse.ok) {
+      const servicesData = await servicesResponse.json()
+      const loadedServices = convertDbServicesToServiceData(servicesData.services || [])
+      setServices(loadedServices)
+    }
+  }, [workOrder])
+
+  // Parts Generation hook
+  const partsGeneration = usePartsGeneration(
+    workOrder?.id,
+    aiRecommendations.selectedAiServices,
+    services.length,
+    workOrder ? { year: workOrder.year, make: workOrder.make, model: workOrder.model, vin: workOrder.vin } : null,
+    reloadServices,
+    showToast
+  )
 
   const updateStatus = useCallback(
     async (nextStatus: string, options?: { successMessage?: string }) => {
@@ -400,7 +410,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           unit_price: item.unitPrice || 0,
           labor_hours: category === "labor" ? item.quantity || 0 : null,
           labor_rate: category === "labor" ? item.unitPrice || 0 : null,
-          is_taxable: true,
+          is_taxable: true, // TODO: Move to shop settings
           display_order: 0,
           service_id: dbServiceId,
         }
@@ -494,353 +504,6 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
       console.error('Error adding service:', error)
     }
   }, [workOrder, services.length])
-
-  const handleAIRecommend = useCallback(async () => {
-    console.log('[DEBUG] AI Recommend clicked')
-    
-    if (!workOrder) {
-      console.log('[DEBUG] No workOrder available')
-      return
-    }
-    
-    setAiDialogOpen(true)
-    setAiLoading(true)
-    setAiServices([])
-    setAiSource(null)
-
-    try {
-      // Get current mileage from user
-      const mileage = prompt("Enter current mileage:")
-      console.log('[DEBUG] Mileage entered:', mileage)
-      
-      if (!mileage) {
-        console.log('[DEBUG] No mileage provided, aborting')
-        setAiLoading(false)
-        return
-      }
-
-      const requestBody = {
-        year: workOrder.year,
-        make: workOrder.make,
-        model: workOrder.model,
-        mileage: parseInt(mileage),
-        vin: workOrder.vin
-      }
-      console.log('[DEBUG] Request body:', requestBody)
-
-      const url = "/api/maintenance-recommendations"
-      console.log('[DEBUG] Calling API:', url)
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-      })
-
-      console.log('[DEBUG] Response status:', response.status)
-      console.log('[DEBUG] Response ok:', response.ok)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('[DEBUG] Error response text:', errorText)
-        throw new Error(`API error: ${response.status}`)
-      }
-
-      const data = await response.json()
-      console.log('[DEBUG] Response data:', data)
-      
-      /**
-       * MULTIPLE VARIANTS HANDLING
-       * 
-       * Some vehicles (like 2020 Honda Accord) have multiple engine options:
-       * - 1.5L Turbo I4 with CVT
-       * - 2.0L Turbo I4 with 10-speed Automatic
-       * 
-       * Strategy: Show variant selector BEFORE saving to database
-       * Why: Don't save irrelevant data (2.0L recommendations for 1.5L car)
-       */
-      if (data.multiple_variants) {
-        console.log('[DEBUG] Multiple variants detected:', data.variants?.length)
-        console.log('[DEBUG] Variants:', data.variants)
-        
-        // Store variants and show selector dialog
-        setAvailableVariants(data.variants || [])
-        setAiSource(data.source)
-        setAiDialogOpen(false) // Close loading dialog
-        setVariantSelectorOpen(true) // Open variant selector
-      } else {
-        // Single variant - auto-save immediately
-        setAiServices(data.services || [])
-        setSelectedAiServices(data.services || []) // Auto-select all
-        setAiSource(data.source)
-        
-        // Auto-save recommendations to database
-        await saveRecommendationsToDatabase(data.services || [])
-      }
-      
-      console.log('[DEBUG] Services set:', data.services?.length || 0, 'services')
-      console.log('[DEBUG] Source:', data.source)
-    } catch (error) {
-      console.error('[DEBUG] AI recommendation error:', error)
-    } finally {
-      console.log('[DEBUG] Setting loading to false')
-      setAiLoading(false)
-    }
-  }, [workOrder])
-
-  /**
-   * Save AI recommendations to vehicle_recommendations table
-   * 
-   * This creates records with status='awaiting_approval' so service advisors
-   * can review and approve them. When approved, they're added to work_order_items.
-   * 
-   * Why auto-save:
-   * - Creates audit trail (even if user closes dialog)
-   * - Tracks presentation history (declined_count, last_presented)
-   * - Allows showing recommendations on future ROs for same vehicle
-   * 
-   * @param services - Array of AI-generated maintenance services
-   */
-  const saveRecommendationsToDatabase = async (services: any[]) => {
-    if (!workOrder?.vehicle_id || !services || services.length === 0) {
-      console.log('[DEBUG] Skip save: no vehicle_id or no services')
-      console.log('[DEBUG] workOrder.vehicle_id:', workOrder?.vehicle_id)
-      return
-    }
-
-    try {
-      console.log('[DEBUG] Saving recommendations to database...')
-      console.log('[DEBUG] Vehicle ID:', workOrder.vehicle_id)
-      console.log('[DEBUG] Vehicle ID type:', typeof workOrder.vehicle_id)
-      console.log('[DEBUG] Services count:', services.length)
-
-      // Ensure vehicle_id is a number
-      const vehicleId = typeof workOrder.vehicle_id === 'string' 
-        ? parseInt(workOrder.vehicle_id, 10) 
-        : workOrder.vehicle_id
-
-      if (!vehicleId || isNaN(vehicleId)) {
-        console.error('[DEBUG] Invalid vehicle_id:', vehicleId)
-        return
-      }
-
-      const saveResponse = await fetch('/api/save-recommendations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vehicle_id: vehicleId,
-          services: services
-        })
-      })
-
-      if (!saveResponse.ok) {
-        const errorText = await saveResponse.text()
-        console.error('[DEBUG] Save error:', errorText)
-        throw new Error(`Failed to save: ${saveResponse.status}`)
-      }
-
-      const saveData = await saveResponse.json()
-      console.log('[DEBUG] Save successful:', saveData)
-      console.log('[DEBUG] Saved recommendation IDs:', saveData.recommendation_ids)
-
-      /**
-       * TODO: Refresh recommendations list on the page
-       * 
-       * After saving, we should refresh the vehicle_recommendations query
-       * to show the newly added recommendations in the UI.
-       * 
-       * Implementation ideas:
-       * 1. Add a recommendations section to this page
-       * 2. Query: SELECT * FROM vehicle_recommendations WHERE vehicle_id = ?
-       * 3. Show with approve/decline buttons
-       * 4. On approve: INSERT INTO work_order_items
-       * 
-       * For now: Recommendations are saved but not displayed on this page.
-       * Service advisors can view them in the vehicle history or recommendations tab.
-       */
-
-    } catch (error) {
-      console.error('[DEBUG] Failed to save recommendations:', error)
-      // Don't throw - still show recommendations in dialog even if save fails
-    }
-  }
-
-  const toggleAiService = useCallback((service: any) => {
-    setSelectedAiServices(prev =>
-      prev.includes(service)
-        ? prev.filter(s => s !== service)
-        : [...prev, service]
-    )
-  }, [])
-
-  /**
-   * NEW FLOW: Generate parts list with AI + PartsTech pricing
-   * 
-   * This replaces the old "add services with labor only" flow.
-   * Now we:
-   * 1. Generate parts list via AI
-   * 2. Look up pricing via PartsTech
-   * 3. Show parts selection modal
-   * 4. Add services + parts to RO
-   */
-  const addSelectedAiServices = useCallback(async () => {
-    if (!workOrder?.id || selectedAiServices.length === 0) return
-
-    console.log('=== GENERATING PARTS LIST FOR SERVICES ===')
-    console.log('Selected services:', selectedAiServices.length)
-
-    setGeneratingParts(true)
-    setAiDialogOpen(false)
-
-    try {
-      // Step 1: Analyzing services
-      setLoadingStep('Analyzing services...')
-      await new Promise(resolve => setTimeout(resolve, 300))
-
-      // Step 2: Generating parts list with AI
-      setLoadingStep('Generating parts list with AI...')
-      const partsResponse = await fetch('/api/services/generate-parts-list', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          services: selectedAiServices.map(s => ({
-            service_name: s.service_name,
-            service_description: s.service_description
-          })),
-          vehicle: {
-            year: workOrder.year,
-            make: workOrder.make,
-            model: workOrder.model,
-            engine: `${workOrder.year} ${workOrder.make} ${workOrder.model}`,
-            vin: workOrder.vin
-          }
-        })
-      })
-
-      if (!partsResponse.ok) {
-        const errorText = await partsResponse.text()
-        console.error('Parts API Error:', errorText)
-        throw new Error(`Failed to generate parts list: ${errorText}`)
-      }
-
-      // Step 3: Looking up pricing
-      setLoadingStep('Looking up pricing...')
-      const { servicesWithParts: generatedParts } = await partsResponse.json()
-      console.log('✓ Parts generated for', generatedParts.length, 'services')
-
-      // Step 4: Preparing selection
-      setLoadingStep('Preparing selection...')
-      await new Promise(resolve => setTimeout(resolve, 200))
-
-      // Done - Show parts selection modal
-      setServicesWithParts(generatedParts)
-      setPartsDialogOpen(true)
-
-    } catch (error: any) {
-      console.error('Failed to generate parts:', error)
-      showToast(error.message || 'Failed to generate parts list', 'error')
-    } finally {
-      setGeneratingParts(false)
-      setLoadingStep('')
-    }
-  }, [selectedAiServices, workOrder, showToast])
-
-  /**
-   * Confirm parts selection and add services + parts to RO
-   */
-  const handleConfirmPartsSelection = useCallback(async (servicesWithSelectedParts: any[]) => {
-    if (!workOrder?.id) return
-
-    console.log('=== ADDING SERVICES WITH PARTS ===')
-    setPartsDialogOpen(false)
-
-    // Save each service with its selected parts
-    for (let i = 0; i < servicesWithSelectedParts.length; i++) {
-      const serviceData = servicesWithSelectedParts[i]
-      const aiService = selectedAiServices[i]
-
-      try {
-        console.log('Creating service:', serviceData.serviceName)
-
-        // Step 1: Create service record
-        const serviceResponse = await fetch(`/api/work-orders/${workOrder.id}/services`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: serviceData.serviceName,
-            description: aiService.service_description || '',
-            display_order: services.length + i,
-            ai_generated: true
-          })
-        })
-
-        if (!serviceResponse.ok) {
-          console.error('✗ Failed to create service:', serviceData.serviceName)
-          continue
-        }
-
-        const serviceResult = await serviceResponse.json()
-        const serviceId = serviceResult.service?.id
-        console.log('✓ Service created - ID:', serviceId)
-
-        // Step 2: Add labor item
-        await fetch(`/api/work-orders/${workOrder.id}/items`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            item_type: 'labor',
-            description: serviceData.serviceName,
-            notes: aiService.service_description,
-            labor_hours: aiService.estimated_labor_hours || 1,
-            labor_rate: 160,
-            is_taxable: false,
-            service_id: serviceId
-          })
-        })
-        console.log('✓ Labor item added')
-
-        // Step 3: Add part items
-        for (const part of serviceData.parts) {
-          if (!part.selectedOption) {
-            console.log('⚠️ No pricing for:', part.description, '- skipping')
-            continue
-          }
-
-          await fetch(`/api/work-orders/${workOrder.id}/items`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              item_type: 'part',
-              description: part.selectedOption.description || part.description,
-              quantity: part.quantity,
-              unit_price: part.selectedOption.retailPrice,
-              is_taxable: true,
-              service_id: serviceId
-            })
-          })
-          console.log('✓ Part added:', part.description)
-        }
-      } catch (error) {
-        console.error('Error adding service:', error)
-      }
-    }
-
-    // Reload services from database
-    console.log('Reloading services...')
-    try {
-      const servicesResponse = await fetch(`/api/work-orders/${workOrder.id}/services`)
-      if (servicesResponse.ok) {
-        const servicesData = await servicesResponse.json()
-        const loadedServices = convertDbServicesToServiceData(servicesData.services || [])
-        setServices(loadedServices)
-        showToast('Services and parts added to RO', 'success')
-      }
-    } catch (error) {
-      console.error('Error reloading services:', error)
-    }
-
-    console.log('=== SAVE COMPLETE ===')
-  }, [workOrder, selectedAiServices, services, showToast])
 
   const handleDragEnd = useCallback(() => {
     if (dragIndex !== null && dragOverIndex !== null && dragIndex !== dragOverIndex) {
@@ -1351,7 +1014,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
                 size="sm" 
                 variant="default" 
                 className="gap-2"
-                onClick={handleAIRecommend}
+                onClick={aiRecommendations.fetchRecommendations}
               >
                 <Sparkles size={16} />
                 AI Recommend Services
@@ -1594,7 +1257,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
       )}
 
       {/* AI Recommendations Dialog */}
-      <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
+      <Dialog open={aiRecommendations.dialogOpen} onOpenChange={aiRecommendations.setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>AI Maintenance Recommendations</DialogTitle>
@@ -1603,22 +1266,22 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
             </p>
           </DialogHeader>
 
-          {aiLoading && (
+          {aiRecommendations.aiLoading && (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="ml-3">Analyzing maintenance schedule...</span>
             </div>
           )}
 
-          {!aiLoading && aiSource && (
+          {!aiRecommendations.aiLoading && aiRecommendations.aiSource && (
             <div className="mb-4">
-              {aiSource === "database" && (
+              {aiRecommendations.aiSource === "database" && (
                 <div className="flex items-center gap-2 text-green-600 text-sm">
                   <CheckCircle className="h-4 w-4" />
                   <span>Found in database (instant)</span>
                 </div>
               )}
-              {aiSource === "vehicle_databases_api" && (
+              {aiRecommendations.aiSource === "vehicle_databases_api" && (
                 <div className="flex items-center gap-2 text-blue-600 text-sm">
                   <FileText className="h-4 w-4" />
                   <span>Extracted from owner's manual - Saved to database</span>
@@ -1627,18 +1290,18 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
             </div>
           )}
 
-          {!aiLoading && aiServices.length > 0 && (
+          {!aiRecommendations.aiLoading && aiRecommendations.aiServices.length > 0 && (
             <>
               <div className="space-y-2">
-                {aiServices.map((service, i) => (
+                {aiRecommendations.aiServices.map((service: any, i: number) => (
                   <div
                     key={i}
                     className="border rounded p-3 flex items-start gap-3 hover:bg-accent cursor-pointer"
-                    onClick={() => toggleAiService(service)}
+                    onClick={() => aiRecommendations.toggleService(service)}
                   >
                     <Checkbox
-                      checked={selectedAiServices.includes(service)}
-                      onCheckedChange={() => toggleAiService(service)}
+                      checked={aiRecommendations.selectedAiServices.includes(service)}
+                      onCheckedChange={() => aiRecommendations.toggleService(service)}
                     />
                     <div className="flex-1">
                       <div className="font-medium">{service.service_name}</div>
@@ -1661,24 +1324,24 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
               </div>
 
               <div className="flex gap-2 mt-4">
-                <Button onClick={addSelectedAiServices} className="flex-1" disabled={generatingParts}>
-                  {generatingParts ? (
+                <Button onClick={() => { aiRecommendations.setDialogOpen(false); partsGeneration.generateParts(); }} className="flex-1" disabled={partsGeneration.generating}>
+                  {partsGeneration.generating ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Generating parts list...
                     </>
                   ) : (
-                    <>Add {selectedAiServices.length} Service{selectedAiServices.length !== 1 ? 's' : ''} to RO</>
+                    <>Add {aiRecommendations.selectedAiServices.length} Service{aiRecommendations.selectedAiServices.length !== 1 ? 's' : ''} to RO</>
                   )}
                 </Button>
-                <Button variant="outline" onClick={() => setAiDialogOpen(false)} disabled={generatingParts}>
+                <Button variant="outline" onClick={() => aiRecommendations.setDialogOpen(false)} disabled={partsGeneration.generating}>
                   Cancel
                 </Button>
               </div>
             </>
           )}
 
-          {!aiLoading && aiServices.length === 0 && aiSource === 'not_found' && (
+          {!aiRecommendations.aiLoading && aiRecommendations.aiServices.length === 0 && aiRecommendations.aiSource === 'not_found' && (
             <div className="text-center py-8">
               <p className="text-muted-foreground mb-2">
                 No maintenance data available for this vehicle.
@@ -1689,7 +1352,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
             </div>
           )}
           
-          {!aiLoading && aiServices.length === 0 && aiSource && aiSource !== 'not_found' && (
+          {!aiRecommendations.aiLoading && aiRecommendations.aiServices.length === 0 && aiRecommendations.aiSource && aiRecommendations.aiSource !== 'not_found' && (
             <div className="text-center text-muted-foreground py-8">
               No maintenance items found for this vehicle at this mileage.
             </div>
@@ -1699,20 +1362,20 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
 
       {/* Parts Selection Modal */}
       <PartsSelectionModal
-        isOpen={partsDialogOpen}
-        onClose={() => setPartsDialogOpen(false)}
-        servicesWithParts={servicesWithParts}
-        onConfirm={handleConfirmPartsSelection}
+        isOpen={partsGeneration.dialogOpen}
+        onClose={() => partsGeneration.setDialogOpen(false)}
+        servicesWithParts={partsGeneration.servicesWithParts}
+        onConfirm={partsGeneration.confirmPartsSelection}
       />
 
       {/* Parts Generation Loading Dialog */}
       <PartsGenerationLoader 
-        isOpen={generatingParts}
-        currentStep={loadingStep}
+        isOpen={partsGeneration.generating}
+        currentStep={partsGeneration.loadingStep}
       />
 
       {/* Variant Selector Dialog */}
-      <Dialog open={variantSelectorOpen} onOpenChange={setVariantSelectorOpen}>
+      <Dialog open={aiRecommendations.variantDialogOpen} onOpenChange={aiRecommendations.setVariantDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Select Engine Variant</DialogTitle>
@@ -1722,24 +1385,24 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           </DialogHeader>
 
           <div className="space-y-3 mt-4">
-            {availableVariants.map((variant, index) => (
+            {aiRecommendations.availableVariants.map((variant: any, index: number) => (
               <div
                 key={index}
                 className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                  selectedVariant === variant
+                  aiRecommendations.selectedVariant === variant
                     ? 'border-primary bg-primary/5'
                     : 'border-border hover:border-primary/50 hover:bg-accent/50'
                 }`}
-                onClick={() => setSelectedVariant(variant)}
+                onClick={() => aiRecommendations.setSelectedVariant(variant)}
               >
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 mt-1">
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                      selectedVariant === variant
+                      aiRecommendations.selectedVariant === variant
                         ? 'border-primary bg-primary'
                         : 'border-muted-foreground'
                     }`}>
-                      {selectedVariant === variant && (
+                      {aiRecommendations.selectedVariant === variant && (
                         <div className="w-2.5 h-2.5 rounded-full bg-white" />
                       )}
                     </div>
@@ -1767,39 +1430,20 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           <div className="flex gap-2 mt-6">
             <Button
               onClick={async () => {
-                if (!selectedVariant) {
+                if (!aiRecommendations.selectedVariant) {
                   showToast('Please select an engine variant', 'error')
                   return
                 }
-                
-                console.log('[DEBUG] Variant selected:', selectedVariant)
-                
-                // Load services from selected variant
-                setAiServices(selectedVariant.services || [])
-                setSelectedAiServices(selectedVariant.services || [])
-                
-                // Save selected variant's recommendations to database
-                await saveRecommendationsToDatabase(selectedVariant.services || [])
-                
-                // Close variant selector and open main AI dialog
-                setVariantSelectorOpen(false)
-                setAiDialogOpen(true)
-                
-                // Reset selection for next time
-                setSelectedVariant(null)
+                await aiRecommendations.confirmVariantSelection()
               }}
               className="flex-1"
-              disabled={!selectedVariant}
+              disabled={!aiRecommendations.selectedVariant}
             >
               Continue with Selected Variant
             </Button>
             <Button
               variant="outline"
-              onClick={() => {
-                setVariantSelectorOpen(false)
-                setSelectedVariant(null)
-                setAvailableVariants([])
-              }}
+              onClick={aiRecommendations.cancelVariantSelection}
             >
               Cancel
             </Button>
