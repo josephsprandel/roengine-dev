@@ -27,9 +27,9 @@ export async function GET(
     const result = await query(
       `SELECT 
         p.id, p.work_order_id, p.amount, p.payment_method,
-        p.card_surcharge, p.card_surcharge_rate, p.total_charged,
+        p.card_surcharge, p.card_surcharge_rate,
         p.paid_at, p.recorded_by, p.notes, p.created_at,
-        u.name as recorded_by_name
+        COALESCE(u.name, 'Unknown User') as recorded_by_name
        FROM payments p
        LEFT JOIN users u ON p.recorded_by = u.id
        WHERE p.work_order_id = $1
@@ -37,16 +37,22 @@ export async function GET(
       [workOrderId]
     )
 
+    // Calculate total_charged for each payment (amount + card_surcharge)
+    const paymentsWithTotal = result.rows.map(p => ({
+      ...p,
+      total_charged: parseFloat(p.amount) + parseFloat(p.card_surcharge || 0)
+    }))
+
     // Calculate totals
-    const totalPaid = result.rows.reduce((sum, p) => sum + parseFloat(p.amount), 0)
-    const totalSurcharges = result.rows.reduce((sum, p) => sum + parseFloat(p.card_surcharge || 0), 0)
+    const totalPaid = paymentsWithTotal.reduce((sum, p) => sum + parseFloat(p.amount), 0)
+    const totalSurcharges = paymentsWithTotal.reduce((sum, p) => sum + parseFloat(p.card_surcharge || 0), 0)
 
     return NextResponse.json({
-      payments: result.rows,
+      payments: paymentsWithTotal,
       summary: {
         total_paid: totalPaid,
         total_surcharges: totalSurcharges,
-        payment_count: result.rows.length,
+        payment_count: paymentsWithTotal.length,
       },
     })
   } catch (error: any) {
