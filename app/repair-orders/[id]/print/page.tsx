@@ -25,33 +25,47 @@ async function getWorkOrderData(id: string) {
 
     const workOrder = woResult.rows[0]
 
-    // Fetch line items (parts, labor, etc.) - group as one "service"
-    const itemsResult = await query(
+    // Fetch services with their items
+    const servicesResult = await query(
       `SELECT 
-        id,
-        description,
-        item_type,
-        quantity,
-        unit_price,
-        labor_hours,
-        labor_rate,
-        line_total
-      FROM work_order_items
-      WHERE work_order_id = $1
-      ORDER BY id`,
+        s.id,
+        s.title,
+        s.description,
+        s.category,
+        s.status
+      FROM work_order_services s
+      WHERE s.work_order_id = $1
+      ORDER BY s.id`,
       [id]
     )
-    
-    // Group items into a single service for display
-    const servicesResult = {
-      rows: itemsResult.rows.length > 0 ? [{
-        id: 1,
-        title: 'Services Performed',
-        description: '',
-        category: 'Service',
-        status: 'COMPLETED',
-        items: itemsResult.rows
-      }] : []
+
+    // Fetch items for each service
+    for (const service of servicesResult.rows) {
+      const itemsResult = await query(
+        `SELECT 
+          id,
+          description,
+          item_type,
+          quantity,
+          unit_price,
+          labor_hours,
+          labor_rate,
+          line_total
+        FROM work_order_items
+        WHERE work_order_id = $1 AND service_id = $2
+        ORDER BY 
+          CASE item_type
+            WHEN 'labor' THEN 1
+            WHEN 'part' THEN 2
+            WHEN 'sublet' THEN 3
+            WHEN 'hazmat' THEN 4
+            WHEN 'fee' THEN 5
+            ELSE 6
+          END,
+          id`,
+        [id, service.id]
+      )
+      service.items = itemsResult.rows
     }
 
     // Fetch payments
@@ -233,51 +247,115 @@ export default async function PrintInvoicePage({
               const items = service.items || []
               if (items.length === 0) return null
 
-              return (
-                <div key={service.id} className="service-group">
-                  <h4 className="service-title">{service.title}</h4>
-                  {service.description && (
-                    <p className="service-description">{service.description}</p>
-                  )}
+              // Calculate service total
+              const serviceTotal = items.reduce((sum: number, item: any) => {
+                return sum + parseFloat(item.line_total || 0)
+              }, 0)
 
-                  <table className="line-items-table">
-                    <thead>
-                      <tr>
-                        <th>Description</th>
-                        <th className="text-center">Qty</th>
-                        <th className="text-right">Unit Price</th>
-                        <th className="text-right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item: any) => (
-                        <tr key={item.id}>
-                          <td>
-                            {item.description}
-                            {item.item_type === "labor" && (
-                              <span className="item-type-label"> (Labor)</span>
-                            )}
-                          </td>
-                          <td className="text-center">
-                            {item.item_type === "labor"
-                              ? `${parseFloat(item.labor_hours || 0)} hrs`
-                              : parseFloat(item.quantity || 1)}
-                          </td>
-                          <td className="text-right">
-                            $
-                            {parseFloat(
-                              item.item_type === "labor"
-                                ? item.labor_rate || 0
-                                : item.unit_price || 0
-                            ).toFixed(2)}
-                          </td>
-                          <td className="text-right">
-                            ${parseFloat(item.line_total || 0).toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              // Group items by type
+              const laborItems = items.filter((i: any) => i.item_type === "labor")
+              const partItems = items.filter((i: any) => i.item_type === "part")
+              const subletItems = items.filter((i: any) => i.item_type === "sublet")
+              const hazmatItems = items.filter((i: any) => i.item_type === "hazmat")
+              const feeItems = items.filter((i: any) => i.item_type === "fee")
+
+              return (
+                <div key={service.id} className="service-card">
+                  <div className="service-card-header">
+                    <h4 className="service-title">{service.title}</h4>
+                    {service.description && (
+                      <p className="service-description">{service.description}</p>
+                    )}
+                  </div>
+
+                  <div className="service-card-body">
+                    {/* Labor Items */}
+                    {laborItems.length > 0 && (
+                      <div className="item-group">
+                        <div className="item-group-header">Labor:</div>
+                        {laborItems.map((item: any) => (
+                          <div key={item.id} className="item-row">
+                            <div className="item-description">
+                              {item.description} ({parseFloat(item.labor_hours || 0)} hrs @ $
+                              {parseFloat(item.labor_rate || 0).toFixed(2)}/hr)
+                            </div>
+                            <div className="item-amount">
+                              ${parseFloat(item.line_total || 0).toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Parts Items */}
+                    {partItems.length > 0 && (
+                      <div className="item-group">
+                        <div className="item-group-header">Parts:</div>
+                        {partItems.map((item: any) => (
+                          <div key={item.id} className="item-row">
+                            <div className="item-description">
+                              {item.description} (Qty: {parseFloat(item.quantity || 1)})
+                            </div>
+                            <div className="item-amount">
+                              ${parseFloat(item.line_total || 0).toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Sublet Items */}
+                    {subletItems.length > 0 && (
+                      <div className="item-group">
+                        <div className="item-group-header">Sublets:</div>
+                        {subletItems.map((item: any) => (
+                          <div key={item.id} className="item-row">
+                            <div className="item-description">{item.description}</div>
+                            <div className="item-amount">
+                              ${parseFloat(item.line_total || 0).toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Hazmat Items */}
+                    {hazmatItems.length > 0 && (
+                      <div className="item-group">
+                        <div className="item-group-header">Hazmat/Disposal:</div>
+                        {hazmatItems.map((item: any) => (
+                          <div key={item.id} className="item-row">
+                            <div className="item-description">{item.description}</div>
+                            <div className="item-amount">
+                              ${parseFloat(item.line_total || 0).toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Fee Items */}
+                    {feeItems.length > 0 && (
+                      <div className="item-group">
+                        <div className="item-group-header">Fees:</div>
+                        {feeItems.map((item: any) => (
+                          <div key={item.id} className="item-row">
+                            <div className="item-description">{item.description}</div>
+                            <div className="item-amount">
+                              ${parseFloat(item.line_total || 0).toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="service-card-footer">
+                    <div className="service-total">
+                      <span>Service Total:</span>
+                      <span className="service-total-amount">${serviceTotal.toFixed(2)}</span>
+                    </div>
+                  </div>
                 </div>
               )
             })}
