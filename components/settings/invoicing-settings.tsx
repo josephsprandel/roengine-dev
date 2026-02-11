@@ -204,8 +204,7 @@ export function InvoicingSettings() {
                 Charge Tax on Labor
               </Label>
               <p className="text-xs text-muted-foreground mt-1">
-                When enabled, sales tax will be applied to labor charges. 
-                <span className="font-medium text-foreground"> Note:</span> Most states don't tax labor, but Arkansas does.
+                When enabled, sales tax will be applied to labor charges
               </p>
             </div>
             <Switch
