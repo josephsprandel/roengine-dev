@@ -25,48 +25,50 @@ async function getWorkOrderData(id: string) {
 
     const workOrder = woResult.rows[0]
 
-    // Fetch services with their items
-    const servicesResult = await query(
+    // Fetch all items grouped by service_id
+    const itemsResult = await query(
       `SELECT 
-        s.id,
-        s.title,
-        s.description,
-        s.category,
-        s.status
-      FROM work_order_services s
-      WHERE s.work_order_id = $1
-      ORDER BY s.id`,
+        id,
+        service_id,
+        description,
+        item_type,
+        quantity,
+        unit_price,
+        labor_hours,
+        labor_rate,
+        line_total
+      FROM work_order_items
+      WHERE work_order_id = $1
+      ORDER BY 
+        service_id,
+        CASE item_type
+          WHEN 'labor' THEN 1
+          WHEN 'part' THEN 2
+          WHEN 'sublet' THEN 3
+          WHEN 'hazmat' THEN 4
+          WHEN 'fee' THEN 5
+          ELSE 6
+        END,
+        id`,
       [id]
     )
 
-    // Fetch items for each service
-    for (const service of servicesResult.rows) {
-      const itemsResult = await query(
-        `SELECT 
-          id,
-          description,
-          item_type,
-          quantity,
-          unit_price,
-          labor_hours,
-          labor_rate,
-          line_total
-        FROM work_order_items
-        WHERE work_order_id = $1 AND service_id = $2
-        ORDER BY 
-          CASE item_type
-            WHEN 'labor' THEN 1
-            WHEN 'part' THEN 2
-            WHEN 'sublet' THEN 3
-            WHEN 'hazmat' THEN 4
-            WHEN 'fee' THEN 5
-            ELSE 6
-          END,
-          id`,
-        [id, service.id]
-      )
-      service.items = itemsResult.rows
+    // Group items by service_id
+    const serviceMap = new Map()
+    for (const item of itemsResult.rows) {
+      const serviceId = item.service_id || 1
+      if (!serviceMap.has(serviceId)) {
+        serviceMap.set(serviceId, {
+          id: serviceId,
+          title: `Service ${serviceId}`,
+          description: '',
+          items: []
+        })
+      }
+      serviceMap.get(serviceId).items.push(item)
     }
+
+    const servicesResult = { rows: Array.from(serviceMap.values()) }
 
     // Fetch payments
     const paymentsResult = await query(
