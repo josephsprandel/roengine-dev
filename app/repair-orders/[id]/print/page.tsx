@@ -79,8 +79,6 @@ async function getWorkOrderData(id: string) {
       items: itemsByService.get(svc.id) || []
     }))
 
-    const finalServicesResult = { rows: services }
-
     // Fetch payments
     const paymentsResult = await query(
       `SELECT 
@@ -96,7 +94,7 @@ async function getWorkOrderData(id: string) {
 
     return {
       workOrder,
-      services: servicesResult.rows,
+      services: services,
       payments: paymentsResult.rows,
       shop: shopResult.rows[0] || {},
     }
