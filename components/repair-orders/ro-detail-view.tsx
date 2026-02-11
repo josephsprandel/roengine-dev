@@ -45,6 +45,7 @@ import { VehicleInfoCard } from "./ro-detail/VehicleInfoCard"
 import { StatusWorkflow, WorkflowStage } from "./ro-detail/StatusWorkflow"
 import { PricingSummary } from "./ro-detail/PricingSummary"
 import { ActionButtons } from "./ro-detail/ActionButtons"
+import { RecommendationsSection } from "./ro-detail/RecommendationsSection"
 import { InvoiceActionsPanel } from "@/components/invoices/InvoiceActionsPanel"
 import { PaymentHistory } from "@/components/invoices/PaymentHistory"
 import { InvoiceCalculations } from "@/components/invoices/InvoiceCalculations"
@@ -625,6 +626,14 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
       </div>
 
       <StatusWorkflow stages={WORKFLOW_STAGES as WorkflowStage[]} />
+
+      {/* AI Maintenance Recommendations */}
+      <RecommendationsSection
+        vehicleId={workOrder.vehicle_id}
+        workOrderId={workOrder.id}
+        currentMileage={workOrder.mileage}
+        onRecommendationApproved={reloadServices}
+      />
 
       {/* Main Content - Full Width */}
       <div className="space-y-4">
