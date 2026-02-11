@@ -25,29 +25,34 @@ async function getWorkOrderData(id: string) {
 
     const workOrder = woResult.rows[0]
 
-    // Fetch services with items
-    const servicesResult = await query(
+    // Fetch line items (parts, labor, etc.) - group as one "service"
+    const itemsResult = await query(
       `SELECT 
-        s.id, s.title, s.description, s.category, s.status,
-        json_agg(
-          json_build_object(
-            'id', i.id,
-            'description', i.description,
-            'item_type', i.item_type,
-            'quantity', i.quantity,
-            'unit_price', i.unit_price,
-            'labor_hours', i.labor_hours,
-            'labor_rate', i.labor_rate,
-            'line_total', i.line_total
-          ) ORDER BY i.id
-        ) FILTER (WHERE i.id IS NOT NULL) as items
-      FROM work_order_services s
-      LEFT JOIN work_order_items i ON s.id = i.service_id
-      WHERE s.work_order_id = $1
-      GROUP BY s.id
-      ORDER BY s.id`,
+        id,
+        description,
+        item_type,
+        quantity,
+        unit_price,
+        labor_hours,
+        labor_rate,
+        line_total
+      FROM work_order_items
+      WHERE work_order_id = $1
+      ORDER BY id`,
       [id]
     )
+    
+    // Group items into a single service for display
+    const servicesResult = {
+      rows: itemsResult.rows.length > 0 ? [{
+        id: 1,
+        title: 'Services Performed',
+        description: '',
+        category: 'Service',
+        status: 'COMPLETED',
+        items: itemsResult.rows
+      }] : []
+    }
 
     // Fetch payments
     const paymentsResult = await query(
