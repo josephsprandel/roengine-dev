@@ -725,9 +725,26 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           feesSubtotal={totals.fees}
           shopSupplies={0}
           subtotalBeforeTax={totals.total}
-          tax={0}
+          tax={(() => {
+            const taxRate = invoiceSettings?.sales_tax_rate || 0.1225
+            const partsTaxable = invoiceSettings?.parts_taxable ?? true
+            const laborTaxable = invoiceSettings?.labor_taxable ?? true
+            const taxableAmount = 
+              (partsTaxable ? totals.parts : 0) +
+              (laborTaxable ? totals.labor : 0)
+            return taxableAmount * taxRate
+          })()}
           taxRate={invoiceSettings?.sales_tax_rate || 0.1225}
-          grandTotal={totals.total}
+          grandTotal={(() => {
+            const taxRate = invoiceSettings?.sales_tax_rate || 0.1225
+            const partsTaxable = invoiceSettings?.parts_taxable ?? true
+            const laborTaxable = invoiceSettings?.labor_taxable ?? true
+            const taxableAmount = 
+              (partsTaxable ? totals.parts : 0) +
+              (laborTaxable ? totals.labor : 0)
+            const tax = taxableAmount * taxRate
+            return totals.total + tax
+          })()}
           ccSurchargeEnabled={invoiceSettings?.cc_surcharge_enabled || false}
           ccSurchargeRate={invoiceSettings?.cc_surcharge_rate || 0.035}
           taxExempt={false}

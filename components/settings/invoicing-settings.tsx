@@ -176,7 +176,7 @@ export function InvoicingSettings() {
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Tax rate applied to taxable items on invoices. Example: 12.25 for Washington County, AR
+              Tax rate applied to taxable items on invoices
             </p>
           </div>
 
