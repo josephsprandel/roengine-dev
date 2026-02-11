@@ -84,6 +84,9 @@ export function RecommendationCard({
 
   const borderClass = urgency ? borderColors[urgency] : 'border-l-border'
 
+  // Parse numeric values from database (PostgreSQL returns as strings)
+  const estimatedCost = parseFloat(recommendation.estimated_cost as any) || 0
+
   // Calculate totals
   const laborTotal = recommendation.labor_items.reduce((sum, item) => sum + item.total, 0)
   const partsCount = recommendation.parts_items.length
@@ -167,7 +170,7 @@ export function RecommendationCard({
       <div className="flex items-center justify-between mb-3 pb-3 border-b border-border">
         <span className="text-sm font-medium text-muted-foreground">Estimated Cost:</span>
         <span className="text-lg font-semibold text-foreground">
-          ${recommendation.estimated_cost.toFixed(2)}
+          ${estimatedCost.toFixed(2)}
         </span>
       </div>
 

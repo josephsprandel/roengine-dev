@@ -196,7 +196,7 @@ export function ApproveRecommendationDialog({
               {recommendation.service_title}
             </p>
             <p className="text-xs text-muted-foreground">
-              Estimated Cost: ${recommendation.estimated_cost.toFixed(2)}
+              Estimated Cost: ${(parseFloat(recommendation.estimated_cost as any) || 0).toFixed(2)}
             </p>
           </div>
 
