@@ -469,7 +469,14 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         const paymentsResponse = await fetch(`/api/work-orders/${roId}/payments`)
         if (paymentsResponse.ok) {
           const paymentsData = await paymentsResponse.json()
-          setPayments(paymentsData.payments || [])
+          // Parse payment amounts to numbers
+          const parsedPayments = (paymentsData.payments || []).map((p: any) => ({
+            ...p,
+            amount: parseFloat(p.amount),
+            card_surcharge: parseFloat(p.card_surcharge || 0),
+            total_charged: parseFloat(p.total_charged || p.amount),
+          }))
+          setPayments(parsedPayments)
         }
         
         // Fetch invoice settings
@@ -791,7 +798,14 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
               const paymentsResponse = await fetch(`/api/work-orders/${roId}/payments`)
               if (paymentsResponse.ok) {
                 const paymentsData = await paymentsResponse.json()
-                setPayments(paymentsData.payments || [])
+                // Parse payment amounts to numbers
+                const parsedPayments = (paymentsData.payments || []).map((p: any) => ({
+                  ...p,
+                  amount: parseFloat(p.amount),
+                  card_surcharge: parseFloat(p.card_surcharge || 0),
+                  total_charged: parseFloat(p.total_charged || p.amount),
+                }))
+                setPayments(parsedPayments)
               }
             }
             reloadData()
