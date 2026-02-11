@@ -74,6 +74,7 @@ export function VehicleSelectionStep({
     trim: "",
     vin: "",
     licensePlate: "",
+    licensePlateState: "",
     color: "",
     mileage: "",
     isNew: true,
@@ -206,6 +207,7 @@ export function VehicleSelectionStep({
           trim: result.data.trim || "",
           vin: result.data.vin || "",
           licensePlate: result.data.licensePlate || "",
+          licensePlateState: result.data.licensePlateState || "",
           color: result.data.color || "",
           mileage: result.data.mileage || "",
         }
@@ -296,8 +298,14 @@ export function VehicleSelectionStep({
   }
 
   const handleConfirmAIData = () => {
+    console.log('[Vehicle Step] Confirming AI data...')
+    console.log('[Vehicle Step] manualData:', JSON.stringify(manualData, null, 2))
+    
     if (manualData.year && manualData.make && manualData.model && manualData.vin) {
+      console.log('[Vehicle Step] Calling onSelectVehicle with manualData')
       onSelectVehicle(manualData)
+    } else {
+      console.warn('[Vehicle Step] Missing required fields, not calling onSelectVehicle')
     }
   }
 
@@ -566,6 +574,7 @@ export function VehicleSelectionStep({
                   { label: "Trim", field: "trim" as const, required: false },
                   { label: "VIN", field: "vin" as const, required: true, span: 2 },
                   { label: "License Plate", field: "licensePlate" as const, required: false },
+                  { label: "State", field: "licensePlateState" as const, required: false },
                   { label: "Color", field: "color" as const, required: false },
                   { label: "Mileage", field: "mileage" as const, required: false },
                   { label: "Build Date", field: "build_date" as any, required: false },
@@ -628,18 +637,21 @@ export function VehicleSelectionStep({
               { label: "Make", field: "make" as const, placeholder: "Ford", required: true },
               { label: "Model", field: "model" as const, placeholder: "F-150", required: true },
               { label: "Trim", field: "trim" as const, placeholder: "Lariat", required: false },
-              { label: "VIN", field: "vin" as const, placeholder: "1FTFW1E85NFA12345", required: true },
+              { label: "VIN", field: "vin" as const, placeholder: "1FTFW1E85NFA12345", required: true, span: 2 },
               { label: "License Plate", field: "licensePlate" as const, placeholder: "ABC-1234", required: false },
+              { label: "State", field: "licensePlateState" as const, placeholder: "TX", required: false },
               { label: "Color", field: "color" as const, placeholder: "Silver", required: false },
-              { label: "Mileage", field: "mileage" as const, placeholder: "45,000", required: false },
-            ].map(({ label, field, placeholder, required }) => (
-              <div key={field} className={field === "vin" ? "col-span-2" : ""}>
+              { label: "Mileage", field: "mileage" as const, placeholder: "45000", required: false },
+              { label: "Build Date", field: "build_date" as any, placeholder: "05/16", required: false },
+              { label: "Tire Size", field: "tire_size" as any, placeholder: "235/50R18 97V", required: false, span: 2 },
+            ].map(({ label, field, placeholder, required, span }) => (
+              <div key={field} className={span === 2 ? "col-span-2" : ""}>
                 <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
                   {label} {required && <span className="text-destructive">*</span>}
                 </label>
                 <Input
-                  value={manualData[field] || ""}
-                  onChange={(e) => handleManualChange(field, e.target.value)}
+                  value={(manualData as any)[field] || ""}
+                  onChange={(e) => handleManualChange(field as any, e.target.value)}
                   placeholder={placeholder}
                   className="bg-card border-border"
                 />

@@ -279,6 +279,7 @@ export async function POST(request: NextRequest) {
       model: null,
       trim: null,
       licensePlate: null,
+      licensePlateState: null,
       color: null,
       mileage: null,
       build_date: null,
@@ -324,6 +325,7 @@ export async function POST(request: NextRequest) {
         if (plateData && plateData.number) {
           console.log('License plate extracted:', plateData)
           result.licensePlate = plateData.number
+          if (plateData.state) result.licensePlateState = plateData.state
           break
         }
       }

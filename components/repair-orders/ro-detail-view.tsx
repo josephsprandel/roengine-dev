@@ -39,6 +39,12 @@ import { PartsSelectionModal } from "./parts-selection-modal"
 import { VehicleEditDialog } from "@/components/customers/vehicle-edit-dialog"
 import { useAIRecommendations } from "./hooks/useAIRecommendations"
 import { usePartsGeneration } from "./hooks/usePartsGeneration"
+import { useServiceManagement } from "./hooks/useServiceManagement"
+import { CustomerInfoCard } from "./ro-detail/CustomerInfoCard"
+import { VehicleInfoCard } from "./ro-detail/VehicleInfoCard"
+import { StatusWorkflow, WorkflowStage } from "./ro-detail/StatusWorkflow"
+import { PricingSummary } from "./ro-detail/PricingSummary"
+import { ActionButtons } from "./ro-detail/ActionButtons"
 
 // Workflow stages - MOVED OUTSIDE to prevent re-creation on every render
 const WORKFLOW_STAGES = [
@@ -199,11 +205,6 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   const [isEditing, setIsEditing] = useState(false)
   const [statusSaving, setStatusSaving] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
-  const [services, setServices] = useState<ServiceData[]>([])
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
-  const [expandedServices, setExpandedServices] = useState<Set<string>>(new Set())
-  const [dragEnabledIndex, setDragEnabledIndex] = useState<number | null>(null)
   
   // Customer and Vehicle edit states
   const [customerEditOpen, setCustomerEditOpen] = useState(false)
@@ -221,6 +222,36 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     zip: "",
   })
   
+  const handleSave = useCallback(() => {
+    setIsEditing(false)
+  }, [])
+
+  const showToast = useCallback((message: string, type: "success" | "error") => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3500)
+  }, [])
+
+  // Service Management hook - handles services CRUD, drag & drop, expanded state
+  const {
+    services,
+    dragIndex,
+    dragOverIndex,
+    dragEnabledIndex,
+    expandedServices,
+    updateService,
+    removeService,
+    addService,
+    reloadServices,
+    handleDragStart,
+    handleDragOver,
+    handleDragEnd,
+    createDragHandleProps,
+    toggleServiceExpanded,
+  } = useServiceManagement({
+    workOrderId: workOrder?.id,
+    convertDbServicesToServiceData,
+  })
+
   // ALL useMemo and useCallback MUST ALSO BE AT THE TOP
   const totals = useMemo(() => {
     const initial = { parts: 0, labor: 0, sublets: 0, hazmat: 0, fees: 0, total: 0 }
@@ -241,28 +272,8 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     }, initial)
   }, [services])
 
-  const handleSave = useCallback(() => {
-    setIsEditing(false)
-  }, [])
-
-  const showToast = useCallback((message: string, type: "success" | "error") => {
-    setToast({ message, type })
-    setTimeout(() => setToast(null), 3500)
-  }, [])
-
   // AI Recommendations hook
   const aiRecommendations = useAIRecommendations(workOrder)
-
-  // Reload services from database (used by parts generation hook)
-  const reloadServices = useCallback(async () => {
-    if (!workOrder?.id) return
-    const servicesResponse = await fetch(`/api/work-orders/${workOrder.id}/services`)
-    if (servicesResponse.ok) {
-      const servicesData = await servicesResponse.json()
-      const loadedServices = convertDbServicesToServiceData(servicesData.services || [])
-      setServices(loadedServices)
-    }
-  }, [workOrder])
 
   // Parts Generation hook
   const partsGeneration = usePartsGeneration(
@@ -334,207 +345,6 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     if (!confirmed) return
     await updateStatus("cancelled", { successMessage: "Repair order cancelled" })
   }, [workOrder, updateStatus])
-
-  const updateService = useCallback(async (updated: ServiceData) => {
-    if (!workOrder?.id) {
-      setServices(prev => prev.map((s) => (s.id === updated.id ? updated : s)))
-      return
-    }
-
-    const previous = services.find((s) => s.id === updated.id)
-    setServices(prev => prev.map((s) => (s.id === updated.id ? updated : s)))
-
-    if (!previous) return
-
-    // Extract database service_id from the service id (e.g., "svc-123" -> 123)
-    const dbServiceId = parseInt(updated.id.replace('svc-', ''), 10)
-
-    // Update the service record itself (title, description)
-    await fetch(`/api/work-orders/${workOrder.id}/services`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        service_id: dbServiceId,
-        title: updated.name,
-        description: updated.description,
-      }),
-    })
-
-    const categories: LineItemCategory[] = ["parts", "labor", "sublets", "hazmat", "fees"]
-    const categoryTypeMap: Record<LineItemCategory, string> = {
-      parts: "part",
-      labor: "labor",
-      sublets: "sublet",
-      hazmat: "hazmat",
-      fees: "fee",
-    }
-    const categoryPrefixMap: Record<LineItemCategory, string> = {
-      parts: "p",
-      labor: "l",
-      sublets: "s",
-      hazmat: "h",
-      fees: "f",
-    }
-
-    const parseDbId = (id: string) => {
-      const match = id.match(/^[a-z](\d+)$/)
-      return match ? parseInt(match[1], 10) : null
-    }
-
-    const updatedWithIds: ServiceData = { ...updated }
-
-    for (const category of categories) {
-      const prevItems = previous[category] || []
-      const nextItems = updated[category] || []
-      const nextIds = new Set(nextItems.map((item) => item.id))
-
-      for (const prevItem of prevItems) {
-        if (!nextIds.has(prevItem.id)) {
-          const dbId = parseDbId(prevItem.id)
-          if (dbId) {
-            await fetch(`/api/work-orders/${workOrder.id}/items?item_id=${dbId}`, {
-              method: "DELETE",
-            })
-          }
-        }
-      }
-
-      const syncedItems: LineItem[] = []
-      for (const item of nextItems) {
-        const dbId = parseDbId(item.id)
-        const payload: Record<string, any> = {
-          item_type: categoryTypeMap[category],
-          description: item.description,
-          notes: updated.description || null,
-          quantity: item.quantity || 1,
-          unit_price: item.unitPrice || 0,
-          labor_hours: category === "labor" ? item.quantity || 0 : null,
-          labor_rate: category === "labor" ? item.unitPrice || 0 : null,
-          is_taxable: true, // TODO: Move to shop settings
-          display_order: 0,
-          service_id: dbServiceId,
-        }
-
-        if (dbId) {
-          await fetch(`/api/work-orders/${workOrder.id}/items`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ item_id: dbId, ...payload }),
-          })
-          syncedItems.push(item)
-        } else {
-          const response = await fetch(`/api/work-orders/${workOrder.id}/items`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          })
-          if (response.ok) {
-            const data = await response.json()
-            const prefix = categoryPrefixMap[category]
-            syncedItems.push({ ...item, id: `${prefix}${data.item.id}` })
-          } else {
-            syncedItems.push(item)
-          }
-        }
-      }
-
-      updatedWithIds[category] = syncedItems
-    }
-
-    setServices(prev => prev.map((s) => (s.id === updated.id ? updatedWithIds : s)))
-  }, [services, workOrder])
-
-  const removeService = useCallback(async (id: string) => {
-    if (!workOrder?.id) return
-
-    console.log('=== DELETING SERVICE ===')
-    console.log('Service ID:', id)
-
-    // Extract database service ID from the service id
-    const dbServiceId = id.replace('svc-', '')
-
-    try {
-      const response = await fetch(`/api/work-orders/${workOrder.id}/services?service_id=${dbServiceId}`, {
-        method: 'DELETE',
-      })
-
-      if (response.ok) {
-        console.log('✓ Deleted from database')
-        // Remove from local state
-        setServices((prev) => prev.filter((s) => s.id !== id))
-      } else {
-        console.error('✗ Failed to delete from database')
-      }
-    } catch (error) {
-      console.error('Error deleting service:', error)
-    }
-  }, [workOrder])
-
-  const addService = useCallback(async () => {
-    if (!workOrder?.id) return
-
-    console.log('=== ADDING NEW SERVICE ===')
-
-    try {
-      const response = await fetch(`/api/work-orders/${workOrder.id}/services`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: 'New Service',
-          description: '',
-          display_order: services.length,
-        }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        console.log('✓ Saved to database - ID:', data.service?.id)
-
-        // Reload services from database
-        const servicesResponse = await fetch(`/api/work-orders/${workOrder.id}/services`)
-        if (servicesResponse.ok) {
-          const servicesData = await servicesResponse.json()
-          const loadedServices = convertDbServicesToServiceData(servicesData.services || [])
-          setServices(loadedServices)
-        }
-      } else {
-        console.error('✗ Failed to save to database')
-      }
-    } catch (error) {
-      console.error('Error adding service:', error)
-    }
-  }, [workOrder, services.length])
-
-  const handleDragEnd = useCallback(() => {
-    if (dragIndex !== null && dragOverIndex !== null && dragIndex !== dragOverIndex) {
-      setServices(prev => {
-        const newServices = [...prev]
-        const [removed] = newServices.splice(dragIndex, 1)
-        newServices.splice(dragOverIndex, 0, removed)
-        return newServices
-      })
-    }
-    setDragIndex(null)
-    setDragOverIndex(null)
-  }, [dragIndex, dragOverIndex])
-
-  const createDragHandleProps = useCallback((index: number) => ({
-    onMouseDown: () => setDragEnabledIndex(index),
-    onMouseUp: () => setDragEnabledIndex(null),
-    onMouseLeave: () => setDragEnabledIndex(null),
-  }), [])
-
-  const toggleServiceExpanded = useCallback((serviceId: string) => {
-    setExpandedServices(prev => {
-      const next = new Set(prev)
-      if (next.has(serviceId)) {
-        next.delete(serviceId)
-      } else {
-        next.add(serviceId)
-      }
-      return next
-    })
-  }, [])
 
   const handleOpenCustomerEdit = useCallback(() => {
     if (!workOrder) return
@@ -636,17 +446,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         setWorkOrder(woData.work_order)
         console.log('✓ Work order loaded')
         
-        // Fetch services with items
-        const servicesResponse = await fetch(`/api/work-orders/${roId}/services`)
-        if (servicesResponse.ok) {
-          const servicesData = await servicesResponse.json()
-          console.log('✓ Loaded', servicesData.services?.length || 0, 'services from database')
-
-          const loadedServices = convertDbServicesToServiceData(servicesData.services || [])
-          setServices(loadedServices)
-        } else {
-          console.log('No services found for this work order')
-        }
+        // Services are loaded automatically by useServiceManagement hook
         
       } catch (err: any) {
         console.error('=== WORK ORDER FETCH ERROR ===')
@@ -679,19 +479,6 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         {onClose && <Button onClick={onClose} variant="outline">Go Back</Button>}
       </Card>
     )
-  }
-
-  // Non-hook functions can stay here
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    setDragIndex(index)
-    e.dataTransfer.effectAllowed = "move"
-  }
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault()
-    if (dragIndex !== null && dragIndex !== index) {
-      setDragOverIndex(index)
-    }
   }
 
   const statusLabelMap: Record<string, string> = {
@@ -773,180 +560,31 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
 
       {/* Customer and Vehicle Cards - Horizontal Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Customer Card */}
-        <Card className="p-6 border-border relative">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-accent to-blue-600 flex items-center justify-center text-accent-foreground font-bold text-lg flex-shrink-0">
-                {workOrder.customer_name.charAt(0)}
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">{workOrder.customer_name}</h2>
-                <p className="text-xs text-muted-foreground">Customer Information</p>
-              </div>
-            </div>
-            <Button size="sm" variant="ghost" onClick={handleOpenCustomerEdit} className="gap-2">
-              <Edit2 size={14} />
-            </Button>
-          </div>
-          
-          <div className="space-y-3 pr-24">
-            <div className="flex items-start gap-3">
-              <Phone size={16} className="text-accent flex-shrink-0 mt-0.5" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted-foreground">Phone</p>
-                <p className="text-sm font-medium text-foreground">{workOrder.phone_primary}</p>
-                {workOrder.phone_secondary && (
-                  <p className="text-xs text-muted-foreground">Alt: {workOrder.phone_secondary}</p>
-                )}
-                {workOrder.phone_mobile && (
-                  <p className="text-xs text-muted-foreground">Mobile: {workOrder.phone_mobile}</p>
-                )}
-              </div>
-            </div>
+        <CustomerInfoCard
+          customerName={workOrder.customer_name}
+          phonePrimary={workOrder.phone_primary}
+          phoneSecondary={workOrder.phone_secondary}
+          phoneMobile={workOrder.phone_mobile}
+          email={workOrder.email}
+          address={fullAddress}
+          onEdit={handleOpenCustomerEdit}
+        />
 
-            {workOrder.email && (
-              <div className="flex items-start gap-3">
-                <Mail size={16} className="text-accent flex-shrink-0 mt-0.5" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-muted-foreground">Email</p>
-                  <p className="text-sm font-medium text-foreground truncate">{workOrder.email}</p>
-                </div>
-              </div>
-            )}
-
-            {fullAddress && (
-              <div className="flex items-start gap-3">
-                <MapPin size={16} className="text-accent flex-shrink-0 mt-0.5" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-muted-foreground">Address</p>
-                  <p className="text-sm font-medium text-foreground">{fullAddress}</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="absolute bottom-6 right-6 flex flex-col gap-2 w-24">
-            <Button size="sm" variant="outline" className="gap-1 bg-transparent w-full">
-              <MessageSquare size={14} />
-              SMS
-            </Button>
-            <Button size="sm" variant="outline" className="gap-1 bg-transparent w-full">
-              <Phone size={14} />
-              Call
-            </Button>
-            {workOrder.email && (
-              <Button size="sm" variant="outline" className="gap-1 bg-transparent w-full">
-                <Mail size={14} />
-                Email
-              </Button>
-            )}
-          </div>
-        </Card>
-
-        {/* Vehicle Card */}
-        <Card className="p-6 border-border">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white flex-shrink-0">
-                <Car size={24} />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">
-                  {workOrder.year} {workOrder.make} {workOrder.model}
-                </h2>
-                <p className="text-xs text-muted-foreground">Vehicle Information</p>
-              </div>
-            </div>
-            <Button size="sm" variant="ghost" onClick={() => setVehicleEditOpen(true)} className="gap-2">
-              <Edit2 size={14} />
-            </Button>
-          </div>
-
-          <div className="space-y-2.5">
-            {/* Row 1: VIN and Prod. Date */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">VIN:</p>
-                <p className="text-sm font-medium text-foreground font-mono leading-tight">{workOrder.vin}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Prod. Date:</p>
-                <p className="text-sm font-medium text-foreground leading-tight">
-                  {workOrder.manufacture_date 
-                    ? (() => {
-                        // Parse YYYY-MM format manually to avoid timezone issues
-                        const [year, month] = workOrder.manufacture_date.split('-')
-                        return `${parseInt(month)}/${year}`
-                      })()
-                    : '—'
-                  }
-                </p>
-              </div>
-            </div>
-
-            {/* Row 2: Engine */}
-            <div>
-              <p className="text-xs text-muted-foreground mb-0.5">Engine:</p>
-              <p className="text-sm font-medium text-foreground leading-tight">{workOrder.engine || '—'}</p>
-            </div>
-
-            {/* Row 3: Plate and Color */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Plate:</p>
-                <p className="text-sm font-medium text-foreground leading-tight">
-                  {workOrder.license_plate || '—'}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Color:</p>
-                <p className="text-sm font-medium text-foreground leading-tight">{workOrder.color || '—'}</p>
-              </div>
-            </div>
-
-            {/* Row 4: Odometer In and Out */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Odometer In:</p>
-                <p className="text-sm font-medium text-foreground leading-tight">
-                  {workOrder.mileage ? workOrder.mileage.toLocaleString() : '—'}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Out:</p>
-                <p className="text-sm font-medium text-foreground leading-tight">—</p>
-              </div>
-            </div>
-          </div>
-        </Card>
+        <VehicleInfoCard
+          year={workOrder.year}
+          make={workOrder.make}
+          model={workOrder.model}
+          vin={workOrder.vin}
+          manufactureDate={workOrder.manufacture_date}
+          engine={workOrder.engine}
+          licensePlate={workOrder.license_plate}
+          color={workOrder.color}
+          mileage={workOrder.mileage}
+          onEdit={() => setVehicleEditOpen(true)}
+        />
       </div>
 
-      {/* Horizontal Status Workflow Bar */}
-      <Card className="p-4 border-border">
-        <div className="flex items-center justify-between overflow-x-auto">
-          {WORKFLOW_STAGES.map((stage, idx) => {
-            const Icon = stage.icon
-            return (
-              <div key={stage.id} className="flex items-center gap-3 flex-shrink-0">
-                <div
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                    stage.completed
-                      ? "bg-green-500/20 text-green-600 dark:text-green-400"
-                      : stage.active
-                        ? "bg-blue-500/20 text-blue-600 dark:text-blue-400"
-                        : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  <Icon size={16} />
-                  <span className="text-sm font-medium whitespace-nowrap">{stage.label}</span>
-                </div>
-                {idx < WORKFLOW_STAGES.length - 1 && <ChevronRight size={16} className="text-border" />}
-              </div>
-            )
-          })}
-        </div>
-      </Card>
+      <StatusWorkflow stages={WORKFLOW_STAGES as WorkflowStage[]} />
 
       {/* Main Content - Full Width */}
       <div className="space-y-4">
@@ -1042,10 +680,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
                   }
                 }}
                 onDragOver={(e) => handleDragOver(e, index)}
-                onDragEnd={() => {
-                  setDragEnabledIndex(null)
-                  handleDragEnd()
-                }}
+                onDragEnd={handleDragEnd}
                 className={`transition-all ${dragOverIndex === index ? "border-t-2 border-primary" : ""}`}
               >
                 <EditableServiceCard
@@ -1061,67 +696,17 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           </div>
         </Card>
 
-        {/* Pricing Summary - Sticky Bottom */}
-        <Card className="p-4 border-border bg-muted/30">
-          <div className="flex items-center justify-between gap-6">
-            <div className="flex items-center gap-6 flex-1 overflow-x-auto pb-2">
-              <div className="flex-shrink-0">
-                <p className="text-xs text-muted-foreground">Parts</p>
-                <p className="font-semibold text-foreground">${totals.parts.toFixed(2)}</p>
-              </div>
-              <div className="flex-shrink-0">
-                <p className="text-xs text-muted-foreground">Labor</p>
-                <p className="font-semibold text-foreground">${totals.labor.toFixed(2)}</p>
-              </div>
-              <div className="flex-shrink-0">
-                <p className="text-xs text-muted-foreground">Sublets</p>
-                <p className="font-semibold text-foreground">${totals.sublets.toFixed(2)}</p>
-              </div>
-              <div className="flex-shrink-0">
-                <p className="text-xs text-muted-foreground">Hazmat</p>
-                <p className="font-semibold text-foreground">${totals.hazmat.toFixed(2)}</p>
-              </div>
-              <div className="flex-shrink-0">
-                <p className="text-xs text-muted-foreground">Fees</p>
-                <p className="font-semibold text-foreground">${totals.fees.toFixed(2)}</p>
-              </div>
-            </div>
+        <PricingSummary totals={totals} />
 
-            <div className="flex items-center gap-4 border-l border-border pl-6 flex-shrink-0">
-              <div>
-                <p className="text-xs text-muted-foreground text-right">Total Estimate</p>
-                <p className="text-2xl font-bold text-foreground">${totals.total.toFixed(2)}</p>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* Action Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Button
-            className="gap-2"
-            onClick={handleApprove}
-            disabled={statusSaving || isApproved || isCompleted || isCancelled}
-          >
-            Approve
-          </Button>
-          <Button
-            variant="outline"
-            className="bg-transparent gap-2"
-            onClick={handleComplete}
-            disabled={statusSaving || isCompleted || isCancelled}
-          >
-            Complete
-          </Button>
-          <Button
-            variant="outline"
-            className="bg-transparent text-destructive border-destructive/30 hover:bg-destructive/10 gap-2"
-            onClick={handleCancel}
-            disabled={statusSaving || isCancelled}
-          >
-            Cancel RO
-          </Button>
-        </div>
+        <ActionButtons
+          onApprove={handleApprove}
+          onComplete={handleComplete}
+          onCancel={handleCancel}
+          isApproved={isApproved}
+          isCompleted={isCompleted}
+          isCancelled={isCancelled}
+          isSaving={statusSaving}
+        />
 
       </div>
 

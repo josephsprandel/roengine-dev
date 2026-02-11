@@ -33,8 +33,11 @@ export interface VehicleData {
   trim?: string
   vin: string
   licensePlate: string
+  licensePlateState?: string // License plate state (e.g., "TX", "IL")
   color: string
   mileage: string
+  build_date?: string // MM/YY format from AI extraction
+  tire_size?: string // Tire specification from door jamb
   isNew?: boolean
 }
 
@@ -165,22 +168,51 @@ export function ROCreationWizard({ initialCustomerId }: { initialCustomerId?: st
 
       // Step 2: Create vehicle if new
       let vehicleId = vehicleData.id
+      
+      console.log('[RO Wizard] vehicleData before check:', vehicleData)
+      console.log('[RO Wizard] Is new vehicle?', vehicleData.isNew)
+      
       if (vehicleData.isNew) {
         console.log("[RO Wizard] Creating new vehicle...")
+        console.log("[RO Wizard] Raw vehicleData:", JSON.stringify(vehicleData, null, 2))
+        
+        // Convert build_date from MM/YY to YYYY-MM format
+        let manufactureDate = null
+        if (vehicleData.build_date) {
+          const match = vehicleData.build_date.match(/^(\d{1,2})\/(\d{2})$/)
+          if (match) {
+            const month = match[1].padStart(2, '0')
+            const year = '20' + match[2] // Assuming 20xx century
+            manufactureDate = `${year}-${month}`
+            console.log(`[RO Wizard] Converted build_date ${vehicleData.build_date} to manufacture_date ${manufactureDate}`)
+          } else {
+            console.warn('[RO Wizard] build_date format did not match MM/YY:', vehicleData.build_date)
+          }
+        } else {
+          console.log('[RO Wizard] No build_date in vehicleData')
+        }
+        
+        const vehiclePayload = {
+          customer_id: customerId,
+          year: parseInt(vehicleData.year),
+          make: vehicleData.make,
+          model: vehicleData.model,
+          submodel: vehicleData.trim || null,
+          vin: vehicleData.vin,
+          license_plate: vehicleData.licensePlate || null,
+          license_plate_state: vehicleData.licensePlateState || null,
+          color: vehicleData.color || null,
+          mileage: vehicleData.mileage ? parseInt(vehicleData.mileage.replace(/,/g, '')) : null,
+          manufacture_date: manufactureDate,
+          notes: vehicleData.tire_size ? `Tire Size: ${vehicleData.tire_size}` : null
+        }
+        
+        console.log('[RO Wizard] Final vehicle payload:', JSON.stringify(vehiclePayload, null, 2))
+        
         const vehicleResponse = await fetch('/api/vehicles', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            customer_id: customerId,
-            year: vehicleData.year,
-            make: vehicleData.make,
-            model: vehicleData.model,
-            trim: vehicleData.trim || null,
-            vin: vehicleData.vin,
-            license_plate: vehicleData.licensePlate || null,
-            color: vehicleData.color || null,
-            odometer: vehicleData.mileage ? parseInt(vehicleData.mileage.replace(/,/g, '')) : null
-          })
+          body: JSON.stringify(vehiclePayload)
         })
 
         if (!vehicleResponse.ok) {
