@@ -78,7 +78,7 @@ export function InvoiceActionsPanel({
   }
 
   const handlePrint = () => {
-    window.print()
+    window.open(`/repair-orders/${workOrderId}/print`, '_blank')
   }
 
   return (

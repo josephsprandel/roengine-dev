@@ -1,0 +1,403 @@
+/**
+ * Professional Invoice Print Styles
+ * Optimized for customer-ready printing
+ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Arial', 'Helvetica', sans-serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  color: #000;
+  background: white;
+  padding: 0.5in;
+}
+
+/* VOID Watermark */
+.invoice-voided::before {
+  content: "VOID";
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  font-size: 180pt;
+  font-weight: bold;
+  color: rgba(255, 0, 0, 0.12);
+  z-index: 9999;
+  pointer-events: none;
+  letter-spacing: 20px;
+}
+
+.invoice-container {
+  max-width: 8.5in;
+  margin: 0 auto;
+}
+
+/* Header */
+.invoice-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 20px;
+  border-bottom: 3px solid #000;
+  margin-bottom: 30px;
+}
+
+.shop-name {
+  font-size: 24pt;
+  font-weight: bold;
+  margin-bottom: 5px;
+  color: #000;
+}
+
+.shop-details {
+  font-size: 10pt;
+  line-height: 1.4;
+}
+
+.invoice-info {
+  text-align: right;
+}
+
+.invoice-title {
+  font-size: 20pt;
+  font-weight: bold;
+  margin-bottom: 5px;
+  color: #000;
+}
+
+.invoice-number {
+  font-size: 16pt;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.invoice-meta {
+  font-size: 10pt;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  margin-top: 5px;
+  border: 2px solid #000;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 10pt;
+}
+
+.status-estimate {
+  background-color: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.status-invoice_open {
+  background-color: #dbeafe;
+  border-color: #3b82f6;
+}
+
+.status-invoice_closed {
+  background-color: #fef3c7;
+  border-color: #f59e0b;
+}
+
+.status-paid {
+  background-color: #d1fae5;
+  border-color: #10b981;
+}
+
+.status-voided {
+  background-color: #fee2e2;
+  border-color: #ef4444;
+}
+
+/* Info Section */
+.info-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  margin-bottom: 25px;
+  page-break-inside: avoid;
+}
+
+.customer-section,
+.vehicle-section {
+  border: 1px solid #d1d5db;
+  padding: 15px;
+  border-radius: 4px;
+}
+
+.customer-section h3,
+.vehicle-section h3 {
+  font-size: 12pt;
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 5px;
+}
+
+.info-content {
+  font-size: 10pt;
+}
+
+.info-row {
+  margin-bottom: 4px;
+}
+
+/* Customer Concern */
+.concern-section {
+  background-color: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 25px;
+  page-break-inside: avoid;
+}
+
+.concern-section h3 {
+  font-size: 11pt;
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #374151;
+}
+
+.concern-section p {
+  font-size: 10pt;
+  font-style: italic;
+  color: #111827;
+}
+
+/* Services Section */
+.services-section {
+  margin-bottom: 25px;
+}
+
+.services-section > h3 {
+  font-size: 13pt;
+  font-weight: bold;
+  margin-bottom: 15px;
+  color: #000;
+}
+
+.service-group {
+  margin-bottom: 20px;
+  page-break-inside: avoid;
+}
+
+.service-title {
+  font-size: 12pt;
+  font-weight: bold;
+  margin-bottom: 5px;
+  color: #111827;
+}
+
+.service-description {
+  font-size: 9pt;
+  color: #6b7280;
+  margin-bottom: 10px;
+}
+
+/* Line Items Table */
+.line-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 15px;
+  font-size: 10pt;
+}
+
+.line-items-table thead {
+  background-color: #f3f4f6;
+}
+
+.line-items-table th {
+  padding: 8px;
+  text-align: left;
+  font-weight: bold;
+  border: 1px solid #d1d5db;
+}
+
+.line-items-table td {
+  padding: 6px 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.line-items-table tbody tr:nth-child(even) {
+  background-color: #f9fafb;
+}
+
+.item-type-label {
+  color: #6b7280;
+  font-size: 9pt;
+}
+
+.text-center {
+  text-align: center !important;
+}
+
+.text-right {
+  text-align: right !important;
+}
+
+/* Totals Section */
+.totals-section {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 25px;
+  page-break-inside: avoid;
+}
+
+.totals-table {
+  width: 350px;
+  border-collapse: collapse;
+  font-size: 11pt;
+}
+
+.totals-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.totals-table td:first-child {
+  text-align: left;
+}
+
+.totals-table td:last-child {
+  text-align: right;
+  font-weight: 500;
+}
+
+.totals-table .grand-total {
+  border-top: 3px solid #000;
+  border-bottom: 3px double #000;
+}
+
+.totals-table .grand-total td {
+  padding: 10px 12px;
+  font-size: 13pt;
+  font-weight: bold;
+}
+
+/* Payments Section */
+.payments-section {
+  margin-bottom: 25px;
+  page-break-inside: avoid;
+}
+
+.payments-section h3 {
+  font-size: 12pt;
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: #000;
+}
+
+.payments-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+}
+
+.payments-table thead {
+  background-color: #f3f4f6;
+}
+
+.payments-table th {
+  padding: 8px;
+  text-align: left;
+  font-weight: bold;
+  border: 1px solid #d1d5db;
+}
+
+.payments-table td {
+  padding: 6px 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.payment-method {
+  text-transform: capitalize;
+}
+
+.payment-notes {
+  color: #6b7280;
+  font-size: 9pt;
+}
+
+.payment-summary td {
+  background-color: #f9fafb;
+  font-weight: bold;
+  border-top: 2px solid #d1d5db !important;
+}
+
+.balance-due td {
+  background-color: #fef3c7;
+  font-weight: bold;
+  font-size: 11pt;
+  border-top: 2px solid #f59e0b !important;
+}
+
+.paid-badge {
+  color: #10b981;
+  font-weight: bold;
+  font-size: 11pt;
+}
+
+/* Footer */
+.invoice-footer {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 2px solid #d1d5db;
+  font-size: 9pt;
+  color: #6b7280;
+}
+
+.footer-section {
+  margin-bottom: 15px;
+}
+
+.footer-section strong {
+  color: #111827;
+  font-size: 10pt;
+}
+
+.footer-section p {
+  margin-top: 5px;
+}
+
+.payment-info {
+  font-style: italic;
+}
+
+/* Page break settings */
+@page {
+  size: letter;
+  margin: 0.5in;
+}
+
+/* Print-specific adjustments */
+@media print {
+  body {
+    padding: 0;
+  }
+
+  .invoice-container {
+    page-break-after: auto;
+  }
+
+  .info-section,
+  .concern-section,
+  .service-group,
+  .totals-section,
+  .payments-section {
+    page-break-inside: avoid;
+  }
+
+  /* Hide browser UI */
+  @page {
+    margin: 0.5in;
+  }
+}
