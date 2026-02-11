@@ -12,7 +12,7 @@
 body {
   font-family: 'Arial', 'Helvetica', sans-serif;
   font-size: 11pt;
-  line-height: 1.5;
+  line-height: 1.4;
   color: #000;
   background: white;
   padding: 0.5in;
@@ -46,6 +46,15 @@ body {
   padding-bottom: 20px;
   border-bottom: 3px solid #000;
   margin-bottom: 30px;
+}
+
+.shop-logo {
+  max-height: 120px;
+  max-width: 250px;
+  height: auto;
+  width: auto;
+  margin-bottom: 10px;
+  object-fit: contain;
 }
 
 .shop-name {
@@ -187,9 +196,9 @@ body {
 
 /* Service Card - Prevents page breaks within a service */
 .service-card {
-  margin-bottom: 20px;
+  margin-bottom: 10px;
   border: 2px solid #d1d5db;
-  border-radius: 6px;
+  border-radius: 4px;
   page-break-inside: avoid;
   break-inside: avoid;
   overflow: hidden;
@@ -197,31 +206,31 @@ body {
 
 .service-card-header {
   background-color: #f3f4f6;
-  padding: 12px 15px;
+  padding: 8px 10px;
   border-bottom: 2px solid #d1d5db;
 }
 
 .service-title {
-  font-size: 12pt;
+  font-size: 11pt;
   font-weight: bold;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   color: #111827;
 }
 
 .service-description {
   font-size: 9pt;
   color: #6b7280;
-  margin-top: 5px;
+  margin-top: 3px;
 }
 
 .service-card-body {
-  padding: 15px;
+  padding: 8px 10px;
   background-color: white;
 }
 
 /* Item Groups within Service Card */
 .item-group {
-  margin-bottom: 15px;
+  margin-bottom: 8px;
 }
 
 .item-group:last-child {
@@ -229,11 +238,11 @@ body {
 }
 
 .item-group-header {
-  font-size: 10pt;
+  font-size: 9pt;
   font-weight: bold;
   color: #374151;
-  margin-bottom: 8px;
-  padding-bottom: 4px;
+  margin-bottom: 4px;
+  padding-bottom: 2px;
   border-bottom: 1px solid #e5e7eb;
 }
 
@@ -241,8 +250,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 6px 0;
-  font-size: 10pt;
+  padding: 3px 0;
+  font-size: 9pt;
   border-bottom: 1px dotted #e5e7eb;
 }
 
@@ -252,7 +261,7 @@ body {
 
 .item-description {
   flex: 1;
-  padding-right: 15px;
+  padding-right: 10px;
   color: #111827;
 }
 
@@ -264,7 +273,7 @@ body {
 
 .service-card-footer {
   background-color: #f9fafb;
-  padding: 12px 15px;
+  padding: 6px 10px;
   border-top: 2px solid #d1d5db;
 }
 
@@ -272,13 +281,13 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 11pt;
+  font-size: 10pt;
   font-weight: bold;
   color: #111827;
 }
 
 .service-total-amount {
-  font-size: 13pt;
+  font-size: 11pt;
   color: #000;
 }
 

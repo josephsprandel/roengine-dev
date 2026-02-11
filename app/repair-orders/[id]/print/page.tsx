@@ -25,7 +25,17 @@ async function getWorkOrderData(id: string) {
 
     const workOrder = woResult.rows[0]
 
-    // Fetch all items grouped by service_id
+    // Fetch services
+    const servicesResult = await query(
+      `SELECT 
+        id, title, description, category
+      FROM services
+      WHERE work_order_id = $1
+      ORDER BY display_order, id`,
+      [id]
+    )
+
+    // Fetch all items
     const itemsResult = await query(
       `SELECT 
         id,
@@ -54,21 +64,22 @@ async function getWorkOrderData(id: string) {
     )
 
     // Group items by service_id
-    const serviceMap = new Map()
+    const itemsByService = new Map()
     for (const item of itemsResult.rows) {
-      const serviceId = item.service_id || 1
-      if (!serviceMap.has(serviceId)) {
-        serviceMap.set(serviceId, {
-          id: serviceId,
-          title: `Service ${serviceId}`,
-          description: '',
-          items: []
-        })
+      const serviceId = item.service_id
+      if (!itemsByService.has(serviceId)) {
+        itemsByService.set(serviceId, [])
       }
-      serviceMap.get(serviceId).items.push(item)
+      itemsByService.get(serviceId).push(item)
     }
 
-    const servicesResult = { rows: Array.from(serviceMap.values()) }
+    // Attach items to services
+    const services = servicesResult.rows.map((svc: any) => ({
+      ...svc,
+      items: itemsByService.get(svc.id) || []
+    }))
+
+    const finalServicesResult = { rows: services }
 
     // Fetch payments
     const paymentsResult = await query(
@@ -173,6 +184,9 @@ export default async function PrintInvoicePage({
           {/* Header */}
           <div className="invoice-header">
             <div className="shop-info">
+              {shop.logo_url && (
+                <img src={shop.logo_url} alt="Shop Logo" className="shop-logo" />
+              )}
               <h1 className="shop-name">{shop.shop_name || "Auto Repair Shop"}</h1>
               <div className="shop-details">
                 {shop.address && <div>{shop.address}</div>}
