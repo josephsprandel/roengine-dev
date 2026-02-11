@@ -279,6 +279,18 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     }, initial)
   }, [services])
 
+  // Calculate grand total with tax
+  const grandTotalWithTax = useMemo(() => {
+    const taxRate = invoiceSettings?.sales_tax_rate || 0.1225
+    const partsTaxable = invoiceSettings?.parts_taxable ?? true
+    const laborTaxable = invoiceSettings?.labor_taxable ?? true
+    const taxableAmount = 
+      (partsTaxable ? totals.parts : 0) +
+      (laborTaxable ? totals.labor : 0)
+    const tax = taxableAmount * taxRate
+    return totals.total + tax
+  }, [totals, invoiceSettings])
+
   // AI Recommendations hook
   const aiRecommendations = useAIRecommendations(workOrder)
 
@@ -753,8 +765,8 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
 
         <PaymentHistory
           payments={payments}
-          balanceDue={totals.total - payments.reduce((sum, p) => sum + parseFloat(p.amount), 0)}
-          grandTotal={totals.total}
+          balanceDue={grandTotalWithTax - payments.reduce((sum, p) => sum + parseFloat(p.amount), 0)}
+          grandTotal={grandTotalWithTax}
         />
 
         <InvoiceActionsPanel
@@ -762,8 +774,8 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           roNumber={workOrder.ro_number}
           invoiceStatus={(workOrder as any).invoice_status || 'estimate'}
           closedAt={(workOrder as any).closed_at ? new Date((workOrder as any).closed_at) : null}
-          grandTotal={totals.total}
-          balanceDue={totals.total - payments.reduce((sum, p) => sum + parseFloat(p.amount), 0)}
+          grandTotal={grandTotalWithTax}
+          balanceDue={grandTotalWithTax - payments.reduce((sum, p) => sum + parseFloat(p.amount), 0)}
           ccSurchargeEnabled={invoiceSettings?.cc_surcharge_enabled || false}
           ccSurchargeRate={invoiceSettings?.cc_surcharge_rate || 0.035}
           payrollFrequency={invoiceSettings?.payroll_frequency || 'weekly'}
