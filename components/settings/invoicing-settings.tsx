@@ -41,8 +41,12 @@ export function InvoicingSettings() {
         throw new Error(data.error || "Failed to fetch invoice settings")
       }
 
+      // Convert decimal to percentage for display (0.1225 → 12.25)
+      const taxRateDecimal = parseFloat(data.settings.sales_tax_rate || "0.1225")
+      const taxRatePercentage = (taxRateDecimal * 100).toString()
+
       setSettings({
-        sales_tax_rate: data.settings.sales_tax_rate || "0.1225",
+        sales_tax_rate: taxRatePercentage,
         parts_taxable: data.settings.parts_taxable ?? true,
         labor_taxable: data.settings.labor_taxable ?? true,
       })
@@ -114,11 +118,6 @@ export function InvoicingSettings() {
     }
   }
 
-  // Convert decimal to percentage for display (0.1225 → 12.25)
-  const displayTaxRate = settings.sales_tax_rate 
-    ? (parseFloat(settings.sales_tax_rate) * 100).toFixed(2)
-    : ""
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -167,7 +166,7 @@ export function InvoicingSettings() {
                 id="sales_tax_rate"
                 type="text"
                 inputMode="decimal"
-                value={displayTaxRate}
+                value={settings.sales_tax_rate}
                 onChange={(e) => handleTaxRateChange(e.target.value)}
                 placeholder="12.25"
                 className="pr-8"
