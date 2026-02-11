@@ -335,19 +335,39 @@ export async function DELETE(
  */
 async function updateWorkOrderTotals(workOrderId: number) {
   try {
+    // Fetch shop settings for tax configuration
+    const shopSettings = await pool.query(
+      'SELECT sales_tax_rate, parts_taxable, labor_taxable FROM shop_profile LIMIT 1'
+    )
+    
+    const taxRate = parseFloat(shopSettings.rows[0]?.sales_tax_rate || 0)
+    const partsTaxable = shopSettings.rows[0]?.parts_taxable ?? true
+    const laborTaxable = shopSettings.rows[0]?.labor_taxable ?? false
+
+    // Calculate category totals
     const totals = await pool.query(`
       SELECT 
         COALESCE(SUM(CASE WHEN item_type = 'labor' THEN line_total ELSE 0 END), 0) as labor_total,
         COALESCE(SUM(CASE WHEN item_type = 'part' THEN line_total ELSE 0 END), 0) as parts_total,
         COALESCE(SUM(CASE WHEN item_type = 'sublet' THEN line_total ELSE 0 END), 0) as sublets_total,
-        COALESCE(SUM(CASE WHEN is_taxable = true THEN line_total ELSE 0 END), 0) * 0.0825 as tax_amount,
+        COALESCE(SUM(CASE WHEN item_type = 'hazmat' THEN line_total ELSE 0 END), 0) as hazmat_total,
+        COALESCE(SUM(CASE WHEN item_type = 'fee' THEN line_total ELSE 0 END), 0) as fees_total,
         COALESCE(SUM(line_total), 0) as subtotal
       FROM work_order_items
       WHERE work_order_id = $1
     `, [workOrderId])
 
     const t = totals.rows[0]
-    const total = parseFloat(t.subtotal) + parseFloat(t.tax_amount)
+    
+    // Calculate tax based on shop settings
+    let taxableAmount = 0
+    if (partsTaxable) taxableAmount += parseFloat(t.parts_total)
+    if (laborTaxable) taxableAmount += parseFloat(t.labor_total)
+    // Sublets, hazmat, and fees are typically always taxable
+    taxableAmount += parseFloat(t.sublets_total) + parseFloat(t.hazmat_total) + parseFloat(t.fees_total)
+    
+    const taxAmount = taxableAmount * taxRate
+    const total = parseFloat(t.subtotal) + taxAmount
 
     await pool.query(`
       UPDATE work_orders
@@ -363,7 +383,7 @@ async function updateWorkOrderTotals(workOrderId: number) {
       t.labor_total,
       t.parts_total,
       t.sublets_total,
-      t.tax_amount,
+      taxAmount,
       total,
       workOrderId
     ])
