@@ -29,7 +29,7 @@ export async function GET(
         p.id, p.work_order_id, p.amount, p.payment_method,
         p.card_surcharge, p.card_surcharge_rate,
         p.paid_at, p.recorded_by, p.notes, p.created_at,
-        COALESCE(u.name, 'Unknown User') as recorded_by_name
+        COALESCE(u.full_name, 'Unknown User') as recorded_by_name
        FROM payments p
        LEFT JOIN users u ON p.recorded_by = u.id
        WHERE p.work_order_id = $1
