@@ -45,6 +45,9 @@ import { VehicleInfoCard } from "./ro-detail/VehicleInfoCard"
 import { StatusWorkflow, WorkflowStage } from "./ro-detail/StatusWorkflow"
 import { PricingSummary } from "./ro-detail/PricingSummary"
 import { ActionButtons } from "./ro-detail/ActionButtons"
+import { InvoiceActionsPanel } from "@/components/invoices/InvoiceActionsPanel"
+import { PaymentHistory } from "@/components/invoices/PaymentHistory"
+import { InvoiceCalculations } from "@/components/invoices/InvoiceCalculations"
 
 // Workflow stages - MOVED OUTSIDE to prevent re-creation on every render
 const WORKFLOW_STAGES = [
@@ -205,6 +208,10 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   const [isEditing, setIsEditing] = useState(false)
   const [statusSaving, setStatusSaving] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
+  
+  // Invoice data
+  const [payments, setPayments] = useState<any[]>([])
+  const [invoiceSettings, setInvoiceSettings] = useState<any>(null)
   
   // Customer and Vehicle edit states
   const [customerEditOpen, setCustomerEditOpen] = useState(false)
@@ -445,6 +452,20 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         
         setWorkOrder(woData.work_order)
         console.log('✓ Work order loaded')
+        
+        // Fetch payments
+        const paymentsResponse = await fetch(`/api/work-orders/${roId}/payments`)
+        if (paymentsResponse.ok) {
+          const paymentsData = await paymentsResponse.json()
+          setPayments(paymentsData.payments || [])
+        }
+        
+        // Fetch invoice settings
+        const settingsResponse = await fetch('/api/settings/invoice')
+        if (settingsResponse.ok) {
+          const settingsData = await settingsResponse.json()
+          setInvoiceSettings(settingsData.settings)
+        }
         
         // Services are loaded automatically by useServiceManagement hook
         
@@ -696,7 +717,58 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           </div>
         </Card>
 
-        <PricingSummary totals={totals} />
+        <InvoiceCalculations
+          partsSubtotal={totals.parts}
+          laborSubtotal={totals.labor}
+          subletsSubtotal={totals.sublets}
+          hazmatSubtotal={totals.hazmat}
+          feesSubtotal={totals.fees}
+          shopSupplies={0}
+          subtotalBeforeTax={totals.total}
+          tax={0}
+          taxRate={invoiceSettings?.sales_tax_rate || 0.1225}
+          grandTotal={totals.total}
+          ccSurchargeEnabled={invoiceSettings?.cc_surcharge_enabled || false}
+          ccSurchargeRate={invoiceSettings?.cc_surcharge_rate || 0.035}
+          taxExempt={false}
+          taxOverride={false}
+        />
+
+        <PaymentHistory
+          payments={payments}
+          balanceDue={totals.total - payments.reduce((sum, p) => sum + parseFloat(p.amount), 0)}
+          grandTotal={totals.total}
+        />
+
+        <InvoiceActionsPanel
+          workOrderId={workOrder.id}
+          roNumber={workOrder.ro_number}
+          invoiceStatus={(workOrder as any).invoice_status || 'estimate'}
+          closedAt={(workOrder as any).closed_at ? new Date((workOrder as any).closed_at) : null}
+          grandTotal={totals.total}
+          balanceDue={totals.total - payments.reduce((sum, p) => sum + parseFloat(p.amount), 0)}
+          ccSurchargeEnabled={invoiceSettings?.cc_surcharge_enabled || false}
+          ccSurchargeRate={invoiceSettings?.cc_surcharge_rate || 0.035}
+          payrollFrequency={invoiceSettings?.payroll_frequency || 'weekly'}
+          payrollStartDay={invoiceSettings?.payroll_start_day || 1}
+          onActionComplete={() => {
+            // Reload work order and payments
+            const reloadData = async () => {
+              const woResponse = await fetch(`/api/work-orders/${roId}`)
+              if (woResponse.ok) {
+                const woData = await woResponse.json()
+                setWorkOrder(woData.work_order)
+              }
+              const paymentsResponse = await fetch(`/api/work-orders/${roId}/payments`)
+              if (paymentsResponse.ok) {
+                const paymentsData = await paymentsResponse.json()
+                setPayments(paymentsData.payments || [])
+              }
+            }
+            reloadData()
+            showToast('Invoice updated successfully', 'success')
+          }}
+        />
 
         <ActionButtons
           onApprove={handleApprove}
