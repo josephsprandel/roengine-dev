@@ -57,12 +57,10 @@ async function getWorkOrderData(id: string) {
     // Fetch payments
     const paymentsResult = await query(
       `SELECT 
-        p.id, p.amount, p.payment_method, p.card_surcharge, p.paid_at, p.notes,
-        u.name as recorded_by_name
-      FROM payments p
-      LEFT JOIN users u ON p.recorded_by = u.id
-      WHERE p.work_order_id = $1
-      ORDER BY p.paid_at DESC`,
+        id, amount, payment_method, card_surcharge, paid_at, notes, recorded_by
+      FROM payments
+      WHERE work_order_id = $1
+      ORDER BY paid_at DESC`,
       [id]
     )
 
