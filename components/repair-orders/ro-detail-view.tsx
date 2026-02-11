@@ -30,7 +30,6 @@ import {
   Car,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import type { ServiceData, LineItem } from "./ro-creation-wizard"
 import { EditableServiceCard, createLineItem } from "./editable-service-card"
@@ -38,7 +37,6 @@ import type { LineItemCategory } from "./editable-service-card"
 import { PartsSelectionModal } from "./parts-selection-modal"
 import { VehicleEditDialog } from "@/components/customers/vehicle-edit-dialog"
 import { useAIRecommendations } from "./hooks/useAIRecommendations"
-import { usePartsGeneration } from "./hooks/usePartsGeneration"
 import { useServiceManagement } from "./hooks/useServiceManagement"
 import { CustomerInfoCard } from "./ro-detail/CustomerInfoCard"
 import { VehicleInfoCard } from "./ro-detail/VehicleInfoCard"
@@ -294,16 +292,6 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
 
   // AI Recommendations hook
   const aiRecommendations = useAIRecommendations(workOrder)
-
-  // Parts Generation hook
-  const partsGeneration = usePartsGeneration(
-    workOrder?.id,
-    aiRecommendations.selectedAiServices,
-    services.length,
-    workOrder ? { year: workOrder.year, make: workOrder.make, model: workOrder.model, vin: workOrder.vin } : null,
-    reloadServices,
-    showToast
-  )
 
   const updateStatus = useCallback(
     async (nextStatus: string, options?: { successMessage?: string }) => {
@@ -1005,13 +993,9 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
                 {aiRecommendations.aiServices.map((service: any, i: number) => (
                   <div
                     key={i}
-                    className="border rounded p-3 flex items-start gap-3 hover:bg-accent cursor-pointer"
-                    onClick={() => aiRecommendations.toggleService(service)}
+                    className="border rounded p-3 flex items-start gap-3"
                   >
-                    <Checkbox
-                      checked={aiRecommendations.selectedAiServices.includes(service)}
-                      onCheckedChange={() => aiRecommendations.toggleService(service)}
-                    />
+                    <CheckCircle size={20} className="text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
                       <div className="font-medium">{service.service_name}</div>
                       <div className="text-sm text-muted-foreground">
@@ -1032,19 +1016,24 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
                 ))}
               </div>
 
+              {/* Success message */}
+              <div className="mt-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <div className="flex items-start gap-3">
+                  <CheckCircle size={20} className="text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-blue-900 dark:text-blue-100 mb-1">
+                      Recommendations Saved
+                    </p>
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      {aiRecommendations.aiServices.length} recommendation{aiRecommendations.aiServices.length !== 1 ? 's have' : ' has'} been saved to the AI Maintenance Recommendations section below. Review and approve them to add services to this work order.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex gap-2 mt-4">
-                <Button onClick={() => { aiRecommendations.setDialogOpen(false); partsGeneration.generateParts(); }} className="flex-1" disabled={partsGeneration.generating}>
-                  {partsGeneration.generating ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Generating parts list...
-                    </>
-                  ) : (
-                    <>Add {aiRecommendations.selectedAiServices.length} Service{aiRecommendations.selectedAiServices.length !== 1 ? 's' : ''} to RO</>
-                  )}
-                </Button>
-                <Button variant="outline" onClick={() => aiRecommendations.setDialogOpen(false)} disabled={partsGeneration.generating}>
-                  Cancel
+                <Button onClick={() => aiRecommendations.setDialogOpen(false)} className="flex-1">
+                  Close
                 </Button>
               </div>
             </>
