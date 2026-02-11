@@ -12,7 +12,8 @@ import { LaborRatesSettings } from "@/components/settings/labor-rates-settings"
 import { VendorPreferencesSettings } from "@/components/settings/vendor-preferences-settings"
 import { RolesSettings } from "@/components/settings/roles-settings"
 import { UsersSettings } from "@/components/settings/users-settings"
-import { Settings, Database, Building2, Users, CreditCard, Palette, DollarSign, Package, Shield, UserCog } from "lucide-react"
+import { InvoicingSettings } from "@/components/settings/invoicing-settings"
+import { Settings, Database, Building2, Users, CreditCard, Palette, DollarSign, Package, Shield, UserCog, Receipt } from "lucide-react"
 
 export default function SettingsPage() {
   return (
@@ -69,6 +70,10 @@ export default function SettingsPage() {
                   <Package size={16} />
                   Vendor Preferences
                 </TabsTrigger>
+                <TabsTrigger value="invoicing" className="flex items-center gap-2 data-[state=active]:bg-background">
+                  <Receipt size={16} />
+                  Invoicing
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="data-sources">
@@ -116,6 +121,10 @@ export default function SettingsPage() {
 
               <TabsContent value="vendor-preferences">
                 <VendorPreferencesSettings />
+              </TabsContent>
+
+              <TabsContent value="invoicing">
+                <InvoicingSettings />
               </TabsContent>
             </Tabs>
           </div>
