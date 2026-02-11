@@ -6,6 +6,7 @@ import { ThemeInitializer } from "@/components/theme-initializer"
 import { AuthProvider } from "@/contexts/auth-context"
 import { Toaster } from "sonner"
 import "./globals.css"
+import "./print.css"
 
 const geistSans = Geist({ subsets: ["latin"] })
 const geistMono = Geist_Mono({ subsets: ["latin"] })
