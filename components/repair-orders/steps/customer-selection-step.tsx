@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Search, Plus, Check, Phone, Mail, User, Loader2 } from "lucide-react"
+import { CustomerCreateDialog } from "@/components/customers/customer-create-dialog"
 import type { CustomerData } from "../ro-creation-wizard"
 
 interface CustomerSelectionStepProps {
@@ -28,15 +29,9 @@ export function CustomerSelectionStep({
   initialCustomerId,
 }: CustomerSelectionStepProps) {
   const [searchTerm, setSearchTerm] = useState("")
-  const [isCreatingNew, setIsCreatingNew] = useState(false)
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(false)
-  const [newCustomer, setNewCustomer] = useState<CustomerData>({
-    name: "",
-    phone: "",
-    email: "",
-    isNew: true,
-  })
 
   const fetchCustomers = useCallback(async (search?: string) => {
     setLoading(true)
@@ -92,7 +87,6 @@ export function CustomerSelectionStep({
   }, [initialCustomerId, onSelectCustomer])
 
   const handleSelectExisting = (customer: Customer) => {
-    setIsCreatingNew(false)
     onSelectCustomer({
       id: customer.id,
       name: customer.customer_name,
@@ -102,17 +96,10 @@ export function CustomerSelectionStep({
     })
   }
 
-  const handleCreateNew = () => {
-    setIsCreatingNew(true)
-    onSelectCustomer(null)
-  }
-
-  const handleNewCustomerChange = (field: keyof CustomerData, value: string) => {
-    const updated = { ...newCustomer, [field]: value }
-    setNewCustomer(updated)
-    if (updated.name && updated.phone) {
-      onSelectCustomer(updated)
-    }
+  const handleCustomerCreated = async () => {
+    // Refresh customer list to show the newly created customer
+    await fetchCustomers(searchTerm)
+    // The user will then need to select it from the list
   }
 
   return (
@@ -136,55 +123,25 @@ export function CustomerSelectionStep({
           />
         </div>
         <Button
-          variant={isCreatingNew ? "default" : "outline"}
-          onClick={handleCreateNew}
-          className={isCreatingNew ? "" : "bg-transparent"}
+          variant="outline"
+          onClick={() => setShowCreateDialog(true)}
+          className="bg-transparent"
         >
           <Plus size={18} className="mr-2" />
           New Customer
         </Button>
       </div>
 
-      {/* New Customer Form */}
-      {isCreatingNew && (
-        <Card className="p-5 border-border bg-muted/30">
-          <h3 className="font-medium text-foreground mb-4">New Customer Details</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Name *</label>
-              <Input
-                placeholder="Full name"
-                value={newCustomer.name}
-                onChange={(e) => handleNewCustomerChange("name", e.target.value)}
-                className="bg-card border-border"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Phone *</label>
-              <Input
-                placeholder="(555) 123-4567"
-                value={newCustomer.phone}
-                onChange={(e) => handleNewCustomerChange("phone", e.target.value)}
-                className="bg-card border-border"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Email</label>
-              <Input
-                placeholder="email@example.com"
-                value={newCustomer.email}
-                onChange={(e) => handleNewCustomerChange("email", e.target.value)}
-                className="bg-card border-border"
-              />
-            </div>
-          </div>
-        </Card>
-      )}
+      {/* Customer Create Dialog */}
+      <CustomerCreateDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onSuccess={handleCustomerCreated}
+      />
 
       {/* Existing Customers List */}
-      {!isCreatingNew && (
-        <div className="space-y-2">
-          {loading ? (
+      <div className="space-y-2">
+        {loading ? (
             <Card className="p-12 border-border text-center">
               <Loader2 className="mx-auto text-muted-foreground mb-3 animate-spin" size={32} />
               <p className="text-muted-foreground">Loading customers...</p>
@@ -245,13 +202,12 @@ export function CustomerSelectionStep({
             <Card className="p-12 border-border text-center">
               <User className="mx-auto text-muted-foreground mb-3" size={32} />
               <p className="text-muted-foreground">No customers found</p>
-              <Button variant="link" onClick={handleCreateNew} className="mt-2">
+              <Button variant="link" onClick={() => setShowCreateDialog(true)} className="mt-2">
                 Create new customer
               </Button>
             </Card>
           )}
-        </div>
-      )}
+      </div>
     </div>
   )
 }

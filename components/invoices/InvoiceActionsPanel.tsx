@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
 import { Lock, LockOpen, Ban, DollarSign, Printer } from "lucide-react"
 import { AddPaymentDialog } from "./AddPaymentDialog"
@@ -34,6 +35,7 @@ export function InvoiceActionsPanel({
   payrollStartDay,
   onActionComplete,
 }: InvoiceActionsPanelProps) {
+  const { user } = useAuth()
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [reopenDialogOpen, setReopenDialogOpen] = useState(false)
   const [voidDialogOpen, setVoidDialogOpen] = useState(false)
@@ -59,7 +61,7 @@ export function InvoiceActionsPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "close",
-          user_id: 1, // TODO: Get from auth context
+          user_id: user?.id || 1
         }),
       })
 

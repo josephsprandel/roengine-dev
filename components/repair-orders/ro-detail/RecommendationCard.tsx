@@ -12,12 +12,21 @@ interface RecommendationCardProps {
   onApprove: () => void
   onDecline: () => void
   showActions?: boolean
+  onEdit?: () => void
 }
 
 type Urgency = 'OVERDUE' | 'DUE_NOW' | 'COMING_SOON' | null
 
 /**
  * Calculate urgency based on recommended mileage vs current mileage
+ *
+ * For recurring services (e.g., oil change every 8000 miles):
+ * - Assumes last service was performed on schedule
+ * - Calculates overdue from most recent service interval
+ *
+ * For one-time services (e.g., spark plugs at 100,000 miles):
+ * - Assumes service has never been performed
+ * - Calculates overdue from the specified mileage
  */
 function calculateUrgency(
   recommendedMileage: number | null,
@@ -25,11 +34,35 @@ function calculateUrgency(
 ): Urgency {
   if (!recommendedMileage || !currentMileage) return null
 
-  const diff = currentMileage - recommendedMileage
-  if (diff >= 0) return 'OVERDUE'           // Past due
-  if (diff >= -2000) return 'DUE_NOW'       // Within 2k miles
-  if (diff >= -5000) return 'COMING_SOON'   // Within 5k miles
+  // Calculate the most recent service point (handles both recurring and one-time)
+  // For recurring: if interval is 8000 and current is 34000, lastDueAt = 32000
+  // For one-time: if interval is 100000 and current is 114011, lastDueAt = 100000
+  const lastDueAt = Math.floor(currentMileage / recommendedMileage) * recommendedMileage
+  const milesSinceLastDue = currentMileage - lastDueAt
+
+  if (milesSinceLastDue >= 0 && currentMileage >= recommendedMileage) return 'OVERDUE'
+
+  // Calculate miles until next service (could be negative if overdue)
+  const milesUntilDue = recommendedMileage - (currentMileage % recommendedMileage)
+
+  if (milesUntilDue <= 2000) return 'DUE_NOW'       // Within 2k miles
+  if (milesUntilDue <= 5000) return 'COMING_SOON'   // Within 5k miles
   return null
+}
+
+/**
+ * Calculate miles overdue for a service
+ * Uses modulo arithmetic to handle recurring services correctly
+ */
+function calculateMilesOverdue(
+  recommendedMileage: number | null,
+  currentMileage: number | null
+): number {
+  if (!recommendedMileage || !currentMileage) return 0
+
+  // Find the most recent service interval point
+  const lastDueAt = Math.floor(currentMileage / recommendedMileage) * recommendedMileage
+  return currentMileage - lastDueAt
 }
 
 /**
@@ -45,9 +78,11 @@ export function RecommendationCard({
   currentMileage,
   onApprove,
   onDecline,
-  showActions = true
+  showActions = true,
+  onEdit
 }: RecommendationCardProps) {
   const urgency = calculateUrgency(recommendation.recommended_at_mileage, currentMileage)
+  const milesOverdue = calculateMilesOverdue(recommendation.recommended_at_mileage, currentMileage)
 
   // Urgency badge styles
   const urgencyBadges = {
@@ -92,100 +127,81 @@ export function RecommendationCard({
   const partsCount = recommendation.parts_items.length
 
   return (
-    <Card className={`p-4 border-border border-l-4 ${borderClass}`}>
+    <Card
+      className={`p-1.5 gap-1.5 border-border border-l-4 ${borderClass} ${onEdit ? 'cursor-pointer hover:bg-muted/30 transition-colors' : ''}`}
+      onClick={onEdit}
+    >
       {/* Header */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
-            <h4 className="font-semibold text-foreground">{recommendation.service_title}</h4>
-            <Badge variant="outline" className={priorityBadges[recommendation.priority]}>
-              {recommendation.priority.toUpperCase()}
+      <div className="mb-0">
+        <h4 className="font-semibold text-sm text-foreground mb-0">{recommendation.service_title}</h4>
+        <div className="flex items-center gap-1 flex-wrap mb-0">
+          <Badge variant="outline" className={`text-xs ${priorityBadges[recommendation.priority]}`}>
+            {recommendation.priority.toUpperCase()}
+          </Badge>
+          {urgency && (
+            <Badge variant="outline" className={`text-xs ${urgencyBadges[urgency].className}`}>
+              {urgencyBadges[urgency].icon} {urgencyBadges[urgency].label}
             </Badge>
-            {urgency && (
-              <Badge variant="outline" className={urgencyBadges[urgency].className}>
-                {urgencyBadges[urgency].icon} {urgencyBadges[urgency].label}
-              </Badge>
-            )}
-          </div>
-
-          {/* Mileage Info */}
-          {recommendation.recommended_at_mileage && (
-            <div className="text-sm text-muted-foreground mb-2">
-              {currentMileage ? (
-                <>
-                  Due at {formatMileage(recommendation.recommended_at_mileage)} miles
-                  <span className="mx-2">•</span>
-                  Current: {formatMileage(currentMileage)} miles
-                  {urgency === 'OVERDUE' && (
-                    <>
-                      <span className="mx-2">•</span>
-                      <span className="text-red-600 dark:text-red-400 font-medium">
-                        {formatMileage(currentMileage - recommendation.recommended_at_mileage)} miles overdue
-                      </span>
-                    </>
-                  )}
-                </>
-              ) : (
-                <>
-                  Due at {formatMileage(recommendation.recommended_at_mileage)} miles
-                  <span className="mx-2">•</span>
-                  <Badge variant="outline" className="text-xs">Mileage Not Recorded</Badge>
-                </>
-              )}
-            </div>
           )}
         </div>
+
+        {/* Mileage Info */}
+        {recommendation.recommended_at_mileage && (
+          <div className="text-xs text-muted-foreground">
+            {currentMileage ? (
+              <>
+                Every {formatMileage(recommendation.recommended_at_mileage)} mi
+                {urgency === 'OVERDUE' && milesOverdue > 0 && (
+                  <>
+                    <span className="mx-1">•</span>
+                    <span className="text-red-600 dark:text-red-400 font-medium">
+                      {formatMileage(milesOverdue)} mi over
+                    </span>
+                  </>
+                )}
+              </>
+            ) : (
+              <>Every {formatMileage(recommendation.recommended_at_mileage)} mi</>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Reason */}
-      <p className="text-sm text-muted-foreground mb-3">
-        {recommendation.reason}
-      </p>
-
       {/* Cost Breakdown */}
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div className="flex items-center gap-2 text-sm">
-          <Wrench className="h-4 w-4 text-blue-500" />
-          <span className="text-muted-foreground">Labor:</span>
+      <div className="space-y-0 mb-0">
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center gap-1">
+            <Wrench className="h-3 w-3 text-blue-500" />
+            <span className="text-muted-foreground">Labor:</span>
+          </div>
           <span className="font-medium text-foreground">
-            ${laborTotal.toFixed(2)}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            ({recommendation.labor_items.reduce((sum, item) => sum + item.hours, 0)} hrs)
+            ${laborTotal.toFixed(2)} ({recommendation.labor_items.reduce((sum, item) => sum + item.hours, 0)}h)
           </span>
         </div>
-        <div className="flex items-center gap-2 text-sm">
-          <Package className="h-4 w-4 text-green-500" />
-          <span className="text-muted-foreground">Parts:</span>
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center gap-1">
+            <Package className="h-3 w-3 text-green-500" />
+            <span className="text-muted-foreground">Parts:</span>
+          </div>
           <span className="font-medium text-foreground">
             {partsCount} item{partsCount !== 1 ? 's' : ''}
           </span>
-          {partsCount > 0 && (
-            <span className="text-xs text-muted-foreground">(pricing TBD)</span>
-          )}
         </div>
       </div>
 
       {/* Estimated Cost */}
-      <div className="flex items-center justify-between mb-3 pb-3 border-b border-border">
-        <span className="text-sm font-medium text-muted-foreground">Estimated Cost:</span>
-        <span className="text-lg font-semibold text-foreground">
+      <div className="flex items-center justify-between mb-0">
+        <span className="text-xs font-medium text-muted-foreground">Total:</span>
+        <span className="text-base font-semibold text-foreground">
           ${estimatedCost.toFixed(2)}
         </span>
       </div>
 
       {/* Decline History */}
       {recommendation.declined_count > 0 && (
-        <div className="flex items-center gap-2 mb-3 text-sm text-muted-foreground">
-          <AlertCircle className="h-4 w-4" />
-          <span>
-            Previously declined {recommendation.declined_count} time{recommendation.declined_count !== 1 ? 's' : ''}
-          </span>
-          {recommendation.last_declined_at && (
-            <span className="text-xs">
-              (Last: {new Date(recommendation.last_declined_at).toLocaleDateString()})
-            </span>
-          )}
+        <div className="flex items-center gap-1 mb-0 text-xs text-muted-foreground">
+          <AlertCircle className="h-3 w-3" />
+          <span>Declined {recommendation.declined_count}x</span>
         </div>
       )}
 
@@ -193,21 +209,25 @@ export function RecommendationCard({
       {showActions && (
         <div className="flex gap-2">
           <Button
-            onClick={onApprove}
+            onClick={(e) => {
+              e.stopPropagation()
+              onApprove()
+            }}
             size="sm"
-            className="flex-1"
+            className="flex-1 text-xs h-7 px-2"
           >
-            <Check className="h-4 w-4 mr-1" />
-            Approve & Add to RO
+            <Check className="h-3 w-3" />
           </Button>
           <Button
-            onClick={onDecline}
+            onClick={(e) => {
+              e.stopPropagation()
+              onDecline()
+            }}
             size="sm"
             variant="outline"
-            className="flex-1"
+            className="flex-1 text-xs h-7 px-2"
           >
-            <X className="h-4 w-4 mr-1" />
-            Decline
+            <X className="h-3 w-3" />
           </Button>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Edit2, MessageSquare, Phone, Mail, MapPin } from "lucide-react"
+import { formatPhoneNumber } from "@/lib/utils/phone-format"
 
 interface CustomerInfoCardProps {
   customerName: string
@@ -43,12 +44,12 @@ export function CustomerInfoCard({
           <Phone size={16} className="text-accent flex-shrink-0 mt-0.5" />
           <div className="min-w-0 flex-1">
             <p className="text-xs text-muted-foreground">Phone</p>
-            <p className="text-sm font-medium text-foreground">{phonePrimary}</p>
+            <p className="text-sm font-medium text-foreground">{formatPhoneNumber(phonePrimary)}</p>
             {phoneSecondary && (
-              <p className="text-xs text-muted-foreground">Alt: {phoneSecondary}</p>
+              <p className="text-xs text-muted-foreground">Alt: {formatPhoneNumber(phoneSecondary)}</p>
             )}
             {phoneMobile && (
-              <p className="text-xs text-muted-foreground">Mobile: {phoneMobile}</p>
+              <p className="text-xs text-muted-foreground">Mobile: {formatPhoneNumber(phoneMobile)}</p>
             )}
           </div>
         </div>

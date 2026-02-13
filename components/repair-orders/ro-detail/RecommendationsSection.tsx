@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +9,7 @@ import { useRecommendationsManagement } from "../hooks/useRecommendationsManagem
 import { RecommendationCard } from "./RecommendationCard"
 import { ApproveRecommendationDialog } from "./ApproveRecommendationDialog"
 import { DeclineRecommendationDialog } from "./DeclineRecommendationDialog"
+import { EditRecommendationDialog } from "./EditRecommendationDialog"
 import type { Recommendation } from "../hooks/useRecommendationsManagement"
 
 interface RecommendationsSectionProps {
@@ -16,13 +17,17 @@ interface RecommendationsSectionProps {
   workOrderId: number
   currentMileage: number | null
   onRecommendationApproved: () => void
+  onGenerateClick?: () => void
+  onReady?: (reloadFn: () => Promise<void>) => void
 }
 
 export function RecommendationsSection({
   vehicleId,
   workOrderId,
   currentMileage,
-  onRecommendationApproved
+  onRecommendationApproved,
+  onGenerateClick,
+  onReady
 }: RecommendationsSectionProps) {
   const {
     awaitingRecommendations,
@@ -32,9 +37,17 @@ export function RecommendationsSection({
     reloadRecommendations
   } = useRecommendationsManagement({ vehicleId })
 
+  // Expose reload function to parent component on mount
+  useEffect(() => {
+    if (onReady) {
+      onReady(reloadRecommendations)
+    }
+  }, [onReady, reloadRecommendations])
+
   const [approvedExpanded, setApprovedExpanded] = useState(false)
   const [approveDialogOpen, setApproveDialogOpen] = useState(false)
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [selectedRecommendation, setSelectedRecommendation] = useState<Recommendation | null>(null)
 
   // Handle approve click
@@ -49,6 +62,12 @@ export function RecommendationsSection({
     setDeclineDialogOpen(true)
   }
 
+  // Handle edit click
+  const handleEditClick = (recommendation: Recommendation) => {
+    setSelectedRecommendation(recommendation)
+    setEditDialogOpen(true)
+  }
+
   // Handle approve success
   const handleApproved = () => {
     reloadRecommendations()
@@ -57,6 +76,11 @@ export function RecommendationsSection({
 
   // Handle decline success
   const handleDeclined = () => {
+    reloadRecommendations()
+  }
+
+  // Handle edit success
+  const handleEdited = () => {
     reloadRecommendations()
   }
 
@@ -100,7 +124,7 @@ export function RecommendationsSection({
           <p className="text-xs text-muted-foreground mb-4">
             Generate AI-powered maintenance recommendations based on the vehicle's manual and current mileage.
           </p>
-          <Button size="sm" variant="outline">
+          <Button size="sm" variant="outline" onClick={onGenerateClick}>
             <Sparkles className="h-4 w-4 mr-2" />
             Generate Recommendations
           </Button>
@@ -127,7 +151,7 @@ export function RecommendationsSection({
 
         {/* Awaiting Approval Section */}
         {awaitingRecommendations.length > 0 ? (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {awaitingRecommendations.map((recommendation) => (
               <RecommendationCard
                 key={recommendation.id}
@@ -135,6 +159,7 @@ export function RecommendationsSection({
                 currentMileage={currentMileage}
                 onApprove={() => handleApproveClick(recommendation)}
                 onDecline={() => handleDeclineClick(recommendation)}
+                onEdit={() => handleEditClick(recommendation)}
                 showActions={true}
               />
             ))}
@@ -163,7 +188,7 @@ export function RecommendationsSection({
             </button>
 
             {approvedExpanded && (
-              <div className="mt-3 space-y-3">
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {approvedRecommendations.map((recommendation) => (
                   <RecommendationCard
                     key={recommendation.id}
@@ -194,6 +219,13 @@ export function RecommendationsSection({
         onOpenChange={setDeclineDialogOpen}
         recommendation={selectedRecommendation}
         onDeclined={handleDeclined}
+      />
+
+      <EditRecommendationDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        recommendation={selectedRecommendation}
+        onEdited={handleEdited}
       />
     </>
   )

@@ -5,11 +5,10 @@ import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { ArrowLeft, Edit2, Mail, Phone, MessageSquare, MapPin, Calendar, DollarSign, Loader2 } from "lucide-react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ArrowLeft, Edit2, Mail, Phone, MessageSquare, MapPin, Calendar, Loader2, ChevronRight, FileText } from "lucide-react"
 import { VehicleManagement } from "./vehicle-management"
+import { CustomerCreateDialog } from "./customer-create-dialog"
+import { formatPhoneNumber } from "@/lib/utils/phone-format"
 
 interface Customer {
   id: string
@@ -26,6 +25,7 @@ interface Customer {
   state: string | null
   zip: string | null
   customer_type: string
+  notes: string | null
   is_active: boolean
   created_at: string
 }
@@ -36,28 +36,15 @@ export function CustomerProfile({ customerId, onClose }: { customerId: string; o
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editOpen, setEditOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
-  const [formData, setFormData] = useState({
-    customer_name: "",
-    first_name: "",
-    last_name: "",
-    phone_primary: "",
-    phone_secondary: "",
-    phone_mobile: "",
-    email: "",
-    address_line1: "",
-    address_line2: "",
-    city: "",
-    state: "",
-    zip: "",
-  })
+  const [workOrders, setWorkOrders] = useState<any[]>([])
+  const [woLoading, setWoLoading] = useState(true)
 
   useEffect(() => {
     const fetchCustomer = async () => {
       setLoading(true)
       setError(null)
-      
+
       try {
         const response = await fetch(`/api/customers/${customerId}`)
         if (!response.ok) {
@@ -72,8 +59,24 @@ export function CustomerProfile({ customerId, onClose }: { customerId: string; o
       }
     }
 
+    const fetchWorkOrders = async () => {
+      setWoLoading(true)
+      try {
+        const response = await fetch(`/api/work-orders?customer_id=${customerId}`)
+        if (response.ok) {
+          const data = await response.json()
+          setWorkOrders(data.work_orders || [])
+        }
+      } catch {
+        // Non-critical, just leave empty
+      } finally {
+        setWoLoading(false)
+      }
+    }
+
     if (customerId) {
       fetchCustomer()
+      fetchWorkOrders()
     }
   }, [customerId])
 
@@ -82,74 +85,17 @@ export function CustomerProfile({ customerId, onClose }: { customerId: string; o
     setTimeout(() => setToast(null), 3500)
   }
 
-  const openEdit = () => {
-    if (!customer) return
-    setFormData({
-      customer_name: customer.customer_name || "",
-      first_name: customer.first_name || "",
-      last_name: customer.last_name || "",
-      phone_primary: customer.phone_primary || "",
-      phone_secondary: customer.phone_secondary || "",
-      phone_mobile: customer.phone_mobile || "",
-      email: customer.email || "",
-      address_line1: customer.address_line1 || "",
-      address_line2: customer.address_line2 || "",
-      city: customer.city || "",
-      state: customer.state || "",
-      zip: customer.zip || "",
-    })
-    setEditOpen(true)
-  }
-
-  const handleFormChange = (field: keyof typeof formData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-  }
-
-  const handleSave = async () => {
-    if (!customer) return
-    setSaving(true)
-
-    const previousCustomer = customer
-    const updatedCustomer = {
-      ...customer,
-      ...formData,
-    }
-    setCustomer(updatedCustomer)
-
+  const handleEditSuccess = async () => {
+    // Reload customer data after successful edit
     try {
-      const response = await fetch(`/api/customers/${customer.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customer_name: formData.customer_name,
-          first_name: formData.first_name || null,
-          last_name: formData.last_name || null,
-          phone_primary: formData.phone_primary,
-          phone_secondary: formData.phone_secondary || null,
-          phone_mobile: formData.phone_mobile || null,
-          email: formData.email || null,
-          address_line1: formData.address_line1 || null,
-          address_line2: formData.address_line2 || null,
-          city: formData.city || null,
-          state: formData.state || null,
-          zip: formData.zip || null,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(errorText || "Failed to update customer")
+      const response = await fetch(`/api/customers/${customerId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setCustomer(data.customer)
+        showToast("Customer updated successfully", "success")
       }
-
-      const data = await response.json()
-      setCustomer(data.customer)
-      setEditOpen(false)
-      showToast("Customer updated successfully", "success")
-    } catch (err: any) {
-      setCustomer(previousCustomer)
-      showToast(err.message || "Failed to update customer", "error")
-    } finally {
-      setSaving(false)
+    } catch (err) {
+      console.error('Failed to reload customer:', err)
     }
   }
 
@@ -200,28 +146,30 @@ export function CustomerProfile({ customerId, onClose }: { customerId: string; o
             </div>
           </div>
         </div>
-        <Button size="icon" className="gap-2" onClick={openEdit}>
-          <Edit2 size={18} />
-        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Contact Information */}
-          <Card className="p-6 border-border">
-            <h2 className="text-lg font-semibold text-foreground mb-4">Contact Information</h2>
+          <Card className="p-6 border-border relative">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-foreground">Contact Information</h2>
+              <Button size="icon" variant="ghost" onClick={() => setEditOpen(true)} className="text-muted-foreground hover:text-foreground">
+                <Edit2 size={16} />
+              </Button>
+            </div>
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <Phone size={18} className="text-accent flex-shrink-0" />
                 <div>
                   <p className="text-sm text-muted-foreground">Primary Phone</p>
-                  <p className="font-medium text-foreground">{customer.phone_primary}</p>
+                  <p className="font-medium text-foreground">{formatPhoneNumber(customer.phone_primary)}</p>
                   {customer.phone_secondary && (
-                    <p className="text-sm text-muted-foreground">Secondary: {customer.phone_secondary}</p>
+                    <p className="text-sm text-muted-foreground">Secondary: {formatPhoneNumber(customer.phone_secondary)}</p>
                   )}
                   {customer.phone_mobile && (
-                    <p className="text-sm text-muted-foreground">Mobile: {customer.phone_mobile}</p>
+                    <p className="text-sm text-muted-foreground">Mobile: {formatPhoneNumber(customer.phone_mobile)}</p>
                   )}
                 </div>
               </div>
@@ -262,6 +210,77 @@ export function CustomerProfile({ customerId, onClose }: { customerId: string; o
 
           {/* Vehicles */}
           <VehicleManagement customerId={customerId} />
+
+          {/* Repair Order History */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-foreground">Repair Orders</h2>
+            </div>
+
+            {woLoading ? (
+              <Card className="p-8 border-border text-center">
+                <Loader2 className="mx-auto text-muted-foreground mb-2 animate-spin" size={24} />
+                <p className="text-sm text-muted-foreground">Loading repair orders...</p>
+              </Card>
+            ) : workOrders.length > 0 ? (
+              <div className="space-y-3">
+                {workOrders.map((wo) => {
+                  const statusColor: Record<string, string> = {
+                    estimate: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+                    approved: "bg-purple-500/10 text-purple-700 dark:text-purple-400",
+                    in_progress: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+                    completed: "bg-green-500/10 text-green-700 dark:text-green-400",
+                  }
+                  const statusLabel: Record<string, string> = {
+                    estimate: "Estimate",
+                    approved: "Approved",
+                    in_progress: "In Progress",
+                    completed: "Completed",
+                  }
+                  const paymentColor =
+                    wo.payment_status === "paid" ? "bg-green-500/20 text-green-700 dark:text-green-400"
+                    : wo.payment_status === "partial" ? "bg-amber-500/20 text-amber-700 dark:text-amber-400"
+                    : "bg-muted text-muted-foreground"
+
+                  return (
+                    <Card
+                      key={wo.id}
+                      className="p-4 border-border cursor-pointer hover:bg-muted/30 transition-colors group"
+                      onClick={() => router.push(`/repair-orders/${wo.id}`)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-bold text-foreground">{wo.ro_number}</span>
+                            <Badge variant="outline" className={statusColor[wo.state] || "bg-muted text-muted-foreground"}>
+                              {statusLabel[wo.state] || wo.state}
+                            </Badge>
+                            <Badge variant="outline" className={paymentColor}>
+                              {wo.payment_status === "paid" ? "Paid" : wo.payment_status === "partial" ? "Partial" : "Unpaid"}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <span>{wo.year} {wo.make} {wo.model}</span>
+                            <span>${parseFloat(wo.total).toFixed(2)}</span>
+                            <span>{new Date(wo.date_opened).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="text-muted-foreground group-hover:text-accent transition-colors flex-shrink-0" size={20} />
+                      </div>
+                    </Card>
+                  )
+                })}
+              </div>
+            ) : (
+              <Card className="p-8 border-border text-center">
+                <FileText className="mx-auto text-muted-foreground mb-2" size={24} />
+                <p className="text-muted-foreground mb-4">No repair orders yet</p>
+                <Button onClick={() => router.push(`/repair-orders/new?customerId=${customer.id}`)} variant="outline" size="sm">
+                  Create First RO
+                </Button>
+              </Card>
+            )}
+          </div>
 
         </div>
 
@@ -307,95 +326,13 @@ export function CustomerProfile({ customerId, onClose }: { customerId: string; o
         </div>
       )}
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Customer</DialogTitle>
-          </DialogHeader>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input
-                value={formData.customer_name}
-                onChange={(e) => handleFormChange("customer_name", e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input
-                value={formData.email}
-                onChange={(e) => handleFormChange("email", e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Primary Phone</Label>
-              <Input
-                value={formData.phone_primary}
-                onChange={(e) => handleFormChange("phone_primary", e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Secondary Phone</Label>
-              <Input
-                value={formData.phone_secondary}
-                onChange={(e) => handleFormChange("phone_secondary", e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Mobile Phone</Label>
-              <Input
-                value={formData.phone_mobile}
-                onChange={(e) => handleFormChange("phone_mobile", e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Address Line 1</Label>
-              <Input
-                value={formData.address_line1}
-                onChange={(e) => handleFormChange("address_line1", e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Address Line 2</Label>
-              <Input
-                value={formData.address_line2}
-                onChange={(e) => handleFormChange("address_line2", e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>City</Label>
-              <Input
-                value={formData.city}
-                onChange={(e) => handleFormChange("city", e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>State</Label>
-              <Input
-                value={formData.state}
-                onChange={(e) => handleFormChange("state", e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Zip</Label>
-              <Input
-                value={formData.zip}
-                onChange={(e) => handleFormChange("zip", e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Edit Customer Dialog */}
+      <CustomerCreateDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSuccess={handleEditSuccess}
+        customer={customer || undefined}
+      />
     </div>
   )
 }

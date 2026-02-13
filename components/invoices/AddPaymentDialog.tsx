@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useAuth } from "@/contexts/auth-context"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,6 +29,7 @@ export function AddPaymentDialog({
   ccSurchargeRate,
   onPaymentAdded,
 }: AddPaymentDialogProps) {
+  const { user } = useAuth()
   const [amount, setAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "check" | "ach">("cash")
   const [notes, setNotes] = useState("")
@@ -72,7 +74,7 @@ export function AddPaymentDialog({
           amount: parseFloat(amount),
           payment_method: paymentMethod,
           notes: notes.trim() || null,
-          user_id: 1, // TODO: Get from auth context
+          user_id: user?.id || 1
         }),
       })
 

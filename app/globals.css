@@ -222,4 +222,19 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Make placeholder text lighter and italicized */
+  ::placeholder {
+    @apply text-muted-foreground/50 italic;
+  }
+
+  /* Textarea placeholders */
+  textarea::placeholder {
+    @apply text-muted-foreground/50 italic;
+  }
+
+  /* Input placeholders */
+  input::placeholder {
+    @apply text-muted-foreground/50 italic;
+  }
 }

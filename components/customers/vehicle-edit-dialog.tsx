@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Loader2 } from "lucide-react"
 
 interface Vehicle {
   id: string
@@ -31,33 +32,20 @@ interface Vehicle {
 interface VehicleEditDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  vehicle: Vehicle | null
-  onSuccess: (updatedVehicle: Vehicle) => void
+  vehicle?: Vehicle | null       // If provided, dialog is in edit mode
+  customerId?: string            // Required for create mode
+  onSuccess: (vehicle?: Vehicle) => void
 }
 
-export function VehicleEditDialog({ open, onOpenChange, vehicle, onSuccess }: VehicleEditDialogProps) {
-  const [saving, setSaving] = useState(false)
+export function VehicleEditDialog({ open, onOpenChange, vehicle, customerId, onSuccess }: VehicleEditDialogProps) {
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [formData, setFormData] = useState({
-    vin: "",
-    year: "",
-    make: "",
-    model: "",
-    submodel: "",
-    engine: "",
-    transmission: "",
-    color: "",
-    license_plate: "",
-    license_plate_state: "",
-    mileage: "",
-    manufacture_date: "",
-    notes: "",
-  })
 
-  // Reset form when vehicle changes
-  useEffect(() => {
+  const isEditMode = !!vehicle
+
+  const getInitialFormData = () => {
     if (vehicle) {
-      setFormData({
+      return {
         vin: vehicle.vin || "",
         year: vehicle.year?.toString() || "",
         make: vehicle.make || "",
@@ -71,9 +59,31 @@ export function VehicleEditDialog({ open, onOpenChange, vehicle, onSuccess }: Ve
         mileage: vehicle.mileage?.toString() || "",
         manufacture_date: vehicle.manufacture_date || "",
         notes: vehicle.notes || "",
-      })
-      setError(null)
+      }
     }
+    return {
+      vin: "",
+      year: new Date().getFullYear().toString(),
+      make: "",
+      model: "",
+      submodel: "",
+      engine: "",
+      transmission: "",
+      color: "",
+      license_plate: "",
+      license_plate_state: "",
+      mileage: "",
+      manufacture_date: "",
+      notes: "",
+    }
+  }
+
+  const [formData, setFormData] = useState(getInitialFormData())
+
+  // Reset form when vehicle changes
+  useEffect(() => {
+    setFormData(getInitialFormData())
+    setError(null)
   }, [vehicle])
 
   const handleChange = (field: keyof typeof formData, value: string) => {
@@ -81,51 +91,76 @@ export function VehicleEditDialog({ open, onOpenChange, vehicle, onSuccess }: Ve
     setError(null)
   }
 
-  const handleSave = async () => {
-    if (!vehicle) return
-    
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
     // Validate required fields
     if (!formData.vin.trim() || !formData.year.trim() || !formData.make.trim() || !formData.model.trim()) {
       setError("VIN, Year, Make, and Model are required")
       return
     }
 
-    setSaving(true)
+    setLoading(true)
     setError(null)
 
     try {
-      const response = await fetch(`/api/vehicles/${vehicle.id}`, {
-        method: "PATCH",
+      const payload = {
+        ...(isEditMode ? {} : { customer_id: customerId }),
+        vin: formData.vin.toUpperCase().trim(),
+        year: parseInt(formData.year),
+        make: formData.make.trim(),
+        model: formData.model.trim(),
+        submodel: formData.submodel.trim() || null,
+        engine: formData.engine.trim() || null,
+        transmission: formData.transmission.trim() || null,
+        color: formData.color.trim() || null,
+        license_plate: formData.license_plate.trim() || null,
+        license_plate_state: formData.license_plate_state.toUpperCase().trim() || null,
+        mileage: formData.mileage ? parseInt(formData.mileage) : null,
+        manufacture_date: formData.manufacture_date.trim() || null,
+        notes: formData.notes.trim() || null,
+      }
+
+      const url = isEditMode ? `/api/vehicles/${vehicle.id}` : "/api/vehicles"
+      const method = isEditMode ? "PATCH" : "POST"
+
+      const response = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          vin: formData.vin.trim(),
-          year: parseInt(formData.year),
-          make: formData.make.trim(),
-          model: formData.model.trim(),
-          submodel: formData.submodel.trim() || null,
-          engine: formData.engine.trim() || null,
-          transmission: formData.transmission.trim() || null,
-          color: formData.color.trim() || null,
-          license_plate: formData.license_plate.trim() || null,
-          license_plate_state: formData.license_plate_state.trim() || null,
-          mileage: formData.mileage ? parseInt(formData.mileage) : null,
-          manufacture_date: formData.manufacture_date.trim() || null,
-          notes: formData.notes.trim() || null,
-        }),
+        body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to update vehicle")
+        throw new Error(errorData.error || `Failed to ${isEditMode ? 'update' : 'create'} vehicle`)
       }
 
       const data = await response.json()
       onSuccess(data.vehicle)
       onOpenChange(false)
+
+      // Reset form only in create mode
+      if (!isEditMode) {
+        setFormData({
+          vin: "",
+          year: new Date().getFullYear().toString(),
+          make: "",
+          model: "",
+          submodel: "",
+          engine: "",
+          transmission: "",
+          color: "",
+          license_plate: "",
+          license_plate_state: "",
+          mileage: "",
+          manufacture_date: "",
+          notes: "",
+        })
+      }
     } catch (err: any) {
       setError(err.message)
     } finally {
-      setSaving(false)
+      setLoading(false)
     }
   }
 
@@ -133,150 +168,203 @@ export function VehicleEditDialog({ open, onOpenChange, vehicle, onSuccess }: Ve
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Vehicle</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Edit Vehicle' : 'Add New Vehicle'}</DialogTitle>
         </DialogHeader>
 
-        {error && (
-          <div className="bg-destructive/10 text-destructive text-sm px-3 py-2 rounded-md">
-            {error}
-          </div>
-        )}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {error && (
+            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>VIN *</Label>
-            <Input
-              value={formData.vin}
-              onChange={(e) => handleChange("vin", e.target.value)}
-              placeholder="17-character VIN"
-              className="font-mono"
+          {/* VIN & Basic Info */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-sm text-muted-foreground">Vehicle Information</h3>
+
+            <div>
+              <Label htmlFor="vin">VIN (Vehicle Identification Number) *</Label>
+              <Input
+                id="vin"
+                value={formData.vin}
+                onChange={(e) => handleChange("vin", e.target.value.toUpperCase())}
+                placeholder="1HGBH41JXMN109186"
+                maxLength={17}
+                required
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground mt-1">17 characters</p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="year">Year *</Label>
+                <Input
+                  id="year"
+                  type="number"
+                  value={formData.year}
+                  onChange={(e) => handleChange("year", e.target.value)}
+                  min={1900}
+                  max={new Date().getFullYear() + 2}
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="make">Make *</Label>
+                <Input
+                  id="make"
+                  value={formData.make}
+                  onChange={(e) => handleChange("make", e.target.value)}
+                  placeholder="Honda"
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="model">Model *</Label>
+                <Input
+                  id="model"
+                  value={formData.model}
+                  onChange={(e) => handleChange("model", e.target.value)}
+                  placeholder="Civic"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="submodel">Submodel / Trim</Label>
+                <Input
+                  id="submodel"
+                  value={formData.submodel}
+                  onChange={(e) => handleChange("submodel", e.target.value)}
+                  placeholder="EX, LX, Sport, etc."
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="color">Color</Label>
+                <Input
+                  id="color"
+                  value={formData.color}
+                  onChange={(e) => handleChange("color", e.target.value)}
+                  placeholder="Silver"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Engine & Transmission */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-sm text-muted-foreground">Technical Details</h3>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="engine">Engine</Label>
+                <Input
+                  id="engine"
+                  value={formData.engine}
+                  onChange={(e) => handleChange("engine", e.target.value)}
+                  placeholder="2.0L 4-Cyl"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="transmission">Transmission</Label>
+                <Input
+                  id="transmission"
+                  value={formData.transmission}
+                  onChange={(e) => handleChange("transmission", e.target.value)}
+                  placeholder="Automatic, Manual, CVT"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* License & Mileage */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-sm text-muted-foreground">Registration & Mileage</h3>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2">
+                <Label htmlFor="license_plate">License Plate</Label>
+                <Input
+                  id="license_plate"
+                  value={formData.license_plate}
+                  onChange={(e) => handleChange("license_plate", e.target.value.toUpperCase())}
+                  placeholder="ABC-1234"
+                  className="font-mono"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="license_plate_state">State</Label>
+                <Input
+                  id="license_plate_state"
+                  value={formData.license_plate_state}
+                  onChange={(e) => handleChange("license_plate_state", e.target.value.toUpperCase())}
+                  placeholder="AR"
+                  maxLength={2}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="mileage">Current Mileage</Label>
+                <Input
+                  id="mileage"
+                  type="number"
+                  value={formData.mileage}
+                  onChange={(e) => handleChange("mileage", e.target.value)}
+                  placeholder="50000"
+                  min={0}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="manufacture_date">Production Date</Label>
+                <Input
+                  id="manufacture_date"
+                  type="month"
+                  value={formData.manufacture_date}
+                  onChange={(e) => handleChange("manufacture_date", e.target.value)}
+                  placeholder="YYYY-MM"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <Label htmlFor="notes">Notes</Label>
+            <Textarea
+              id="notes"
+              value={formData.notes}
+              onChange={(e) => handleChange("notes", e.target.value)}
+              placeholder="Additional vehicle information..."
+              rows={3}
             />
           </div>
 
-          <div className="space-y-2">
-            <Label>Year *</Label>
-            <Input
-              type="number"
-              value={formData.year}
-              onChange={(e) => handleChange("year", e.target.value)}
-              placeholder="2024"
-              min={1900}
-              max={2100}
-            />
+          {/* Actions */}
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={loading}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isEditMode ? 'Save Changes' : 'Add Vehicle'}
+            </Button>
           </div>
-
-          <div className="space-y-2">
-            <Label>Make *</Label>
-            <Input
-              value={formData.make}
-              onChange={(e) => handleChange("make", e.target.value)}
-              placeholder="Honda"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Model *</Label>
-            <Input
-              value={formData.model}
-              onChange={(e) => handleChange("model", e.target.value)}
-              placeholder="Accord"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Trim/Submodel</Label>
-            <Input
-              value={formData.submodel}
-              onChange={(e) => handleChange("submodel", e.target.value)}
-              placeholder="Sport, LX, etc."
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Engine</Label>
-            <Input
-              value={formData.engine}
-              onChange={(e) => handleChange("engine", e.target.value)}
-              placeholder="2.0L Turbo I4"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Transmission</Label>
-            <Input
-              value={formData.transmission}
-              onChange={(e) => handleChange("transmission", e.target.value)}
-              placeholder="Automatic, Manual, CVT"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Mileage</Label>
-            <Input
-              type="number"
-              value={formData.mileage}
-              onChange={(e) => handleChange("mileage", e.target.value)}
-              placeholder="45000"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>License Plate</Label>
-            <Input
-              value={formData.license_plate}
-              onChange={(e) => handleChange("license_plate", e.target.value)}
-              placeholder="ABC-1234"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>State</Label>
-            <Input
-              value={formData.license_plate_state}
-              onChange={(e) => handleChange("license_plate_state", e.target.value)}
-              placeholder="TX"
-              maxLength={2}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Color</Label>
-            <Input
-              value={formData.color}
-              onChange={(e) => handleChange("color", e.target.value)}
-              placeholder="Silver"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Production Date</Label>
-            <Input
-              type="month"
-              value={formData.manufacture_date}
-              onChange={(e) => handleChange("manufacture_date", e.target.value)}
-              placeholder="YYYY-MM"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Notes</Label>
-          <Textarea
-            value={formData.notes}
-            onChange={(e) => handleChange("notes", e.target.value)}
-            placeholder="Any additional notes about this vehicle..."
-            rows={3}
-          />
-        </div>
-
-        <div className="flex justify-end gap-2 mt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : "Save Changes"}
-          </Button>
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
   )

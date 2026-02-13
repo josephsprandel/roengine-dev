@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { useAuth } from "@/contexts/auth-context"
 import { Pagination, PaginationInfo } from "@/components/ui/pagination"
 import { CustomerCreateDialog } from "./customer-create-dialog"
+import { formatPhoneNumber } from "@/lib/utils/phone-format"
 
 interface Customer {
   id: string
@@ -182,7 +183,7 @@ export function CustomerSearch({ onSelectCustomer }: { onSelectCustomer?: (id: s
                       <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                         <span className="flex items-center gap-1">
                           <Phone size={14} />
-                          {customer.phone_primary}
+                          {formatPhoneNumber(customer.phone_primary)}
                         </span>
                         {customer.email && (
                           <span className="flex items-center gap-1">
@@ -202,9 +203,9 @@ export function CustomerSearch({ onSelectCustomer }: { onSelectCustomer?: (id: s
                     </div>
                     {(customer.phone_secondary || customer.phone_mobile) && (
                       <div className="text-xs text-muted-foreground">
-                        {customer.phone_secondary && `Secondary: ${customer.phone_secondary}`}
+                        {customer.phone_secondary && `Secondary: ${formatPhoneNumber(customer.phone_secondary)}`}
                         {customer.phone_secondary && customer.phone_mobile && " • "}
-                        {customer.phone_mobile && `Mobile: ${customer.phone_mobile}`}
+                        {customer.phone_mobile && `Mobile: ${formatPhoneNumber(customer.phone_mobile)}`}
                       </div>
                     )}
                   </div>

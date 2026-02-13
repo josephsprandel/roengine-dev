@@ -35,15 +35,22 @@ interface UseAIRecommendationsReturn {
   cancelVariantSelection: () => void
 }
 
+interface UseAIRecommendationsOptions {
+  workOrder: WorkOrder | null
+  onRecommendationsSaved?: () => void
+}
+
 /**
  * Hook: useAIRecommendations
  *
  * Extracts all AI maintenance recommendation logic from ro-detail-view.
  * Handles fetching recommendations, multi-variant vehicles, and saving to database.
  *
- * @param workOrder - The current work order (or null if not loaded)
+ * @param options - Configuration object
+ * @param options.workOrder - The current work order (or null if not loaded)
+ * @param options.onRecommendationsSaved - Callback to reload recommendations after saving
  */
-export function useAIRecommendations(workOrder: WorkOrder | null): UseAIRecommendationsReturn {
+export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseAIRecommendationsOptions): UseAIRecommendationsReturn {
   // AI Recommendation states
   const [dialogOpen, setDialogOpen] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
@@ -109,21 +116,11 @@ export function useAIRecommendations(workOrder: WorkOrder | null): UseAIRecommen
       console.log('[DEBUG] Save successful:', saveData)
       console.log('[DEBUG] Saved recommendation IDs:', saveData.recommendation_ids)
 
-      /**
-       * TODO: Refresh recommendations list on the page
-       *
-       * After saving, we should refresh the vehicle_recommendations query
-       * to show the newly added recommendations in the UI.
-       *
-       * Implementation ideas:
-       * 1. Add a recommendations section to this page
-       * 2. Query: SELECT * FROM vehicle_recommendations WHERE vehicle_id = ?
-       * 3. Show with approve/decline buttons
-       * 4. On approve: INSERT INTO work_order_items
-       *
-       * For now: Recommendations are saved but not displayed on this page.
-       * Service advisors can view them in the vehicle history or recommendations tab.
-       */
+      // Trigger recommendations reload in the UI
+      if (onRecommendationsSaved) {
+        console.log('[DEBUG] Triggering recommendations reload')
+        onRecommendationsSaved()
+      }
 
     } catch (error) {
       console.error('[DEBUG] Failed to save recommendations:', error)

@@ -2,41 +2,32 @@
 
 import React from "react"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   ArrowLeft,
-  Edit2,
-  Save,
-  X,
   Plus,
   Printer,
-  MessageSquare,
-  Phone,
   Check,
   Clock,
   AlertCircle,
-  ChevronRight,
-  User,
   Loader2,
   Sparkles,
   CheckCircle,
   FileText,
-  Mail,
-  MapPin,
-  Car,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
 import type { ServiceData, LineItem } from "./ro-creation-wizard"
 import { EditableServiceCard, createLineItem } from "./editable-service-card"
 import type { LineItemCategory } from "./editable-service-card"
 import { PartsSelectionModal } from "./parts-selection-modal"
 import { VehicleEditDialog } from "@/components/customers/vehicle-edit-dialog"
+import { CustomerCreateDialog } from "@/components/customers/customer-create-dialog"
 import { useAIRecommendations } from "./hooks/useAIRecommendations"
+import { usePartsGeneration } from "./hooks/usePartsGeneration"
 import { useServiceManagement } from "./hooks/useServiceManagement"
 import { CustomerInfoCard } from "./ro-detail/CustomerInfoCard"
 import { VehicleInfoCard } from "./ro-detail/VehicleInfoCard"
@@ -215,18 +206,6 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   // Customer and Vehicle edit states
   const [customerEditOpen, setCustomerEditOpen] = useState(false)
   const [vehicleEditOpen, setVehicleEditOpen] = useState(false)
-  const [customerFormData, setCustomerFormData] = useState({
-    customer_name: "",
-    phone_primary: "",
-    phone_secondary: "",
-    phone_mobile: "",
-    email: "",
-    address_line1: "",
-    address_line2: "",
-    city: "",
-    state: "",
-    zip: "",
-  })
   
   const handleSave = useCallback(() => {
     setIsEditing(false)
@@ -236,6 +215,9 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     setToast({ message, type })
     setTimeout(() => setToast(null), 3500)
   }, [])
+
+  // Ref to store recommendations reload function
+  const reloadRecommendationsRef = useRef<(() => Promise<void>) | null>(null)
 
   // Service Management hook - handles services CRUD, drag & drop, expanded state
   const {
@@ -291,7 +273,33 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   }, [totals, invoiceSettings])
 
   // AI Recommendations hook
-  const aiRecommendations = useAIRecommendations(workOrder)
+  const aiRecommendations = useAIRecommendations({
+    workOrder,
+    onRecommendationsSaved: () => {
+      // Reload recommendations after AI saves them
+      if (reloadRecommendationsRef.current) {
+        reloadRecommendationsRef.current()
+      }
+    }
+  })
+
+  // Parts Generation hook
+  const partsGeneration = usePartsGeneration(
+    aiRecommendations.selectedAiServices,
+    workOrder ? {
+      year: workOrder.year,
+      make: workOrder.make,
+      model: workOrder.model,
+      vin: workOrder.vin,
+      vehicle_id: workOrder.vehicle_id
+    } : null,
+    () => {
+      // On save complete: close AI dialog and refresh recommendations
+      aiRecommendations.setDialogOpen(false)
+      // Recommendations will be refreshed by RecommendationsSection component
+    },
+    showToast
+  )
 
   const updateStatus = useCallback(
     async (nextStatus: string, options?: { successMessage?: string }) => {
@@ -354,59 +362,19 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     await updateStatus("cancelled", { successMessage: "Repair order cancelled" })
   }, [workOrder, updateStatus])
 
-  const handleOpenCustomerEdit = useCallback(() => {
-    if (!workOrder) return
-    setCustomerFormData({
-      customer_name: workOrder.customer_name || "",
-      phone_primary: workOrder.phone_primary || "",
-      phone_secondary: workOrder.phone_secondary ?? "",
-      phone_mobile: workOrder.phone_mobile ?? "",
-      email: workOrder.email ?? "",
-      address_line1: workOrder.address_line1 ?? "",
-      address_line2: workOrder.address_line2 ?? "",
-      city: workOrder.city ?? "",
-      state: workOrder.state ?? "",
-      zip: workOrder.zip ?? "",
-    })
-    setCustomerEditOpen(true)
-  }, [workOrder])
-
-  const handleSaveCustomer = useCallback(async () => {
-    if (!workOrder) return
-    const previousWorkOrder = workOrder
-    
-    // Optimistically update
-    setWorkOrder({ ...workOrder, ...customerFormData })
-    
+  const handleCustomerEditSuccess = useCallback(async () => {
+    // Re-fetch work order to get updated customer data
     try {
-      const response = await fetch(`/api/customers/${workOrder.customer_id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customer_name: customerFormData.customer_name,
-          phone_primary: customerFormData.phone_primary,
-          phone_secondary: customerFormData.phone_secondary || null,
-          phone_mobile: customerFormData.phone_mobile || null,
-          email: customerFormData.email || null,
-          address_line1: customerFormData.address_line1 || null,
-          address_line2: customerFormData.address_line2 || null,
-          city: customerFormData.city || null,
-          state: customerFormData.state || null,
-          zip: customerFormData.zip || null,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to update customer")
+      const woResponse = await fetch(`/api/work-orders/${roId}`)
+      if (woResponse.ok) {
+        const woData = await woResponse.json()
+        setWorkOrder(woData.work_order)
       }
-
-      setCustomerEditOpen(false)
       showToast("Customer updated successfully", "success")
-    } catch (err: any) {
-      setWorkOrder(previousWorkOrder)
-      showToast(err.message || "Failed to update customer", "error")
+    } catch {
+      showToast("Customer updated, but failed to refresh data", "error")
     }
-  }, [workOrder, customerFormData, showToast])
+  }, [roId, showToast])
 
   const handleVehicleUpdateSuccess = useCallback((updatedVehicle: any) => {
     if (!workOrder) return
@@ -535,11 +503,11 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   const isCancelled = workOrder.state === "cancelled"
 
   // Parts Generation Loader Component
-  function PartsGenerationLoader({ 
-    isOpen, 
-    currentStep 
-  }: { 
-    isOpen: boolean; 
+  function PartsGenerationLoader({
+    isOpen,
+    currentStep
+  }: {
+    isOpen: boolean;
     currentStep: string;
   }) {
     return (
@@ -596,7 +564,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           phoneMobile={workOrder.phone_mobile}
           email={workOrder.email}
           address={fullAddress}
-          onEdit={handleOpenCustomerEdit}
+          onEdit={() => setCustomerEditOpen(true)}
         />
 
         <VehicleInfoCard
@@ -621,6 +589,10 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         workOrderId={workOrder.id}
         currentMileage={workOrder.mileage}
         onRecommendationApproved={reloadServices}
+        onGenerateClick={aiRecommendations.fetchRecommendations}
+        onReady={(reloadFn) => {
+          reloadRecommendationsRef.current = reloadFn
+        }}
       />
 
       {/* Main Content - Full Width */}
@@ -823,96 +795,28 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
       </div>
 
       {/* Customer Edit Dialog */}
-      <Dialog open={customerEditOpen} onOpenChange={setCustomerEditOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Customer</DialogTitle>
-          </DialogHeader>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Customer Name</Label>
-              <Input
-                value={customerFormData.customer_name}
-                onChange={(e) => setCustomerFormData({ ...customerFormData, customer_name: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input
-                value={customerFormData.email}
-                onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Primary Phone</Label>
-              <Input
-                value={customerFormData.phone_primary}
-                onChange={(e) => setCustomerFormData({ ...customerFormData, phone_primary: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Secondary Phone</Label>
-              <Input
-                value={customerFormData.phone_secondary || ""}
-                onChange={(e) => setCustomerFormData({ ...customerFormData, phone_secondary: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Mobile Phone</Label>
-              <Input
-                value={customerFormData.phone_mobile || ""}
-                onChange={(e) => setCustomerFormData({ ...customerFormData, phone_mobile: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Address Line 1</Label>
-              <Input
-                value={customerFormData.address_line1 || ""}
-                onChange={(e) => setCustomerFormData({ ...customerFormData, address_line1: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Address Line 2</Label>
-              <Input
-                value={customerFormData.address_line2 || ""}
-                onChange={(e) => setCustomerFormData({ ...customerFormData, address_line2: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>City</Label>
-              <Input
-                value={customerFormData.city || ""}
-                onChange={(e) => setCustomerFormData({ ...customerFormData, city: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>State</Label>
-              <Input
-                value={customerFormData.state || ""}
-                onChange={(e) => setCustomerFormData({ ...customerFormData, state: e.target.value })}
-                maxLength={2}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Zip</Label>
-              <Input
-                value={customerFormData.zip || ""}
-                onChange={(e) => setCustomerFormData({ ...customerFormData, zip: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setCustomerEditOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveCustomer}>
-              Save Changes
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <CustomerCreateDialog
+        open={customerEditOpen}
+        onOpenChange={setCustomerEditOpen}
+        onSuccess={handleCustomerEditSuccess}
+        customer={{
+          id: workOrder.customer_id.toString(),
+          customer_name: workOrder.customer_name,
+          first_name: null,
+          last_name: null,
+          phone_primary: workOrder.phone_primary,
+          phone_secondary: workOrder.phone_secondary,
+          phone_mobile: workOrder.phone_mobile,
+          email: workOrder.email,
+          address_line1: workOrder.address_line1,
+          address_line2: workOrder.address_line2,
+          city: workOrder.city,
+          state: workOrder.customer_state,
+          zip: workOrder.zip,
+          customer_type: "individual",
+          notes: null,
+        }}
+      />
 
       {/* Vehicle Edit Dialog */}
       <VehicleEditDialog
@@ -990,50 +894,65 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           {!aiRecommendations.aiLoading && aiRecommendations.aiServices.length > 0 && (
             <>
               <div className="space-y-2">
-                {aiRecommendations.aiServices.map((service: any, i: number) => (
-                  <div
-                    key={i}
-                    className="border rounded p-3 flex items-start gap-3"
-                  >
-                    <CheckCircle size={20} className="text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1">
-                      <div className="font-medium">{service.service_name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {service.service_description}
-                      </div>
-                      <div className="flex gap-2 mt-1">
-                        <Badge variant="outline" className="text-xs">
-                          Due: {service.mileage_interval?.toLocaleString()} mi
-                        </Badge>
-                        {service.driving_condition && (
-                          <Badge variant="secondary" className="text-xs">
-                            {service.driving_condition}
+                {aiRecommendations.aiServices.map((service: any, i: number) => {
+                  const isSelected = aiRecommendations.selectedAiServices.includes(service)
+                  return (
+                    <div
+                      key={i}
+                      className={`border rounded p-3 flex items-start gap-3 cursor-pointer transition-all ${
+                        isSelected
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                      }`}
+                      onClick={() => aiRecommendations.toggleService(service)}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => aiRecommendations.toggleService(service)}
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium">{service.service_name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {service.service_description}
+                        </div>
+                        <div className="flex gap-2 mt-1">
+                          <Badge variant="outline" className="text-xs">
+                            Due: {service.mileage_interval?.toLocaleString()} mi
                           </Badge>
-                        )}
+                          {service.driving_condition && (
+                            <Badge variant="secondary" className="text-xs">
+                              {service.driving_condition}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
 
-              {/* Success message */}
-              <div className="mt-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                <div className="flex items-start gap-3">
-                  <CheckCircle size={20} className="text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-blue-900 dark:text-blue-100 mb-1">
-                      Recommendations Saved
-                    </p>
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      {aiRecommendations.aiServices.length} recommendation{aiRecommendations.aiServices.length !== 1 ? 's have' : ' has'} been saved to the AI Maintenance Recommendations section below. Review and approve them to add services to this work order.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
+              {/* Action Buttons */}
               <div className="flex gap-2 mt-4">
-                <Button onClick={() => aiRecommendations.setDialogOpen(false)} className="flex-1">
-                  Close
+                <Button
+                  onClick={() => aiRecommendations.setDialogOpen(false)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={partsGeneration.generateParts}
+                  className="flex-1"
+                  disabled={aiRecommendations.selectedAiServices.length === 0}
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Continue to Parts Selection
+                  {aiRecommendations.selectedAiServices.length > 0 && (
+                    <Badge variant="secondary" className="ml-2 bg-white/20">
+                      {aiRecommendations.selectedAiServices.length}
+                    </Badge>
+                  )}
                 </Button>
               </div>
             </>
@@ -1067,7 +986,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
       />
 
       {/* Parts Generation Loading Dialog */}
-      <PartsGenerationLoader 
+      <PartsGenerationLoader
         isOpen={partsGeneration.generating}
         currentStep={partsGeneration.loadingStep}
       />

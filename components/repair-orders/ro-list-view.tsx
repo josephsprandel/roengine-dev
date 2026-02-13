@@ -225,7 +225,7 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
           </Card>
         ) : workOrders.length > 0 ? (
           /* RO Cards Grid */
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {workOrders.map((wo) => (
               <Card
                 key={wo.id}

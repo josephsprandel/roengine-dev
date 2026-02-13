@@ -387,7 +387,8 @@ async function updateWorkOrderTotals(workOrderId: number) {
       total,
       workOrderId
     ])
-  } catch (error) {
-    console.error('Error updating work order totals:', error)
+  } catch (error: any) {
+    console.error('Critical error updating work order totals:', error)
+    throw new Error(`Failed to update totals for work order ${workOrderId}: ${error.message}`)
   }
 }

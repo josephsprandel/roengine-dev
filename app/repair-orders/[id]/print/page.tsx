@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation"
 import { query } from "@/lib/db"
+import { formatPhoneNumber } from "@/lib/utils/phone-format"
 import "./print-invoice.css"
 
 async function getWorkOrderData(id: string) {
@@ -218,7 +219,7 @@ export default async function PrintInvoicePage({
                 </div>
                 {fullAddress && <div className="info-row">{fullAddress}</div>}
                 {workOrder.phone_primary && (
-                  <div className="info-row">Phone: {workOrder.phone_primary}</div>
+                  <div className="info-row">Phone: {formatPhoneNumber(workOrder.phone_primary)}</div>
                 )}
                 {workOrder.email && <div className="info-row">Email: {workOrder.email}</div>}
               </div>

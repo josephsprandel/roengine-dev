@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useAuth } from "@/contexts/auth-context"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -27,6 +28,7 @@ export function ReopenInvoiceDialog({
   payrollStartDay,
   onReopened,
 }: ReopenInvoiceDialogProps) {
+  const { user, roles } = useAuth()
   const [reopenReason, setReopenReason] = useState("")
   const [closeDateOption, setCloseDateOption] = useState<"keep_original" | "use_current" | "custom">("keep_original")
   const [customDate, setCustomDate] = useState("")
@@ -74,8 +76,8 @@ export function ReopenInvoiceDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "reopen",
-          user_id: 1, // TODO: Get from auth context
-          user_roles: ["Owner"], // TODO: Get from auth context
+          user_id: user?.id || 1,
+          user_roles: roles.map(r => r.name),
           reopen_reason: reopenReason.trim(),
           close_date_option: closeDateOption,
           new_close_date: closeDateOption === "custom" ? customDate : null,

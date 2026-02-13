@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useAuth } from "@/contexts/auth-context"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -34,6 +35,7 @@ export function ApproveRecommendationDialog({
   workOrderId,
   onApproved
 }: ApproveRecommendationDialogProps) {
+  const { user } = useAuth()
   const [contactMethod, setContactMethod] = useState<ContactMethod>('in_person')
   const [notes, setNotes] = useState("")
   const [saving, setSaving] = useState(false)
@@ -144,7 +146,7 @@ export function ApproveRecommendationDialog({
           status: 'approved',
           approved_at: new Date().toISOString(),
           approved_by_work_order_id: workOrderId,
-          approved_by_user_id: 1, // TODO: Get from auth context
+          approved_by_user_id: user?.id || 1,
           approval_method: contactMethod,
           approval_notes: notes.trim() || null
         })

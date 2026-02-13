@@ -28,7 +28,9 @@ export async function query<T extends QueryResultRow = any>(
   try {
     const res = await pool.query<T>(text, params)
     const duration = Date.now() - start
-    console.log('Executed query', { text, duration, rows: res.rowCount })
+    if (process.env.DEBUG_SQL === 'true') {
+      console.log('Executed query', { text, duration, rows: res.rowCount })
+    }
     return res
   } catch (error) {
     console.error('Database query error:', error)

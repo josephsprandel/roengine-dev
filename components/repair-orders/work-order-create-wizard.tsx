@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Search, Phone, Mail, Plus, Loader2, ChevronRight, ChevronLeft, Check } from "lucide-react"
 import { CustomerCreateDialog } from "@/components/customers/customer-create-dialog"
-import { VehicleCreateDialog } from "@/components/customers/vehicle-create-dialog"
+import { VehicleEditDialog } from "@/components/customers/vehicle-edit-dialog"
 
 interface Customer {
   id: string
@@ -444,7 +444,7 @@ export function WorkOrderCreateWizard({ open, onOpenChange, onSuccess }: WorkOrd
       />
 
       {selectedCustomer && (
-        <VehicleCreateDialog
+        <VehicleEditDialog
           open={showVehicleDialog}
           onOpenChange={setShowVehicleDialog}
           onSuccess={handleVehicleCreated}

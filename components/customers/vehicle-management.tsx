@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Clock, Loader2, Edit2, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { useAuth } from "@/contexts/auth-context"
-import { VehicleCreateDialog } from "./vehicle-create-dialog"
 import { VehicleEditDialog } from "./vehicle-edit-dialog"
 
 interface Vehicle {
@@ -24,6 +23,7 @@ interface Vehicle {
   license_plate: string | null
   license_plate_state: string | null
   mileage: number | null
+  manufacture_date: string | null
   notes: string | null
   is_active: boolean
   created_at: string
@@ -208,11 +208,11 @@ export function VehicleManagement({ customerId }: { customerId: string }) {
       </div>
 
       {/* Create Dialog */}
-      <VehicleCreateDialog
+      <VehicleEditDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
-        onSuccess={fetchVehicles}
         customerId={customerId}
+        onSuccess={() => fetchVehicles()}
       />
 
       {/* Edit Dialog */}
@@ -220,7 +220,9 @@ export function VehicleManagement({ customerId }: { customerId: string }) {
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         vehicle={selectedVehicle}
-        onSuccess={handleVehicleUpdated}
+        onSuccess={(updatedVehicle) => {
+          if (updatedVehicle) handleVehicleUpdated(updatedVehicle)
+        }}
       />
     </div>
   )

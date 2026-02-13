@@ -62,7 +62,7 @@ export async function GET(
 /**
  * PATCH /api/vehicle-recommendations/[id]
  *
- * Updates a recommendation's status and metadata (approve/decline).
+ * Updates a recommendation's status, metadata, or content.
  *
  * Allowed fields in request body:
  * - status: 'awaiting_approval' | 'approved' | 'declined_for_now' | 'superseded'
@@ -74,6 +74,13 @@ export async function GET(
  * - declined_count: number
  * - last_declined_at: timestamp
  * - decline_reason: string
+ * - service_title: string
+ * - reason: string
+ * - priority: 'critical' | 'recommended' | 'suggested'
+ * - recommended_at_mileage: number
+ * - labor_items: JSON array
+ * - parts_items: JSON array
+ * - estimated_cost: number
  *
  * Returns:
  * - success: boolean
@@ -108,7 +115,15 @@ export async function PATCH(
       'approval_notes',
       'declined_count',
       'last_declined_at',
-      'decline_reason'
+      'decline_reason',
+      // Editing fields
+      'service_title',
+      'reason',
+      'priority',
+      'recommended_at_mileage',
+      'labor_items',
+      'parts_items',
+      'estimated_cost'
     ]
 
     // Validate status if provided
@@ -152,10 +167,19 @@ export async function PATCH(
     const updateValues: any[] = []
     let paramIndex = 1
 
+    // JSON (not JSONB) fields that need string conversion
+    const jsonFields = ['labor_items', 'parts_items']
+
     for (const [key, value] of Object.entries(body)) {
       if (allowedFields.includes(key) && value !== undefined) {
         updateFields.push(`${key} = $${paramIndex}`)
-        updateValues.push(value)
+
+        // For JSON columns (not JSONB), PostgreSQL expects JSON strings
+        if (jsonFields.includes(key) && typeof value === 'object') {
+          updateValues.push(JSON.stringify(value))
+        } else {
+          updateValues.push(value)
+        }
         paramIndex++
       }
     }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useAuth } from "@/contexts/auth-context"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -24,6 +25,7 @@ export function VoidInvoiceDialog({
   grandTotal,
   onVoided,
 }: VoidInvoiceDialogProps) {
+  const { user } = useAuth()
   const [voidReason, setVoidReason] = useState("")
   const [confirmed, setConfirmed] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -49,7 +51,7 @@ export function VoidInvoiceDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: 1, // TODO: Get from auth context
+          user_id: user?.id || 1,
           void_reason: voidReason.trim(),
         }),
       })

@@ -21,15 +21,10 @@ const pool = new Pool({
 })
 
 /**
- * Labor Rate Configuration
- * 
- * TODO: Fetch from shop_settings table instead of hardcoding
- * Query: SELECT labor_rate FROM shop_settings WHERE id = 1
- * 
- * Hardcoded for now to avoid extra database query on every save.
- * $160/hr is a reasonable default for most shops.
+ * Default Labor Rate
+ * Used as fallback if shop labor rate cannot be fetched
  */
-const SHOP_LABOR_RATE = 160
+const DEFAULT_LABOR_RATE = 160
 
 /**
  * Map AI urgency levels to existing database priority field
@@ -101,6 +96,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Fetch shop labor rate
+    const laborRateResult = await pool.query(`
+      SELECT rate_per_hour
+      FROM labor_rates
+      WHERE is_default = true
+      LIMIT 1
+    `)
+    const shopLaborRate = laborRateResult.rows.length > 0
+      ? parseFloat(laborRateResult.rows[0].rate_per_hour) || DEFAULT_LABOR_RATE
+      : DEFAULT_LABOR_RATE
+
     // Insert recommendations
     const insertedIds: number[] = []
     const client = await pool.connect()
@@ -141,8 +147,8 @@ export async function POST(request: NextRequest) {
         const laborItems = [{
           description: service.service_name,
           hours: service.estimated_labor_hours || 0,
-          rate: SHOP_LABOR_RATE,
-          total: (service.estimated_labor_hours || 0) * SHOP_LABOR_RATE
+          rate: shopLaborRate,
+          total: (service.estimated_labor_hours || 0) * shopLaborRate
         }]
 
         // Build parts items JSON
@@ -151,13 +157,15 @@ export async function POST(request: NextRequest) {
           description: part.description || '',
           qty: part.qty || 1,
           unit: part.unit || 'each',
-          // Price not available from AI endpoint, will be filled in during approval
-          price: 0,
-          total: 0
+          // Use provided price if available (from parts generation), otherwise 0
+          price: part.price || 0,
+          total: part.total || 0
         }))
 
-        // Calculate estimated cost (labor only, since we don't have part prices yet)
-        const estimatedCost = (service.estimated_labor_hours || 0) * SHOP_LABOR_RATE
+        // Calculate estimated cost (labor + parts if provided)
+        const laborCost = (service.estimated_labor_hours || 0) * shopLaborRate
+        const partsCost = partsItems.reduce((sum: number, part: any) => sum + (part.total || 0), 0)
+        const estimatedCost = laborCost + partsCost
 
         // Map urgency to priority
         const priority = URGENCY_TO_PRIORITY[service.urgency] || 'suggested'

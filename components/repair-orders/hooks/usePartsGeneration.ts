@@ -22,28 +22,29 @@ interface PartsGenerationVehicle {
   make: string
   model: string
   vin: string
+  vehicle_id: number
 }
 
 /**
  * Hook: usePartsGeneration
  *
- * Extracts all parts generation logic from ro-detail-view.
- * Handles the 4-step loading UX, parts list generation via AI,
- * and adding services + parts to the work order.
+ * Handles the AI parts generation workflow for maintenance recommendations.
  *
- * @param workOrderId - The work order database ID
+ * WORKFLOW:
+ * 1. Generate parts list with AI + pricing lookup
+ * 2. Show parts selection modal
+ * 3. Save to vehicle_recommendations table (NOT directly to RO)
+ * 4. Service advisor later approves recommendations to add to RO
+ *
  * @param selectedAiServices - Currently selected AI services (from useAIRecommendations)
- * @param servicesCount - Current number of services on the RO (for display_order)
  * @param vehicle - Vehicle info for parts generation API
- * @param onReloadServices - Callback to reload services from database after adding
+ * @param onSaveComplete - Callback after recommendations are saved
  * @param showToast - Callback to show toast notifications
  */
 export function usePartsGeneration(
-  workOrderId: number | undefined,
   selectedAiServices: any[],
-  servicesCount: number,
   vehicle: PartsGenerationVehicle | null,
-  onReloadServices: () => Promise<void>,
+  onSaveComplete: () => void,
   showToast: (message: string, type: "success" | "error") => void
 ): UsePartsGenerationReturn {
   // Parts generation states
@@ -53,19 +54,12 @@ export function usePartsGeneration(
   const [loadingStep, setLoadingStep] = useState<string>('')
 
   /**
-   * NEW FLOW: Generate parts list with AI + PartsTech pricing
-   *
-   * This replaces the old "add services with labor only" flow.
-   * Now we:
-   * 1. Generate parts list via AI
-   * 2. Look up pricing via PartsTech
-   * 3. Show parts selection modal
-   * 4. Add services + parts to RO
+   * Generate parts list with AI + PartsTech pricing
    */
   const generateParts = useCallback(async () => {
-    if (!workOrderId || selectedAiServices.length === 0) return
+    if (selectedAiServices.length === 0) return
 
-    console.log('=== GENERATING PARTS LIST FOR SERVICES ===')
+    console.log('=== GENERATING PARTS LIST FOR RECOMMENDATIONS ===')
     console.log('Selected services:', selectedAiServices.length)
 
     setGenerating(true)
@@ -121,99 +115,85 @@ export function usePartsGeneration(
       setGenerating(false)
       setLoadingStep('')
     }
-  }, [selectedAiServices, workOrderId, vehicle, showToast])
+  }, [selectedAiServices, vehicle, showToast])
 
   /**
-   * Confirm parts selection and add services + parts to RO
+   * Confirm parts selection and save to recommendations table
+   *
+   * This saves recommendations to vehicle_recommendations table with status='awaiting_approval'
+   * so service advisors can review and approve them later.
    */
   const confirmPartsSelection = useCallback(async (servicesWithSelectedParts: any[]) => {
-    if (!workOrderId) return
-
-    console.log('=== ADDING SERVICES WITH PARTS ===')
-    setDialogOpen(false)
-
-    // Save each service with its selected parts
-    for (let i = 0; i < servicesWithSelectedParts.length; i++) {
-      const serviceData = servicesWithSelectedParts[i]
-      const aiService = selectedAiServices[i]
-
-      try {
-        console.log('Creating service:', serviceData.serviceName)
-
-        // Step 1: Create service record
-        const serviceResponse = await fetch(`/api/work-orders/${workOrderId}/services`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: serviceData.serviceName,
-            description: aiService.service_description || '',
-            display_order: servicesCount + i,
-            ai_generated: true
-          })
-        })
-
-        if (!serviceResponse.ok) {
-          console.error('✗ Failed to create service:', serviceData.serviceName)
-          continue
-        }
-
-        const serviceResult = await serviceResponse.json()
-        const serviceId = serviceResult.service?.id
-        console.log('✓ Service created - ID:', serviceId)
-
-        // Step 2: Add labor item
-        await fetch(`/api/work-orders/${workOrderId}/items`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            item_type: 'labor',
-            description: serviceData.serviceName,
-            notes: aiService.service_description,
-            labor_hours: aiService.estimated_labor_hours || 1,
-            labor_rate: 160, // TODO: Move to shop settings
-            is_taxable: false, // TODO: Move to shop settings
-            service_id: serviceId
-          })
-        })
-        console.log('✓ Labor item added')
-
-        // Step 3: Add part items
-        for (const part of serviceData.parts) {
-          if (!part.selectedOption) {
-            console.log('⚠️ No pricing for:', part.description, '- skipping')
-            continue
-          }
-
-          await fetch(`/api/work-orders/${workOrderId}/items`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              item_type: 'part',
-              description: part.selectedOption.description || part.description,
-              quantity: part.quantity,
-              unit_price: part.selectedOption.retailPrice,
-              is_taxable: true, // TODO: Move to shop settings
-              service_id: serviceId
-            })
-          })
-          console.log('✓ Part added:', part.description)
-        }
-      } catch (error) {
-        console.error('Error adding service:', error)
-      }
+    if (!vehicle?.vehicle_id) {
+      showToast('Vehicle ID not found', 'error')
+      return
     }
 
-    // Reload services from database
-    console.log('Reloading services...')
+    console.log('=== SAVING RECOMMENDATIONS WITH PARTS ===')
+    setDialogOpen(false)
+
     try {
-      await onReloadServices()
-      showToast('Services and parts added to RO', 'success')
-    } catch (error) {
-      console.error('Error reloading services:', error)
+      // Build recommendations payload in the format expected by /api/save-recommendations
+      const recommendations = servicesWithSelectedParts.map((serviceData, i) => {
+        const aiService = selectedAiServices[i]
+
+        // Build parts array from selected options (API expects 'parts', not 'parts_items')
+        const parts = serviceData.parts
+          .filter((part: any) => part.selectedOption) // Only include parts with pricing
+          .map((part: any) => ({
+            part_number: part.selectedOption.partNumber || '',
+            description: part.selectedOption.description || part.description,
+            qty: part.quantity,
+            unit: part.unit || 'each',
+            price: part.selectedOption.retailPrice || 0,
+            total: (part.selectedOption.retailPrice || 0) * part.quantity
+          }))
+
+        return {
+          service_name: serviceData.serviceName,
+          service_description: aiService.service_description || '',
+          service_category: aiService.service_category || 'maintenance',
+          urgency: aiService.urgency || 'DUE_NOW',
+          reason: aiService.service_description || `Due at ${aiService.mileage_interval?.toLocaleString() || 'N/A'} miles`,
+          mileage_interval: aiService.mileage_interval,
+          estimated_labor_hours: aiService.estimated_labor_hours || 1,
+          driving_condition: aiService.driving_condition,
+          parts: parts  // API expects 'parts', not 'parts_items'
+        }
+      })
+
+      // Save to database
+      console.log('Saving', recommendations.length, 'recommendations to database...')
+
+      const saveResponse = await fetch('/api/save-recommendations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicle_id: vehicle.vehicle_id,
+          services: recommendations
+        })
+      })
+
+      if (!saveResponse.ok) {
+        const errorText = await saveResponse.text()
+        console.error('Save error:', errorText)
+        throw new Error(`Failed to save: ${saveResponse.status}`)
+      }
+
+      const saveData = await saveResponse.json()
+      console.log('✓ Save successful:', saveData)
+      console.log('✓ Saved recommendation IDs:', saveData.recommendation_ids)
+
+      showToast('Recommendations saved successfully', 'success')
+      onSaveComplete()
+
+    } catch (error: any) {
+      console.error('Failed to save recommendations:', error)
+      showToast(error.message || 'Failed to save recommendations', 'error')
     }
 
     console.log('=== SAVE COMPLETE ===')
-  }, [workOrderId, selectedAiServices, servicesCount, onReloadServices, showToast])
+  }, [vehicle, selectedAiServices, showToast, onSaveComplete])
 
   return {
     // State
