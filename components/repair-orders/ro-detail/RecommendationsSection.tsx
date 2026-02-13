@@ -10,6 +10,7 @@ import { RecommendationCard } from "./RecommendationCard"
 import { ApproveRecommendationDialog } from "./ApproveRecommendationDialog"
 import { DeclineRecommendationDialog } from "./DeclineRecommendationDialog"
 import { EditRecommendationDialog } from "./EditRecommendationDialog"
+import { GenerateEstimateLinkButton } from "@/components/estimates/GenerateEstimateLinkButton"
 import type { Recommendation } from "../hooks/useRecommendationsManagement"
 
 interface RecommendationsSectionProps {
@@ -147,6 +148,12 @@ export function RecommendationsSection({
               </Badge>
             )}
           </div>
+          {awaitingRecommendations.length > 0 && (
+            <GenerateEstimateLinkButton
+              workOrderId={workOrderId}
+              recommendations={awaitingRecommendations}
+            />
+          )}
         </div>
 
         {/* Awaiting Approval Section */}

@@ -2,9 +2,6 @@
 
 /**
  * Authentication Context Provider
- * 
- * AUTHENTICATION DISABLED FOR V0.DEV
- * To re-enable: uncomment the auth logic sections below
  */
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
@@ -93,41 +90,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // AUTHENTICATION DISABLED - Set mock user on mount
+  // Check auth on mount
   useEffect(() => {
-    // Always set mock user for v0.dev
-    setUser({
-      id: 1,
-      email: 'demo@roengine.com',
-      name: 'Demo User'
-    })
-    setRoles([{ id: 1, name: 'Admin', description: 'Full access' }])
-    setPermissions(['*']) // All permissions
-    setIsLoading(false)
-    
-    /* TO RE-ENABLE AUTH, UNCOMMENT THIS:
     const checkAuth = async () => {
       const token = localStorage.getItem('auth_token')
-      
+
       if (token) {
         await fetchUser(token)
       }
-      
+
       setIsLoading(false)
     }
-    
+
     checkAuth()
-    */
   }, [fetchUser])
 
-  // AUTHENTICATION REDIRECT DISABLED
-  /* TO RE-ENABLE AUTH REDIRECT, UNCOMMENT THIS:
+  // Redirect to login if not authenticated
   useEffect(() => {
     if (!isLoading && !isAuthenticated && !PUBLIC_ROUTES.includes(pathname)) {
       router.push('/login')
     }
   }, [isLoading, isAuthenticated, pathname, router])
-  */
 
   // Login function
   async function login(email: string, password: string) {

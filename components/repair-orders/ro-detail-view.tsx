@@ -756,6 +756,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           ccSurchargeRate={invoiceSettings?.cc_surcharge_rate || 0.035}
           payrollFrequency={invoiceSettings?.payroll_frequency || 'weekly'}
           payrollStartDay={invoiceSettings?.payroll_start_day || 1}
+          customerEmail={workOrder.email}
           onActionComplete={() => {
             // Reload work order and payments
             const reloadData = async () => {
