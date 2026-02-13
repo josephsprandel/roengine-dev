@@ -52,6 +52,16 @@ export async function GET(
         'UPDATE estimates SET viewed_at = NOW(), updated_at = NOW() WHERE id = $1',
         [est.id]
       )
+
+      // Track viewed_at on linked recommendations
+      await query(`
+        UPDATE vehicle_recommendations vr
+        SET estimate_viewed_at = NOW()
+        WHERE EXISTS (
+          SELECT 1 FROM estimate_services es
+          WHERE es.estimate_id = $1 AND es.recommendation_id = vr.id
+        ) AND vr.estimate_viewed_at IS NULL
+      `, [est.id])
     }
 
     // Fetch services

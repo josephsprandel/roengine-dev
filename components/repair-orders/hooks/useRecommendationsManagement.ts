@@ -11,7 +11,7 @@ export interface Recommendation {
   estimated_cost: number
   labor_items: { description: string; hours: number; rate: number; total: number }[]
   parts_items: { part_number: string; description: string; qty: number; unit: string; price: number; total: number }[]
-  status: 'awaiting_approval' | 'approved' | 'declined_for_now' | 'superseded'
+  status: 'awaiting_approval' | 'sent_to_customer' | 'customer_approved' | 'customer_declined' | 'approved' | 'declined_for_now' | 'superseded'
   recommended_at_mileage: number | null
   approved_at: string | null
   approved_by_work_order_id: number | null
@@ -21,6 +21,10 @@ export interface Recommendation {
   last_declined_at: string | null
   decline_reason: string | null
   source: string
+  estimate_sent_at: string | null
+  estimate_viewed_at: string | null
+  customer_responded_at: string | null
+  customer_response_method: string | null
   created_at: string
   updated_at: string
 }
@@ -30,38 +34,43 @@ interface UseRecommendationsManagementParams {
 }
 
 interface UseRecommendationsManagementReturn {
-  awaitingRecommendations: Recommendation[]
+  /** customer_approved + awaiting_approval + sent_to_customer + customer_declined */
+  activeRecommendations: Recommendation[]
+  /** approved (added to RO) */
   approvedRecommendations: Recommendation[]
   loading: boolean
   error: string | null
   reloadRecommendations: () => Promise<void>
 }
 
+/** Status display priority for sorting */
+const STATUS_SORT_ORDER: Record<string, number> = {
+  customer_approved: 1,
+  sent_to_customer: 2,
+  awaiting_approval: 3,
+  customer_declined: 4,
+  approved: 5,
+  declined_for_now: 6,
+  superseded: 7,
+}
+
 /**
  * Hook: useRecommendationsManagement
  *
  * Manages fetching and state for AI maintenance recommendations.
- * Separates recommendations into awaiting approval and approved lists.
- * Auto-loads when vehicleId changes.
- *
- * @param vehicleId - The vehicle ID to fetch recommendations for
- * @returns State and methods for managing recommendations
+ * Fetches all non-terminal statuses as "active" and approved as historical.
  */
 export function useRecommendationsManagement({
   vehicleId
 }: UseRecommendationsManagementParams): UseRecommendationsManagementReturn {
-  const [awaitingRecommendations, setAwaitingRecommendations] = useState<Recommendation[]>([])
+  const [activeRecommendations, setActiveRecommendations] = useState<Recommendation[]>([])
   const [approvedRecommendations, setApprovedRecommendations] = useState<Recommendation[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  /**
-   * Fetches recommendations from the API
-   * Separates into awaiting and approved lists
-   */
   const reloadRecommendations = useCallback(async () => {
     if (!vehicleId) {
-      setAwaitingRecommendations([])
+      setActiveRecommendations([])
       setApprovedRecommendations([])
       return
     }
@@ -70,50 +79,41 @@ export function useRecommendationsManagement({
     setError(null)
 
     try {
-      // Fetch awaiting approval recommendations
-      const awaitingResponse = await fetch(
-        `/api/vehicles/${vehicleId}/recommendations?status=awaiting_approval`
-      )
+      // Fetch all recommendations at once (no status filter) and sort client-side
+      const response = await fetch(`/api/vehicles/${vehicleId}/recommendations`)
 
-      if (!awaitingResponse.ok) {
-        const errorData = await awaitingResponse.json()
-        throw new Error(errorData.error || 'Failed to fetch awaiting recommendations')
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to fetch recommendations')
       }
 
-      const awaitingData = await awaitingResponse.json()
+      const data = await response.json()
+      const all: Recommendation[] = data.recommendations || []
 
-      // Fetch approved recommendations
-      const approvedResponse = await fetch(
-        `/api/vehicles/${vehicleId}/recommendations?status=approved`
-      )
+      // Active = anything the SA needs to see and act on
+      const active = all
+        .filter(r => ['customer_approved', 'sent_to_customer', 'awaiting_approval', 'customer_declined'].includes(r.status))
+        .sort((a, b) => (STATUS_SORT_ORDER[a.status] || 99) - (STATUS_SORT_ORDER[b.status] || 99))
 
-      if (!approvedResponse.ok) {
-        const errorData = await approvedResponse.json()
-        throw new Error(errorData.error || 'Failed to fetch approved recommendations')
-      }
+      const approved = all.filter(r => r.status === 'approved')
 
-      const approvedData = await approvedResponse.json()
-
-      setAwaitingRecommendations(awaitingData.recommendations || [])
-      setApprovedRecommendations(approvedData.recommendations || [])
-
+      setActiveRecommendations(active)
+      setApprovedRecommendations(approved)
     } catch (err: any) {
-      console.error('Error loading recommendations:', err)
       setError(err.message || 'Failed to load recommendations')
-      setAwaitingRecommendations([])
+      setActiveRecommendations([])
       setApprovedRecommendations([])
     } finally {
       setLoading(false)
     }
   }, [vehicleId])
 
-  // Auto-load recommendations when vehicleId changes
   useEffect(() => {
     reloadRecommendations()
   }, [reloadRecommendations])
 
   return {
-    awaitingRecommendations,
+    activeRecommendations,
     approvedRecommendations,
     loading,
     error,

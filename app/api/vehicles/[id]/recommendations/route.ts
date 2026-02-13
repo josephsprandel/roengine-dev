@@ -36,7 +36,7 @@ export async function GET(
     const statusFilter = searchParams.get("status")
 
     // Validate status filter if provided
-    const validStatuses = ['awaiting_approval', 'approved', 'declined_for_now', 'superseded']
+    const validStatuses = ['awaiting_approval', 'sent_to_customer', 'customer_approved', 'customer_declined', 'approved', 'declined_for_now', 'superseded']
     if (statusFilter && !validStatuses.includes(statusFilter)) {
       return NextResponse.json(
         { error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` },
@@ -51,6 +51,7 @@ export async function GET(
         labor_items, parts_items, status, recommended_at_mileage,
         approved_at, approved_by_work_order_id, approval_method, approval_notes,
         declined_count, last_declined_at, decline_reason, source,
+        estimate_sent_at, estimate_viewed_at, customer_responded_at, customer_response_method,
         created_at, updated_at
       FROM vehicle_recommendations
       WHERE vehicle_id = $1

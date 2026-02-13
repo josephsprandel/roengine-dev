@@ -120,6 +120,15 @@ export async function generateEstimate({
       ])
     }
 
+    // Mark recommendations as sent_to_customer
+    await client.query(`
+      UPDATE vehicle_recommendations
+      SET status = 'sent_to_customer',
+          estimate_sent_at = NOW(),
+          updated_at = NOW()
+      WHERE id = ANY($1) AND status = 'awaiting_approval'
+    `, [recommendationIds])
+
     await client.query('COMMIT')
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'

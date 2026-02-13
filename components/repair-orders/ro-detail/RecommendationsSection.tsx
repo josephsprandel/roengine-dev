@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Sparkles, ChevronDown, ChevronRight, Loader2 } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronRight, Loader2, AlertTriangle } from "lucide-react"
 import { useRecommendationsManagement } from "../hooks/useRecommendationsManagement"
 import { RecommendationCard } from "./RecommendationCard"
 import { ApproveRecommendationDialog } from "./ApproveRecommendationDialog"
@@ -31,12 +31,16 @@ export function RecommendationsSection({
   onReady
 }: RecommendationsSectionProps) {
   const {
-    awaitingRecommendations,
+    activeRecommendations,
     approvedRecommendations,
     loading,
     error,
     reloadRecommendations
   } = useRecommendationsManagement({ vehicleId })
+
+  // Derive counts by status
+  const customerApprovedCount = activeRecommendations.filter(r => r.status === 'customer_approved').length
+  const awaitingApprovalOnly = activeRecommendations.filter(r => r.status === 'awaiting_approval')
 
   // Expose reload function to parent component on mount
   useEffect(() => {
@@ -85,8 +89,14 @@ export function RecommendationsSection({
     reloadRecommendations()
   }
 
+  // Handle "Add to Services" for customer-approved items (same flow as approve)
+  const handleAddToServices = (recommendation: Recommendation) => {
+    setSelectedRecommendation(recommendation)
+    setApproveDialogOpen(true)
+  }
+
   // Loading state
-  if (loading && awaitingRecommendations.length === 0 && approvedRecommendations.length === 0) {
+  if (loading && activeRecommendations.length === 0 && approvedRecommendations.length === 0) {
     return (
       <Card className="p-6 border-border">
         <div className="flex items-center justify-center py-8">
@@ -113,7 +123,7 @@ export function RecommendationsSection({
   }
 
   // Empty state - no recommendations at all
-  if (awaitingRecommendations.length === 0 && approvedRecommendations.length === 0) {
+  if (activeRecommendations.length === 0 && approvedRecommendations.length === 0) {
     return (
       <Card className="p-6 border-border">
         <div className="flex items-center gap-2 mb-4">
@@ -142,30 +152,46 @@ export function RecommendationsSection({
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-blue-500" />
             <h3 className="font-semibold text-lg">AI Maintenance Recommendations</h3>
-            {awaitingRecommendations.length > 0 && (
+            {activeRecommendations.length > 0 && (
               <Badge variant="secondary" className="bg-amber-500/20 text-amber-700 dark:text-amber-400">
-                {awaitingRecommendations.length}
+                {activeRecommendations.length}
+              </Badge>
+            )}
+            {customerApprovedCount > 0 && (
+              <Badge className="bg-green-600 text-white animate-pulse">
+                {customerApprovedCount} Approved
               </Badge>
             )}
           </div>
-          {awaitingRecommendations.length > 0 && (
+          {awaitingApprovalOnly.length > 0 && (
             <GenerateEstimateLinkButton
               workOrderId={workOrderId}
-              recommendations={awaitingRecommendations}
+              recommendations={activeRecommendations}
             />
           )}
         </div>
 
-        {/* Awaiting Approval Section */}
-        {awaitingRecommendations.length > 0 ? (
+        {/* Action Required Banner */}
+        {customerApprovedCount > 0 && (
+          <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+            <span className="text-sm font-medium text-green-800 dark:text-green-300">
+              {customerApprovedCount} service{customerApprovedCount > 1 ? 's' : ''} approved by customer — review and add to work order
+            </span>
+          </div>
+        )}
+
+        {/* Active Recommendations */}
+        {activeRecommendations.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {awaitingRecommendations.map((recommendation) => (
+            {activeRecommendations.map((recommendation) => (
               <RecommendationCard
                 key={recommendation.id}
                 recommendation={recommendation}
                 currentMileage={currentMileage}
                 onApprove={() => handleApproveClick(recommendation)}
                 onDecline={() => handleDeclineClick(recommendation)}
+                onAddToServices={() => handleAddToServices(recommendation)}
                 onEdit={() => handleEditClick(recommendation)}
                 showActions={true}
               />

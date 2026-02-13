@@ -112,7 +112,7 @@ export function EstimateClient({ estimate, token }: EstimateClientProps) {
           </div>
 
           <p className="text-sm text-muted-foreground mt-6">
-            The shop has been notified and will begin working on your approved services.
+            The shop has been notified and your service advisor will review your selections.
           </p>
         </div>
       </div>
