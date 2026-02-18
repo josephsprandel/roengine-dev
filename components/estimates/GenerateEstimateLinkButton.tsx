@@ -30,25 +30,27 @@ export function GenerateEstimateLinkButton({
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  const awaitingRecommendations = recommendations.filter(
-    r => r.status === 'awaiting_approval'
+  // Show all non-approved recommendations (awaiting_approval + sent_to_customer)
+  const availableRecommendations = recommendations.filter(
+    r => r.status !== 'approved' && r.status !== 'superseded'
   )
+  const alreadySent = availableRecommendations.filter(r => r.status === 'sent_to_customer')
 
-  if (awaitingRecommendations.length === 0) {
+  if (availableRecommendations.length === 0) {
     return null
   }
 
   const handleOpen = (open: boolean) => {
     setIsOpen(open)
     if (open) {
-      // Pre-select all awaiting recommendations
-      setSelectedRecs(awaitingRecommendations.map(r => r.id))
+      // Pre-select all available recommendations
+      setSelectedRecs(availableRecommendations.map(r => r.id))
       setEstimateUrl('')
       setCopied(false)
     }
   }
 
-  const selectedTotal = awaitingRecommendations
+  const selectedTotal = availableRecommendations
     .filter(r => selectedRecs.includes(r.id))
     .reduce((sum, r) => sum + (parseFloat(r.estimated_cost as any) || 0), 0)
 
@@ -114,8 +116,14 @@ export function GenerateEstimateLinkButton({
               Select services to include in the customer estimate:
             </p>
 
+            {alreadySent.length > 0 && (
+              <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+                ⚠️ {alreadySent.length} service{alreadySent.length > 1 ? 's have' : ' has'} already been sent to the customer
+              </div>
+            )}
+
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {awaitingRecommendations.map((rec) => (
+              {availableRecommendations.map((rec) => (
                 <div
                   key={rec.id}
                   className="flex items-start space-x-3 p-2 rounded-lg hover:bg-accent/50 cursor-pointer"

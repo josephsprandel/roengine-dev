@@ -63,7 +63,7 @@ export async function generateEstimate({
     const recsResult = await client.query(`
       SELECT id, service_title, reason, estimated_cost, labor_items, parts_items, priority
       FROM vehicle_recommendations
-      WHERE id = ANY($1) AND status = 'awaiting_approval'
+      WHERE id = ANY($1) AND status IN ('awaiting_approval', 'sent_to_customer')
     `, [recommendationIds])
 
     if (recsResult.rows.length === 0) {

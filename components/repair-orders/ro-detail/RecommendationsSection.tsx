@@ -42,6 +42,7 @@ export function RecommendationsSection({
   // Derive counts by status
   const customerApprovedCount = activeRecommendations.filter(r => r.status === 'customer_approved').length
   const awaitingApprovalOnly = activeRecommendations.filter(r => r.status === 'awaiting_approval')
+  const estimatableRecs = activeRecommendations.filter(r => r.status !== 'approved' && r.status !== 'superseded')
 
   // Expose reload function to parent component on mount
   useEffect(() => {
@@ -186,7 +187,7 @@ export function RecommendationsSection({
             )}
           </div>
           <div className="flex items-center gap-2">
-            {awaitingApprovalOnly.length > 0 && (
+            {estimatableRecs.length > 0 && (
               <GenerateEstimateLinkButton
                 workOrderId={workOrderId}
                 recommendations={activeRecommendations}
