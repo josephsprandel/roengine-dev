@@ -47,6 +47,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 // Routes that don't require authentication
 const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password']
+// Route prefixes that don't require authentication
+const PUBLIC_ROUTE_PREFIXES = ['/estimates/', '/images/vehicles/']
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -107,7 +109,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Redirect to login if not authenticated
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && !PUBLIC_ROUTES.includes(pathname)) {
+    const isPublic = PUBLIC_ROUTES.includes(pathname) || PUBLIC_ROUTE_PREFIXES.some(prefix => pathname.startsWith(prefix))
+    if (!isLoading && !isAuthenticated && !isPublic) {
       router.push('/login')
     }
   }, [isLoading, isAuthenticated, pathname, router])

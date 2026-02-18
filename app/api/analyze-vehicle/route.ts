@@ -169,29 +169,63 @@ Return ONLY valid JSON.`
 /**
  * Extract paint color
  */
+const COLOR_MAP: Record<string, string> = {
+  'white': 'white',
+  'black': 'black',
+  'silver': 'silver',
+  'gray': 'gray',
+  'grey': 'gray',
+  'red': 'red',
+  'blue': 'blue',
+  'darkblue': 'darkblue',
+  'dark blue': 'darkblue',
+  'lightblue': 'lightblue',
+  'light blue': 'lightblue',
+  'bronze': 'bronze',
+  'brown': 'bronze',
+  'green': 'green',
+  'beige': 'beige',
+  'orange': 'orange',
+  'yellow': 'yellow',
+  'gold': 'yellow',
+  'purple': 'purple',
+  'burgundy': 'burgundy',
+  'tan': 'tan',
+}
+
 async function extractPaintColor(imageBase64: string): Promise<string | null> {
-  const model = genAI.getGenerativeModel({ 
+  const model = genAI.getGenerativeModel({
     model: 'gemini-2.5-flash',
     generationConfig: {
       temperature: 0.1
     }
   })
-  
+
   const prompt = `Identify this vehicle's paint color.
-Return ONE of: Red, Blue, White, Black, Silver, Gray, Green, Yellow, Orange, Brown, Beige, Gold
-Return ONLY the color name.`
-  
+Return ONE of: White, Black, Silver, Gray, Red, Blue, Bronze, Green, Beige, Orange, Yellow, Purple, LightBlue, DarkBlue, Burgundy, Tan
+Return ONLY the color name.
+
+Guidelines:
+- Light blues → LightBlue
+- Navy/midnight/dark blues → DarkBlue
+- Browns/copper → Bronze
+- Cream/champagne → Beige
+- Maroon/wine reds → Burgundy
+- Sandy/khaki → Tan`
+
   const imagePart = {
     inlineData: {
       data: imageBase64,
       mimeType: 'image/jpeg'
     }
   }
-  
+
   try {
     const result = await model.generateContent([prompt, imagePart])
     const response = await result.response
-    return response.text().trim()
+    const rawColor = response.text().trim()
+    const normalizedColor = rawColor.toLowerCase()
+    return COLOR_MAP[normalizedColor] || 'silver'
   } catch (e) {
     return null
   }
