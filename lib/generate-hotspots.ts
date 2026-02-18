@@ -37,21 +37,21 @@ export async function generateHotspots(
 
   const zones = zonesResult.rows
 
-  // 2. Get all zone mappings for the provided services in one query
-  const serviceNames = services.map(s => s.name)
+  // 2. Get all zone mappings for the provided services in one query (case-insensitive)
+  const serviceNamesLower = services.map(s => s.name.toLowerCase())
   const mappingResult = await query(
     `SELECT service_name, zone_name
      FROM service_zone_mapping
-     WHERE service_name = ANY($1)`,
-    [serviceNames]
+     WHERE LOWER(service_name) = ANY($1)`,
+    [serviceNamesLower]
   )
 
-  // 3. Group services by zone
-  const serviceByName = new Map(services.map(s => [s.name, s]))
+  // 3. Group services by zone (case-insensitive lookup)
+  const serviceByName = new Map(services.map(s => [s.name.toLowerCase(), s]))
   const zoneServiceMap = new Map<string, Service[]>()
 
   for (const mapping of mappingResult.rows) {
-    const service = serviceByName.get(mapping.service_name)
+    const service = serviceByName.get(mapping.service_name.toLowerCase())
     if (!service) continue
 
     const list = zoneServiceMap.get(mapping.zone_name)
