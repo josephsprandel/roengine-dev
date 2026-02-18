@@ -87,13 +87,11 @@ function HotspotBubble({
           transition-all duration-200
           group-hover:scale-110 group-hover:shadow-lg group-active:scale-95`}
       >
-        {/* Service count — outlined for readability on any background */}
+        {/* Service count — black text with white halo for readability */}
         <span
-          className="font-bold text-lg leading-none"
+          className="font-bold text-xl text-gray-900 leading-none"
           style={{
-            WebkitTextStroke: '2px black',
-            WebkitTextFillColor: 'white',
-            textShadow: '0 0 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.6)',
+            textShadow: `-1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 -1px 0 #fff, 0 1px 0 #fff, -1px 0 0 #fff, 1px 0 0 #fff, 0 0 2px rgba(255,255,255,0.8)`,
           }}
         >
           {hotspot.count}
