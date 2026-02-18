@@ -871,7 +871,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           {aiRecommendations.aiLoading && (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="ml-3">Analyzing maintenance schedule...</span>
+              <span className="ml-3">{aiRecommendations.loadingStep || 'Analyzing maintenance schedule...'}</span>
             </div>
           )}
 
@@ -936,24 +936,19 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
               {/* Action Buttons */}
               <div className="flex gap-2 mt-4">
                 <Button
-                  onClick={() => aiRecommendations.setDialogOpen(false)}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
                   onClick={partsGeneration.generateParts}
+                  variant="outline"
                   className="flex-1"
                   disabled={aiRecommendations.selectedAiServices.length === 0}
                 >
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Continue to Parts Selection
-                  {aiRecommendations.selectedAiServices.length > 0 && (
-                    <Badge variant="secondary" className="ml-2 bg-white/20">
-                      {aiRecommendations.selectedAiServices.length}
-                    </Badge>
-                  )}
+                  Reselect Parts
+                </Button>
+                <Button
+                  onClick={() => aiRecommendations.setDialogOpen(false)}
+                  className="flex-1"
+                >
+                  <Check className="mr-2 h-4 w-4" />
+                  Done
                 </Button>
               </div>
             </>

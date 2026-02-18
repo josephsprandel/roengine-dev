@@ -18,6 +18,7 @@ interface UseAIRecommendationsReturn {
   selectedAiServices: any[]
   aiSource: string | null
   aiLoading: boolean
+  loadingStep: string
   availableVariants: any[]
   selectedVariant: any | null
 
@@ -54,6 +55,7 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
   // AI Recommendation states
   const [dialogOpen, setDialogOpen] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
+  const [loadingStep, setLoadingStep] = useState('')
   const [aiServices, setAiServices] = useState<any[]>([])
   const [selectedAiServices, setSelectedAiServices] = useState<any[]>([])
   const [aiSource, setAiSource] = useState<string | null>(null)
@@ -128,6 +130,97 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
     }
   }
 
+  /**
+   * Look up parts pricing via PartsTech + inventory and merge into services.
+   * Auto-selects the best pricing option (first in list = highest priority).
+   * Returns the services array with priced parts merged in.
+   * On failure, returns services unchanged (graceful degradation).
+   */
+  const lookupPartsAndMerge = async (services: any[]): Promise<any[]> => {
+    if (!workOrder || services.length === 0) return services
+
+    try {
+      console.log('[DEBUG] Looking up parts pricing for', services.length, 'services...')
+      setLoadingStep('Looking up parts & pricing...')
+
+      const partsResponse = await fetch('/api/services/generate-parts-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          services: services.map(s => ({
+            service_name: s.service_name,
+            service_description: s.service_description
+          })),
+          vehicle: {
+            year: workOrder.year,
+            make: workOrder.make,
+            model: workOrder.model,
+            engine: `${workOrder.year} ${workOrder.make} ${workOrder.model}`,
+            vin: workOrder.vin
+          }
+        })
+      })
+
+      if (!partsResponse.ok) {
+        console.error('[DEBUG] Parts lookup failed:', partsResponse.status)
+        return services // Graceful degradation — save with unpriced parts
+      }
+
+      const { servicesWithParts } = await partsResponse.json()
+      console.log('[DEBUG] Parts returned for', servicesWithParts?.length || 0, 'services')
+
+      // Merge priced parts back into the services array
+      const mergedServices = services.map(service => {
+        const matchingParts = servicesWithParts?.find(
+          (sp: any) => sp.serviceName === service.service_name
+        )
+
+        if (!matchingParts?.parts || matchingParts.parts.length === 0) {
+          return service // No parts found — keep original
+        }
+
+        // Auto-select best pricing option for each part (first = highest priority)
+        const pricedParts = matchingParts.parts
+          .filter((part: any) => part.pricingOptions?.length > 0)
+          .map((part: any) => {
+            const best = part.pricingOptions[0]
+            return {
+              part_number: best.partNumber || '',
+              description: best.description || part.description,
+              qty: part.quantity || 1,
+              unit: part.unit || 'each',
+              price: best.retailPrice || 0,
+              total: (best.retailPrice || 0) * (part.quantity || 1)
+            }
+          })
+
+        // Include parts with no pricing options as unpriced (keeps PARTS NEEDED label)
+        const unpricedParts = matchingParts.parts
+          .filter((part: any) => !part.pricingOptions || part.pricingOptions.length === 0)
+          .map((part: any) => ({
+            part_number: '',
+            description: part.description,
+            qty: part.quantity || 1,
+            unit: part.unit || 'each',
+            price: 0,
+            total: 0
+          }))
+
+        return {
+          ...service,
+          parts: [...pricedParts, ...unpricedParts]
+        }
+      })
+
+      console.log('[DEBUG] Parts merged into services successfully')
+      return mergedServices
+
+    } catch (error) {
+      console.error('[DEBUG] Parts lookup error (graceful degradation):', error)
+      return services // Graceful degradation
+    }
+  }
+
   const fetchRecommendations = useCallback(async () => {
     console.log('[DEBUG] AI Recommend clicked')
 
@@ -138,6 +231,7 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
 
     setDialogOpen(true)
     setAiLoading(true)
+    setLoadingStep('Generating recommendations...')
     setAiServices([])
     setAiSource(null)
 
@@ -202,13 +296,19 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
         setDialogOpen(false) // Close loading dialog
         setVariantDialogOpen(true) // Open variant selector
       } else {
-        // Single variant - auto-save immediately
-        setAiServices(data.services || [])
-        setSelectedAiServices(data.services || []) // Auto-select all
+        // Single variant — look up parts pricing, then save
+        const services = data.services || []
         setAiSource(data.source)
 
-        // Auto-save recommendations to database
-        await saveRecommendationsToDatabase(data.services || [])
+        // Run parts lookup and merge pricing before saving
+        const servicesWithPricing = await lookupPartsAndMerge(services)
+
+        setAiServices(servicesWithPricing)
+        setSelectedAiServices(servicesWithPricing) // Auto-select all
+
+        // Save recommendations with priced parts
+        setLoadingStep('Saving recommendations...')
+        await saveRecommendationsToDatabase(servicesWithPricing)
       }
 
       console.log('[DEBUG] Services set:', data.services?.length || 0, 'services')
@@ -218,6 +318,7 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
     } finally {
       console.log('[DEBUG] Setting loading to false')
       setAiLoading(false)
+      setLoadingStep('')
     }
   }, [workOrder])
 
@@ -234,16 +335,26 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
 
     console.log('[DEBUG] Variant selected:', selectedVariant)
 
-    // Load services from selected variant
-    setAiServices(selectedVariant.services || [])
-    setSelectedAiServices(selectedVariant.services || [])
+    const services = selectedVariant.services || []
 
-    // Save selected variant's recommendations to database
-    await saveRecommendationsToDatabase(selectedVariant.services || [])
-
-    // Close variant selector and open main AI dialog
+    // Close variant selector and show loading in main dialog
     setVariantDialogOpen(false)
     setDialogOpen(true)
+    setAiLoading(true)
+    setLoadingStep('Looking up parts & pricing...')
+
+    // Run parts lookup and merge pricing before saving
+    const servicesWithPricing = await lookupPartsAndMerge(services)
+
+    setAiServices(servicesWithPricing)
+    setSelectedAiServices(servicesWithPricing)
+
+    // Save with priced parts
+    setLoadingStep('Saving recommendations...')
+    await saveRecommendationsToDatabase(servicesWithPricing)
+
+    setAiLoading(false)
+    setLoadingStep('')
 
     // Reset selection for next time
     setSelectedVariant(null)
@@ -261,6 +372,7 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
     selectedAiServices,
     aiSource,
     aiLoading,
+    loadingStep,
     availableVariants,
     selectedVariant,
 

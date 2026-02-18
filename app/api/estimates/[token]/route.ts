@@ -7,6 +7,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { classifyBodyStyle } from '@/lib/classify-body-style'
+import { getVehicleImagePath } from '@/lib/vehicle-image-mapper'
+import { generateHotspots, type Service } from '@/lib/generate-hotspots'
 
 export async function GET(
   request: NextRequest,
@@ -24,8 +27,9 @@ export async function GET(
       SELECT
         e.id, e.token, e.status, e.total_amount, e.approved_amount,
         e.expires_at, e.viewed_at, e.responded_at, e.customer_notes,
+        e.vehicle_id,
         c.first_name, c.last_name, c.customer_name, c.email, c.phone_primary,
-        v.year, v.make, v.model, v.vin
+        v.year, v.make, v.model, v.vin, v.color, v.body_style
       FROM estimates e
       JOIN customers c ON e.customer_id = c.id
       JOIN vehicles v ON e.vehicle_id = v.id
@@ -64,17 +68,52 @@ export async function GET(
       `, [est.id])
     }
 
-    // Fetch services
+    // Fetch services with urgency from linked recommendations
     const servicesResult = await query(`
-      SELECT id, service_title, customer_explanation, estimated_cost, status
-      FROM estimate_services
-      WHERE estimate_id = $1
-      ORDER BY id
+      SELECT es.id, es.service_title, es.customer_explanation, es.estimated_cost, es.status,
+             COALESCE(vr.priority, 'recommended') as urgency
+      FROM estimate_services es
+      LEFT JOIN vehicle_recommendations vr ON es.recommendation_id = vr.id
+      WHERE es.estimate_id = $1
+      ORDER BY es.id
     `, [est.id])
 
     // Build customer name
     const customerFirstName = est.first_name || est.customer_name?.split(' ')[0] || ''
     const customerLastName = est.last_name || est.customer_name?.split(' ').slice(1).join(' ') || ''
+
+    // --- Vehicle Diagram Data ---
+    let vehicleImagePath: string | null = null
+    let hotspots: any[] = []
+
+    try {
+      const vehicle = {
+        id: est.vehicle_id,
+        make: est.make,
+        model: est.model,
+        year: est.year,
+        vin: est.vin,
+        body_style: est.body_style,
+      }
+
+      const bodyStyle = await classifyBodyStyle(vehicle)
+      vehicleImagePath = getVehicleImagePath(bodyStyle, est.color || 'silver')
+
+      // Map estimate services to the Service[] format for generateHotspots
+      const hotspotServices: Service[] = servicesResult.rows.map((s: any) => ({
+        id: s.id,
+        name: s.service_title,
+        estimated_cost: parseFloat(s.estimated_cost) || 0,
+        urgency: mapUrgency(s.urgency),
+        urgency_display: formatUrgencyDisplay(s.urgency),
+        description: s.customer_explanation || '',
+      }))
+
+      hotspots = await generateHotspots(bodyStyle, hotspotServices)
+    } catch (diagramError) {
+      // Diagram is non-critical — estimate still works without it
+      console.error('[Estimate Diagram] Error generating diagram data:', diagramError)
+    }
 
     return NextResponse.json({
       estimate: {
@@ -102,7 +141,9 @@ export async function GET(
           customerExplanation: s.customer_explanation,
           estimatedCost: parseFloat(s.estimated_cost) || 0,
           status: s.status
-        }))
+        })),
+        vehicleImagePath,
+        hotspots,
       }
     })
   } catch (error: any) {
@@ -111,4 +152,38 @@ export async function GET(
       { status: 500 }
     )
   }
+}
+
+/**
+ * Map recommendation priority to the 5-level Service urgency.
+ */
+function mapUrgency(priority: string): Service['urgency'] {
+  const map: Record<string, Service['urgency']> = {
+    critical: 'critical',
+    overdue: 'overdue',
+    due_now: 'due_now',
+    recommended: 'recommended',
+    coming_soon: 'coming_soon',
+    low: 'coming_soon',
+    medium: 'recommended',
+    high: 'critical',
+  }
+  return map[priority?.toLowerCase()] || 'recommended'
+}
+
+/**
+ * Human-readable urgency label.
+ */
+function formatUrgencyDisplay(priority: string): string {
+  const map: Record<string, string> = {
+    critical: 'Critical — Needs Immediate Attention',
+    overdue: 'Overdue',
+    due_now: 'Due Now',
+    recommended: 'Recommended',
+    coming_soon: 'Coming Soon',
+    low: 'Coming Soon',
+    medium: 'Recommended',
+    high: 'Critical',
+  }
+  return map[priority?.toLowerCase()] || 'Recommended'
 }

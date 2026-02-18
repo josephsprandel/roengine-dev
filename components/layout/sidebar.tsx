@@ -1,14 +1,29 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { List, X, Wrench, SquaresFour, Users, ChatCircle, Gear, Lightning, ChartBar, Package, Trash } from "@phosphor-icons/react"
+import { List, X, Wrench, SquaresFour, Users, ChatCircle, Gear, Lightning, ChartBar, Package, Trash, SignOut, UserCircle, CaretUp } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
 import Image from "next/image"
+import { useAuth } from "@/contexts/auth-context"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
 
 export function Sidebar() {
   const [isOpen, setIsOpen] = useState(true)
   const [shopLogo, setShopLogo] = useState<string | null>(null)
   const [shopName, setShopName] = useState<string>("RO Engine")
+  const { user, roles, logout } = useAuth()
+
+  const userInitials = user?.name
+    ? user.name.split(" ").map(part => part[0]).join("").toUpperCase().slice(0, 2)
+    : "?"
+  const primaryRole = roles.length > 0 ? roles[0].name : "User"
 
   useEffect(() => {
     // Fetch shop profile to get logo
@@ -114,15 +129,36 @@ export function Sidebar() {
 
         {/* User profile */}
         <div className="px-4 py-4 border-t border-sidebar-border">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-sidebar-accent/50">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-sidebar-primary to-blue-600 flex items-center justify-center text-sidebar-primary-foreground font-bold">
-              SA
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">Service Advisor</p>
-              <p className="text-xs text-sidebar-accent-foreground truncate">Active Now</p>
-            </div>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-3 px-4 py-3 rounded-lg bg-sidebar-accent/50 hover:bg-sidebar-accent w-full text-left transition-colors cursor-pointer">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-sidebar-primary to-blue-600 flex items-center justify-center text-sidebar-primary-foreground font-bold text-sm shrink-0">
+                  {userInitials}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-sidebar-foreground truncate">{user?.name ?? "Loading..."}</p>
+                  <p className="text-xs text-sidebar-accent-foreground truncate">{primaryRole}</p>
+                </div>
+                <CaretUp size={16} className="text-sidebar-accent-foreground shrink-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="start" className="w-56">
+              <DropdownMenuLabel>
+                <p className="text-sm font-medium">{user?.name}</p>
+                <p className="text-xs text-muted-foreground font-normal">{user?.email}</p>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => alert("Coming soon")}>
+                <UserCircle size={16} />
+                Profile Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={logout}>
+                <SignOut size={16} />
+                Sign Out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </aside>
 

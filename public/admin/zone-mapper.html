@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vehicle Zone Mapper</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; }
+
+  .toolbar {
+    display: flex; align-items: center; gap: 16px; padding: 12px 20px;
+    background: #16213e; border-bottom: 1px solid #333;
+  }
+  .toolbar h1 { font-size: 16px; font-weight: 600; color: #fff; margin-right: auto; }
+  .toolbar label { font-size: 13px; color: #aaa; }
+  .toolbar select, .toolbar button {
+    padding: 6px 12px; border-radius: 6px; border: 1px solid #444;
+    background: #0f3460; color: #fff; font-size: 13px; cursor: pointer;
+  }
+  .toolbar select:hover, .toolbar button:hover { border-color: #4fc3f7; }
+  .toolbar button.primary { background: #1a73e8; border-color: #1a73e8; }
+  .toolbar button.primary:hover { background: #1565c0; }
+
+  .container { display: flex; height: calc(100vh - 49px); }
+
+  .canvas-area {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 20px; position: relative; overflow: hidden;
+  }
+
+  .image-wrapper {
+    position: relative; display: inline-block;
+    border: 2px solid #333; border-radius: 8px; overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+  .image-wrapper img {
+    display: block; max-width: 100%; max-height: calc(100vh - 100px);
+    user-select: none; -webkit-user-drag: none;
+  }
+
+  .grid-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; display: none;
+  }
+  .grid-overlay.visible {
+    display: block;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 9.9%, rgba(255,255,255,0.06) 10%, rgba(255,255,255,0.06) 10.1%)
+      ,repeating-linear-gradient(90deg, transparent, transparent 9.9%, rgba(255,255,255,0.06) 10%, rgba(255,255,255,0.06) 10.1%);
+  }
+  .grid-overlay.visible::after {
+    content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background:
+      linear-gradient(0deg, transparent 49.8%, rgba(255,80,80,0.15) 50%, transparent 50.2%)
+      ,linear-gradient(90deg, transparent 49.8%, rgba(255,80,80,0.15) 50%, transparent 50.2%);
+  }
+
+  .zone-marker {
+    position: absolute; border-radius: 50%; cursor: grab;
+    display: flex; align-items: center; justify-content: center;
+    transform: translate(-50%, -50%);
+    transition: box-shadow 0.15s;
+    z-index: 10;
+  }
+  .zone-marker:hover { z-index: 20; }
+  .zone-marker.dragging { cursor: grabbing; z-index: 30; }
+  .zone-marker .dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid #fff; box-shadow: 0 0 8px rgba(0,0,0,0.5);
+  }
+  .zone-marker .label {
+    position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+    white-space: nowrap; font-size: 10px; font-weight: 600;
+    background: rgba(0,0,0,0.85); color: #fff; padding: 2px 6px;
+    border-radius: 3px; pointer-events: none;
+  }
+  .zone-marker .coords {
+    position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+    white-space: nowrap; font-size: 9px; font-family: monospace;
+    background: rgba(0,0,0,0.85); color: #4fc3f7; padding: 2px 6px;
+    border-radius: 3px; pointer-events: none; display: none;
+  }
+  .zone-marker:hover .coords, .zone-marker.dragging .coords { display: block; }
+
+  .zone-marker .pulse {
+    position: absolute; width: 100%; height: 100%; border-radius: 50%;
+    border: 2px solid; opacity: 0.4;
+    animation: pulse 2s ease-out infinite;
+  }
+  @keyframes pulse {
+    0% { transform: scale(1); opacity: 0.4; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
+
+  .sidebar {
+    width: 360px; background: #16213e; border-left: 1px solid #333;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sidebar h2 {
+    font-size: 14px; padding: 12px 16px; border-bottom: 1px solid #333;
+    color: #aaa; text-transform: uppercase; letter-spacing: 1px;
+  }
+  .zone-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .zone-item {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    border-radius: 6px; margin-bottom: 4px; font-size: 13px;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .zone-item:hover { background: rgba(255,255,255,0.05); }
+  .zone-item.active { background: rgba(26,115,232,0.2); }
+  .zone-item .swatch {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+  .zone-item .name { flex: 1; }
+  .zone-item .pos { font-family: monospace; font-size: 11px; color: #888; }
+
+  .sql-area {
+    border-top: 1px solid #333; padding: 12px;
+  }
+  .sql-area h2 {
+    font-size: 12px; color: #aaa; text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 8px;
+  }
+  .sql-area textarea {
+    width: 100%; height: 160px; background: #0a0a1a; color: #4fc3f7;
+    border: 1px solid #333; border-radius: 6px; padding: 8px;
+    font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 11px;
+    resize: vertical;
+  }
+  .sql-area .actions { display: flex; gap: 8px; margin-top: 8px; }
+  .sql-area button {
+    padding: 6px 14px; border-radius: 6px; border: 1px solid #444;
+    background: #0f3460; color: #fff; font-size: 12px; cursor: pointer;
+  }
+  .sql-area button:hover { border-color: #4fc3f7; }
+  .sql-area button.copy { background: #1a73e8; border-color: #1a73e8; }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: #1a73e8; color: #fff; padding: 8px 20px; border-radius: 8px;
+    font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <h1>Vehicle Zone Mapper</h1>
+  <label>Body Style:</label>
+  <select id="bodyStyleSelect">
+    <option value="sedan">Sedan</option>
+    <option value="mid_suv" selected>Mid SUV</option>
+    <option value="full_suv">Full SUV</option>
+    <option value="mid_truck">Mid Truck</option>
+    <option value="full_truck">Full Truck</option>
+  </select>
+  <label>Color:</label>
+  <select id="colorSelect">
+    <option value="white" selected>White</option>
+    <option value="silver">Silver</option>
+    <option value="gray">Gray</option>
+    <option value="black">Black</option>
+  </select>
+  <label>
+    <input type="checkbox" id="gridToggle"> Grid
+  </label>
+  <button class="primary" onclick="resetPositions()">Reset Positions</button>
+</div>
+
+<div class="container">
+  <div class="canvas-area">
+    <div class="image-wrapper" id="imageWrapper">
+      <img id="vehicleImage" src="/images/vehicles/mid_suv_white.png" alt="Vehicle" draggable="false">
+      <div class="grid-overlay" id="gridOverlay"></div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <h2>Zones</h2>
+    <div class="zone-list" id="zoneList"></div>
+    <div class="sql-area">
+      <h2>Generated SQL</h2>
+      <textarea id="sqlOutput" readonly></textarea>
+      <div class="actions">
+        <button class="copy" onclick="copySQL()">Copy SQL</button>
+        <button onclick="generateAllBodyStyles()">Generate All Styles</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ZONES = [
+  { name: 'engine_bay',          label: 'Engine Bay',          color: '#e53935' },
+  { name: 'radiator',            label: 'Radiator',            color: '#ff7043' },
+  { name: 'front_left_wheel',    label: 'Front Left Wheel',    color: '#42a5f5' },
+  { name: 'front_right_wheel',   label: 'Front Right Wheel',   color: '#1565c0' },
+  { name: 'rear_left_wheel',     label: 'Rear Left Wheel',     color: '#66bb6a' },
+  { name: 'rear_right_wheel',    label: 'Rear Right Wheel',    color: '#2e7d32' },
+  { name: 'cabin_interior',      label: 'Cabin Interior',      color: '#ab47bc' },
+  { name: 'undercarriage_front', label: 'Front Undercarriage', color: '#ffa726' },
+  { name: 'undercarriage_rear',  label: 'Rear Undercarriage',  color: '#8d6e63' },
+];
+
+const DEFAULT_POSITIONS = {
+  sedan:      { engine_bay:[28,20], radiator:[42,10], front_left_wheel:[78,18], front_right_wheel:[78,82], rear_left_wheel:[78,35], rear_right_wheel:[78,65], cabin_interior:[30,50], undercarriage_front:[65,25], undercarriage_rear:[65,70] },
+  mid_suv:    { engine_bay:[28,58], radiator:[62,12], front_left_wheel:[55,8], front_right_wheel:[45,85], rear_left_wheel:[70,15], rear_right_wheel:[65,82], cabin_interior:[35,72], undercarriage_front:[50,40], undercarriage_rear:[72,48] },
+  full_suv:   { engine_bay:[28,55], radiator:[60,10], front_left_wheel:[55,8], front_right_wheel:[45,88], rear_left_wheel:[72,15], rear_right_wheel:[68,85], cabin_interior:[32,70], undercarriage_front:[50,38], undercarriage_rear:[72,50] },
+  mid_truck:  { engine_bay:[30,22], radiator:[48,10], front_left_wheel:[65,15], front_right_wheel:[65,85], rear_left_wheel:[65,40], rear_right_wheel:[65,60], cabin_interior:[28,45], undercarriage_front:[55,25], undercarriage_rear:[55,70] },
+  full_truck: { engine_bay:[30,20], radiator:[48,8], front_left_wheel:[68,12], front_right_wheel:[68,88], rear_left_wheel:[68,35], rear_right_wheel:[68,65], cabin_interior:[28,42], undercarriage_front:[55,22], undercarriage_rear:[55,72] },
+};
+
+let positions = {};
+let activeZone = null;
+let dragging = null;
+let dragOffset = { x: 0, y: 0 };
+
+function init() {
+  const bodyStyle = document.getElementById('bodyStyleSelect').value;
+  const saved = localStorage.getItem(`zones_${bodyStyle}`);
+  if (saved) {
+    positions = JSON.parse(saved);
+  } else {
+    positions = JSON.parse(JSON.stringify(DEFAULT_POSITIONS[bodyStyle] || DEFAULT_POSITIONS.mid_suv));
+  }
+  updateImage();
+  renderMarkers();
+  renderZoneList();
+  generateSQL();
+}
+
+function updateImage() {
+  const bodyStyle = document.getElementById('bodyStyleSelect').value;
+  const color = document.getElementById('colorSelect').value;
+  document.getElementById('vehicleImage').src = `/images/vehicles/${bodyStyle}_${color}.png`;
+}
+
+function renderMarkers() {
+  // Remove old markers
+  document.querySelectorAll('.zone-marker').forEach(el => el.remove());
+
+  const wrapper = document.getElementById('imageWrapper');
+
+  ZONES.forEach(zone => {
+    const pos = positions[zone.name] || [50, 50];
+    const marker = document.createElement('div');
+    marker.className = 'zone-marker';
+    marker.dataset.zone = zone.name;
+    marker.style.top = pos[0] + '%';
+    marker.style.left = pos[1] + '%';
+    marker.style.width = '36px';
+    marker.style.height = '36px';
+
+    marker.innerHTML = `
+      <div class="pulse" style="border-color:${zone.color}"></div>
+      <div class="dot" style="background:${zone.color}"></div>
+      <div class="label">${zone.label}</div>
+      <div class="coords">${pos[0].toFixed(1)}%, ${pos[1].toFixed(1)}%</div>
+    `;
+
+    marker.addEventListener('mousedown', startDrag);
+    marker.addEventListener('click', () => selectZone(zone.name));
+    wrapper.appendChild(marker);
+  });
+}
+
+function startDrag(e) {
+  e.preventDefault();
+  const marker = e.currentTarget;
+  const zone = marker.dataset.zone;
+  dragging = zone;
+  marker.classList.add('dragging');
+  selectZone(zone);
+
+  const wrapper = document.getElementById('imageWrapper');
+  const rect = wrapper.getBoundingClientRect();
+  const pos = positions[zone] || [50, 50];
+
+  dragOffset.x = e.clientX - (rect.left + (pos[1] / 100) * rect.width);
+  dragOffset.y = e.clientY - (rect.top + (pos[0] / 100) * rect.height);
+
+  document.addEventListener('mousemove', onDrag);
+  document.addEventListener('mouseup', stopDrag);
+}
+
+function onDrag(e) {
+  if (!dragging) return;
+  const wrapper = document.getElementById('imageWrapper');
+  const rect = wrapper.getBoundingClientRect();
+
+  let top = ((e.clientY - dragOffset.y - rect.top) / rect.height) * 100;
+  let left = ((e.clientX - dragOffset.x - rect.left) / rect.width) * 100;
+
+  top = Math.max(0, Math.min(100, top));
+  left = Math.max(0, Math.min(100, left));
+
+  // Snap to grid if holding shift
+  if (e.shiftKey) {
+    top = Math.round(top / 5) * 5;
+    left = Math.round(left / 5) * 5;
+  }
+
+  positions[dragging] = [Math.round(top * 10) / 10, Math.round(left * 10) / 10];
+
+  const marker = document.querySelector(`.zone-marker[data-zone="${dragging}"]`);
+  if (marker) {
+    marker.style.top = positions[dragging][0] + '%';
+    marker.style.left = positions[dragging][1] + '%';
+    marker.querySelector('.coords').textContent =
+      `${positions[dragging][0].toFixed(1)}%, ${positions[dragging][1].toFixed(1)}%`;
+  }
+
+  renderZoneList();
+  generateSQL();
+}
+
+function stopDrag() {
+  if (dragging) {
+    const marker = document.querySelector(`.zone-marker[data-zone="${dragging}"]`);
+    if (marker) marker.classList.remove('dragging');
+    const bodyStyle = document.getElementById('bodyStyleSelect').value;
+    localStorage.setItem(`zones_${bodyStyle}`, JSON.stringify(positions));
+  }
+  dragging = null;
+  document.removeEventListener('mousemove', onDrag);
+  document.removeEventListener('mouseup', stopDrag);
+}
+
+function selectZone(name) {
+  activeZone = name;
+  document.querySelectorAll('.zone-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.zone === name);
+  });
+}
+
+function renderZoneList() {
+  const list = document.getElementById('zoneList');
+  list.innerHTML = '';
+  ZONES.forEach(zone => {
+    const pos = positions[zone.name] || [50, 50];
+    const item = document.createElement('div');
+    item.className = 'zone-item' + (activeZone === zone.name ? ' active' : '');
+    item.dataset.zone = zone.name;
+    item.innerHTML = `
+      <div class="swatch" style="background:${zone.color}"></div>
+      <div class="name">${zone.label}</div>
+      <div class="pos">${pos[0].toFixed(1)}, ${pos[1].toFixed(1)}</div>
+    `;
+    item.addEventListener('click', () => selectZone(zone.name));
+    list.appendChild(item);
+  });
+}
+
+function generateSQL() {
+  const bodyStyle = document.getElementById('bodyStyleSelect').value;
+  let sql = `-- Zone positions for ${bodyStyle}\n`;
+  sql += `-- Generated: ${new Date().toISOString().slice(0, 19)}\n\n`;
+
+  ZONES.forEach(zone => {
+    const pos = positions[zone.name] || [50, 50];
+    sql += `UPDATE vehicle_zones SET top_percent = ${pos[0].toFixed(1)}, left_percent = ${pos[1].toFixed(1)} `;
+    sql += `WHERE body_style = '${bodyStyle}' AND zone_name = '${zone.name}';\n`;
+  });
+
+  document.getElementById('sqlOutput').value = sql;
+}
+
+function generateAllBodyStyles() {
+  let sql = '-- Zone positions for ALL body styles\n';
+  sql += `-- Generated: ${new Date().toISOString().slice(0, 19)}\n\n`;
+
+  const styles = ['sedan', 'mid_suv', 'full_suv', 'mid_truck', 'full_truck'];
+  styles.forEach(style => {
+    const saved = localStorage.getItem(`zones_${style}`);
+    const pos = saved ? JSON.parse(saved) : (DEFAULT_POSITIONS[style] || DEFAULT_POSITIONS.mid_suv);
+
+    sql += `-- ${style}\n`;
+
+    // Generate INSERT ... ON CONFLICT for all zones
+    ZONES.forEach(zone => {
+      const p = pos[zone.name] || [50, 50];
+      sql += `INSERT INTO vehicle_zones (body_style, zone_name, zone_label, top_percent, left_percent, size_px) `;
+      sql += `VALUES ('${style}', '${zone.name}', '${zone.label}', ${p[0].toFixed(1)}, ${p[1].toFixed(1)}, 80) `;
+      sql += `ON CONFLICT (body_style, zone_name) DO UPDATE SET top_percent = ${p[0].toFixed(1)}, left_percent = ${p[1].toFixed(1)};\n`;
+    });
+    sql += '\n';
+  });
+
+  document.getElementById('sqlOutput').value = sql;
+  showToast('Generated SQL for all 5 body styles');
+}
+
+function copySQL() {
+  const textarea = document.getElementById('sqlOutput');
+  navigator.clipboard.writeText(textarea.value).then(() => {
+    showToast('SQL copied to clipboard');
+  });
+}
+
+function resetPositions() {
+  const bodyStyle = document.getElementById('bodyStyleSelect').value;
+  localStorage.removeItem(`zones_${bodyStyle}`);
+  positions = JSON.parse(JSON.stringify(DEFAULT_POSITIONS[bodyStyle] || DEFAULT_POSITIONS.mid_suv));
+  renderMarkers();
+  renderZoneList();
+  generateSQL();
+  showToast('Positions reset to defaults');
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+// Event listeners
+document.getElementById('bodyStyleSelect').addEventListener('change', init);
+document.getElementById('colorSelect').addEventListener('change', updateImage);
+document.getElementById('gridToggle').addEventListener('change', (e) => {
+  document.getElementById('gridOverlay').classList.toggle('visible', e.target.checked);
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (!activeZone || dragging) return;
+  const step = e.shiftKey ? 5 : 0.5;
+  const pos = positions[activeZone];
+  if (!pos) return;
+
+  let moved = false;
+  if (e.key === 'ArrowUp')    { pos[0] = Math.max(0, pos[0] - step); moved = true; }
+  if (e.key === 'ArrowDown')  { pos[0] = Math.min(100, pos[0] + step); moved = true; }
+  if (e.key === 'ArrowLeft')  { pos[1] = Math.max(0, pos[1] - step); moved = true; }
+  if (e.key === 'ArrowRight') { pos[1] = Math.min(100, pos[1] + step); moved = true; }
+
+  if (moved) {
+    e.preventDefault();
+    pos[0] = Math.round(pos[0] * 10) / 10;
+    pos[1] = Math.round(pos[1] * 10) / 10;
+    const bodyStyle = document.getElementById('bodyStyleSelect').value;
+    localStorage.setItem(`zones_${bodyStyle}`, JSON.stringify(positions));
+    renderMarkers();
+    renderZoneList();
+    generateSQL();
+  }
+});
+
+// Init
+init();
+</script>
+</body>
+</html>

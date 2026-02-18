@@ -238,3 +238,23 @@
     @apply text-muted-foreground/50 italic;
   }
 }
+
+/* Vehicle Estimate Diagram — Critical hotspot pulse animation */
+@keyframes hotspot-pulse-red {
+  0% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.animate-hotspot-pulse-red {
+  animation: hotspot-pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { CheckCircle, ChevronDown, ChevronUp, Car, User, Clock } from 'lucide-react'
 import { toast } from 'sonner'
+import { VehicleEstimateDiagram } from './VehicleEstimateDiagram'
+import type { Hotspot } from '@/lib/generate-hotspots'
 
 interface EstimateService {
   id: number
@@ -32,6 +34,8 @@ interface EstimateData {
     vin: string
   }
   services: EstimateService[]
+  vehicleImagePath?: string | null
+  hotspots?: Hotspot[]
 }
 
 interface EstimateClientProps {
@@ -225,6 +229,40 @@ export function EstimateClient({ estimate, token }: EstimateClientProps) {
           </div>
         </div>
       </div>
+
+      {/* Vehicle Diagram Section */}
+      {estimate.vehicleImagePath && estimate.hotspots && estimate.hotspots.length > 0 && (
+        <div className="max-w-lg mx-auto px-4 pt-5">
+          {/* Empowerment messaging */}
+          <div className="bg-card rounded-xl border border-border p-5 mb-5">
+            <h2 className="text-lg font-bold text-foreground mb-2">
+              👋 You&apos;re in the Driver&apos;s Seat
+            </h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              We&apos;ve inspected your{' '}
+              <span className="font-semibold text-foreground">
+                {estimate.vehicle.year} {estimate.vehicle.make} {estimate.vehicle.model}
+              </span>{' '}
+              and found{' '}
+              <span className="font-semibold text-foreground">
+                {estimate.services.length} item{estimate.services.length !== 1 ? 's' : ''}
+              </span>{' '}
+              that could use attention. You decide what makes sense for you right now.
+              Tap any glowing area below to explore.
+            </p>
+          </div>
+
+          {/* Interactive vehicle diagram */}
+          <div className="bg-card rounded-xl border border-border p-4 mb-5">
+            <VehicleEstimateDiagram
+              vehicleImagePath={estimate.vehicleImagePath}
+              hotspots={estimate.hotspots}
+              onServiceToggle={toggleService}
+              selectedServiceIds={selectedServices}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Services List */}
       <div className="max-w-lg mx-auto px-4 py-5 space-y-3">

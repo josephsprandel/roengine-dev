@@ -3,7 +3,7 @@
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Check, X, AlertCircle, Wrench, Package, Plus, Clock, Send } from "lucide-react"
+import { Check, X, AlertCircle, AlertTriangle, Wrench, Package, Plus, Clock, Send } from "lucide-react"
 import type { Recommendation } from "../hooks/useRecommendationsManagement"
 
 interface RecommendationCardProps {
@@ -140,6 +140,11 @@ export function RecommendationCard({
   const estimatedCost = parseFloat(recommendation.estimated_cost as any) || 0
   const laborTotal = recommendation.labor_items.reduce((sum, item) => sum + item.total, 0)
   const partsCount = recommendation.parts_items.length
+  const partsTotal = recommendation.parts_items.reduce((sum, item) => sum + (item.total || 0), 0)
+
+  // Parts are "needed" if the service has parts listed but none are priced yet
+  const hasUnpricedParts = partsCount > 0 && recommendation.parts_items.every(p => !p.price || p.price === 0)
+  const needsParts = hasUnpricedParts
 
   return (
     <Card
@@ -161,6 +166,12 @@ export function RecommendationCard({
           {urgency && (
             <Badge variant="outline" className={`text-xs ${urgencyBadges[urgency].className}`}>
               {urgencyBadges[urgency].icon} {urgencyBadges[urgency].label}
+            </Badge>
+          )}
+          {needsParts && (
+            <Badge variant="outline" className="text-xs bg-orange-500/20 text-orange-700 dark:text-orange-400 border-orange-500/20">
+              <AlertTriangle className="h-2.5 w-2.5 mr-1" />
+              PARTS NEEDED
             </Badge>
           )}
         </div>
@@ -224,12 +235,22 @@ export function RecommendationCard({
         </div>
         <div className="flex items-center justify-between text-xs">
           <div className="flex items-center gap-1">
-            <Package className="h-3 w-3 text-green-500" />
+            <Package className={`h-3 w-3 ${needsParts ? 'text-orange-500' : 'text-green-500'}`} />
             <span className="text-muted-foreground">Parts:</span>
           </div>
-          <span className="font-medium text-foreground">
-            {partsCount} item{partsCount !== 1 ? 's' : ''}
-          </span>
+          {needsParts ? (
+            <span className="font-medium text-orange-600 dark:text-orange-400">
+              {partsCount} item{partsCount !== 1 ? 's' : ''} — not priced
+            </span>
+          ) : partsCount > 0 ? (
+            <span className="font-medium text-foreground">
+              ${partsTotal.toFixed(2)} ({partsCount} item{partsCount !== 1 ? 's' : ''})
+            </span>
+          ) : (
+            <span className="font-medium text-muted-foreground">
+              None required
+            </span>
+          )}
         </div>
       </div>
 

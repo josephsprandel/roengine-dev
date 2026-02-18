@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Sparkles, ChevronDown, ChevronRight, Loader2, AlertTriangle } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronRight, Loader2, AlertTriangle, Trash2 } from "lucide-react"
+import { toast } from "sonner" // TODO: REMOVE - only needed for dev delete button
 import { useRecommendationsManagement } from "../hooks/useRecommendationsManagement"
 import { RecommendationCard } from "./RecommendationCard"
 import { ApproveRecommendationDialog } from "./ApproveRecommendationDialog"
@@ -54,6 +55,27 @@ export function RecommendationsSection({
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [selectedRecommendation, setSelectedRecommendation] = useState<Recommendation | null>(null)
+  const [deleting, setDeleting] = useState(false) // TODO: REMOVE - dev only
+
+  // TODO: REMOVE handleDeleteAll before production - dev/testing only
+  const handleDeleteAll = async () => {
+    if (!confirm('Permanently delete ALL recommendations for this vehicle? This cannot be undone.')) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/vehicles/${vehicleId}/recommendations/delete-all`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to delete')
+      }
+      const data = await res.json()
+      toast.success(`Deleted ${data.deleted} recommendations`)
+      reloadRecommendations()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete recommendations')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   // Handle approve click
   const handleApproveClick = (recommendation: Recommendation) => {
@@ -163,12 +185,25 @@ export function RecommendationsSection({
               </Badge>
             )}
           </div>
-          {awaitingApprovalOnly.length > 0 && (
-            <GenerateEstimateLinkButton
-              workOrderId={workOrderId}
-              recommendations={activeRecommendations}
-            />
-          )}
+          <div className="flex items-center gap-2">
+            {awaitingApprovalOnly.length > 0 && (
+              <GenerateEstimateLinkButton
+                workOrderId={workOrderId}
+                recommendations={activeRecommendations}
+              />
+            )}
+            {/* TODO: REMOVE this delete button before production - dev/testing only */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDeleteAll}
+              disabled={deleting}
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              title="DEV: Delete all recommendations"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
 
         {/* Action Required Banner */}
