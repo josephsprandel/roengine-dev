@@ -87,8 +87,15 @@ function HotspotBubble({
           transition-all duration-200
           group-hover:scale-110 group-hover:shadow-lg group-active:scale-95`}
       >
-        {/* Service count */}
-        <span className={`${config.text} font-bold text-sm leading-none drop-shadow-sm`}>
+        {/* Service count — outlined for readability on any background */}
+        <span
+          className="font-bold text-lg leading-none"
+          style={{
+            WebkitTextStroke: '2px black',
+            WebkitTextFillColor: 'white',
+            textShadow: '0 0 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.6)',
+          }}
+        >
           {hotspot.count}
         </span>
       </span>
