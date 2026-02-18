@@ -15,6 +15,9 @@ interface VehicleEstimateDiagramProps {
 const hotspotColors = {
   critical: {
     bg: 'bg-red-500',
+    border: 'border-red-500',
+    fillBg: 'bg-red-500/15',
+    text: 'text-red-600',
     ring: 'ring-red-500/30',
     shadow: 'shadow-red-500/25',
     pulse: 'animate-hotspot-pulse-red',
@@ -22,6 +25,9 @@ const hotspotColors = {
   },
   recommended: {
     bg: 'bg-amber-500',
+    border: 'border-amber-500',
+    fillBg: 'bg-amber-500/15',
+    text: 'text-amber-600',
     ring: 'ring-amber-500/30',
     shadow: 'shadow-amber-500/25',
     pulse: '',
@@ -29,6 +35,9 @@ const hotspotColors = {
   },
   coming_soon: {
     bg: 'bg-emerald-500',
+    border: 'border-emerald-500',
+    fillBg: 'bg-emerald-500/15',
+    text: 'text-emerald-600',
     ring: 'ring-emerald-500/30',
     shadow: 'shadow-emerald-500/25',
     pulse: '',
@@ -46,8 +55,7 @@ function HotspotBubble({
   const config = hotspotColors[hotspot.urgency]
   const isCritical = hotspot.urgency === 'critical'
 
-  // Ensure minimum 60px touch target
-  const displaySize = Math.max(hotspot.size_px || 60, 60)
+  const displaySize = Math.max(hotspot.size_px || 40, 40)
 
   return (
     <button
@@ -66,26 +74,21 @@ function HotspotBubble({
       {/* Pulse ring for critical zones */}
       {isCritical && (
         <span
-          className={`absolute inset-0 rounded-full ${config.bg} opacity-40 ${config.pulse}`}
+          className={`absolute inset-[-4px] rounded-full border-2 ${config.border} opacity-60 ${config.pulse}`}
         />
       )}
 
-      {/* Outer glow ring */}
+      {/* Ring bubble — colored border with transparent fill */}
       <span
-        className={`absolute inset-0 rounded-full ring-4 ${config.ring} ${config.bg} opacity-20 group-hover:opacity-30 transition-opacity`}
-      />
-
-      {/* Main bubble */}
-      <span
-        className={`absolute inset-[6px] rounded-full ${config.bg} 
-          backdrop-blur-sm bg-opacity-90
-          shadow-lg ${config.shadow}
+        className={`absolute inset-0 rounded-full 
+          border-[3px] ${config.border} ${config.fillBg}
+          shadow-md ${config.shadow}
           flex items-center justify-center
           transition-all duration-200
-          group-hover:scale-110 group-active:scale-95`}
+          group-hover:scale-110 group-hover:shadow-lg group-active:scale-95`}
       >
-        {/* Service count badge */}
-        <span className="text-white font-bold text-sm leading-none">
+        {/* Service count */}
+        <span className={`${config.text} font-bold text-sm leading-none drop-shadow-sm`}>
           {hotspot.count}
         </span>
       </span>
