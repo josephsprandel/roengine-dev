@@ -1,14 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { X, ChevronDown, ChevronUp, CheckCircle, Plus, HelpCircle } from 'lucide-react'
+import { X, ChevronDown, ChevronUp, CheckCircle, Plus, HelpCircle, AlertTriangle } from 'lucide-react'
 import type { Hotspot, Service } from '@/lib/generate-hotspots'
+import { getServiceExplanation, interpolateTemplateVars, type VehicleContext } from '@/lib/service-explanations'
 
 interface ZoneServicesModalProps {
   zone: Hotspot
   selectedServiceIds: Set<number>
   onServiceToggle: (serviceId: number) => void
   onClose: () => void
+  vehicle?: VehicleContext
 }
 
 const urgencyConfig = {
@@ -76,13 +78,20 @@ function ServiceCard({
   service,
   isSelected,
   onToggle,
+  vehicle,
 }: {
   service: Service
   isSelected: boolean
   onToggle: () => void
+  vehicle?: VehicleContext
 }) {
   const [expanded, setExpanded] = useState(false)
   const config = urgencyConfig[service.urgency]
+  const explanation = getServiceExplanation(service.name)
+
+  // Helper to interpolate text with vehicle data
+  const t = (text: string) =>
+    vehicle ? interpolateTemplateVars(text, vehicle) : text
 
   return (
     <div
@@ -110,15 +119,55 @@ function ServiceCard({
           </div>
         </div>
 
-        {/* Description preview */}
-        {service.description && !expanded && (
+        {/* Level 1 summary — always visible if available */}
+        {!expanded && explanation && (
+          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+            {explanation.level_1.summary}
+          </p>
+        )}
+
+        {/* Fallback to service.description if no explanation */}
+        {!expanded && !explanation && service.description && (
           <p className="text-sm text-muted-foreground mt-2 line-clamp-2 leading-relaxed">
             {service.description}
           </p>
         )}
 
-        {/* Expanded description */}
-        {expanded && service.description && (
+        {/* Expanded — Level 2 rich explanation */}
+        {expanded && explanation && (
+          <div className="mt-3 space-y-3">
+            <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+              <p className="font-semibold text-sm text-blue-800 dark:text-blue-300 mb-1.5">
+                🔧 What is it?
+              </p>
+              <p className="text-sm text-foreground leading-relaxed">
+                {t(explanation.level_2.what)}
+              </p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+              <p className="font-semibold text-sm text-amber-800 dark:text-amber-300 mb-1.5">
+                ⏰ Why now?
+              </p>
+              <p className="text-sm text-foreground leading-relaxed">
+                {t(explanation.level_2.why)}
+              </p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
+              <p className="font-semibold text-sm text-orange-800 dark:text-orange-300 mb-1.5 flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                What happens if you wait?
+              </p>
+              <p className="text-sm text-foreground leading-relaxed">
+                {t(explanation.level_2.consequences)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Fallback expanded description */}
+        {expanded && !explanation && service.description && (
           <div className={`mt-3 p-3 rounded-lg ${config.lightBg} border ${config.border}`}>
             <p className="text-sm text-foreground leading-relaxed">
               {service.description}
@@ -149,7 +198,7 @@ function ServiceCard({
             )}
           </button>
 
-          {service.description && (
+          {(explanation || service.description) && (
             <button
               onClick={() => setExpanded(!expanded)}
               className="flex items-center gap-1 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors active:scale-[0.97]"
@@ -177,6 +226,7 @@ export function ZoneServicesModal({
   selectedServiceIds,
   onServiceToggle,
   onClose,
+  vehicle,
 }: ZoneServicesModalProps) {
   const zoneConfig = zoneUrgencyConfig[zone.urgency]
 
@@ -236,6 +286,7 @@ export function ZoneServicesModal({
                 service={service}
                 isSelected={selectedServiceIds.has(service.id)}
                 onToggle={() => onServiceToggle(service.id)}
+                vehicle={vehicle}
               />
             ))}
           </div>

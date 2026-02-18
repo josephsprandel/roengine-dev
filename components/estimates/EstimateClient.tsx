@@ -259,6 +259,11 @@ export function EstimateClient({ estimate, token }: EstimateClientProps) {
               hotspots={estimate.hotspots}
               onServiceToggle={toggleService}
               selectedServiceIds={selectedServices}
+              vehicle={{
+                year: estimate.vehicle.year,
+                make: estimate.vehicle.make,
+                model: estimate.vehicle.model,
+              }}
             />
           </div>
         </div>

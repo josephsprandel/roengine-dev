@@ -1,0 +1,229 @@
+{
+  "version": "1.0",
+  "services": [
+    {
+      "id": "engine_oil_change",
+      "name": "Engine Oil Change",
+      "aliases": ["Oil Change", "Oil and Filter Change", "Engine Oil and Filter Change"],
+      "level_1": {
+        "summary": "Drains old engine oil and replaces it with fresh oil and a new filter to keep your engine running smoothly."
+      },
+      "level_2": {
+        "what": "We drain the used motor oil from your {{year}} {{make}} {{model}}'s {{engine_type}} engine, replace the oil filter, and refill with the manufacturer-recommended grade of fresh oil.",
+        "why": "Engine oil breaks down over time and loses its ability to lubricate, cool, and protect the moving parts inside your engine. At {{mileage}} miles, fresh oil ensures everything moves freely without excessive wear.",
+        "consequences": "Running old or low oil can cause metal-on-metal contact inside the engine, leading to overheating, sludge buildup, and eventually catastrophic engine failure — one of the most expensive repairs on any vehicle."
+      },
+      "template_vehicle_line": "Your {{year}} {{make}} {{model}} with the {{engine_type}} uses {{fuel_type}} and benefits from regular oil changes every 5,000–7,500 miles."
+    },
+    {
+      "id": "tire_rotation",
+      "name": "Tire Rotation",
+      "aliases": ["Rotate Tires"],
+      "level_1": {
+        "summary": "Moves your tires to different positions so they wear evenly and last longer."
+      },
+      "level_2": {
+        "what": "We reposition each tire on your {{year}} {{make}} {{model}} — typically moving front tires to the rear and vice versa — following the pattern recommended for your {{drive_type}} system.",
+        "why": "Front and rear tires wear at different rates due to steering, braking, and weight distribution. Regular rotation at {{mileage}} miles ensures all four tires wear evenly, maximizing their lifespan.",
+        "consequences": "Skipping rotations causes uneven tread wear, which reduces grip and handling, can trigger vibrations at highway speeds, and may force you to replace tires thousands of miles sooner than necessary."
+      },
+      "template_vehicle_line": "Your {{drive_type}} {{year}} {{make}} {{model}} benefits from tire rotation every 5,000–7,500 miles."
+    },
+    {
+      "id": "brake_inspection",
+      "name": "Brake Inspection",
+      "aliases": ["Brake Check", "Brake System Inspection"],
+      "level_1": {
+        "summary": "A thorough check of your brake pads, rotors, calipers, and brake fluid to make sure your brakes are safe."
+      },
+      "level_2": {
+        "what": "We measure brake pad thickness, inspect rotors for wear or warping, check calipers for proper function, and evaluate brake fluid condition on your {{year}} {{make}} {{model}}.",
+        "why": "Brakes are your vehicle's most critical safety system. At {{mileage}} miles, a professional inspection catches wear before it becomes a safety issue or causes more expensive damage to rotors and calipers.",
+        "consequences": "Worn brake pads that go unchecked will grind into the rotors, turning a $150 pad replacement into a $500+ rotor and pad job. More importantly, degraded brakes increase stopping distance and put you and your passengers at risk."
+      },
+      "template_vehicle_line": "Brake inspections on your {{year}} {{make}} {{model}} are typically recommended every 15,000–30,000 miles or at any sign of noise or vibration."
+    },
+    {
+      "id": "engine_air_filter",
+      "name": "Engine Air Filter Replacement",
+      "aliases": ["Engine Air Filter", "Air Filter Replacement", "Air Filter"],
+      "level_1": {
+        "summary": "Replaces the filter that cleans the air entering your engine, helping it breathe and perform efficiently."
+      },
+      "level_2": {
+        "what": "We remove the old engine air filter from your {{year}} {{make}} {{model}}'s {{engine_type}} and install a new one that catches dust, pollen, and debris before they enter the engine.",
+        "why": "A clogged air filter restricts airflow to the engine, forcing it to work harder. At {{mileage}} miles, a fresh filter restores optimal airflow for better fuel efficiency and engine performance.",
+        "consequences": "A dirty air filter reduces fuel economy by up to 10%, decreases acceleration, and in extreme cases allows contaminants into the engine that can cause premature wear on internal components."
+      },
+      "template_vehicle_line": "The {{engine_type}} in your {{year}} {{make}} {{model}} typically needs a new air filter every 15,000–30,000 miles depending on driving conditions."
+    },
+    {
+      "id": "cabin_air_filter",
+      "name": "Cabin Air Filter Replacement",
+      "aliases": ["Cabin Air Filter", "Cabin Filter", "HVAC Filter"],
+      "level_1": {
+        "summary": "Replaces the filter that cleans the air inside your car's cabin, improving air quality for you and your passengers."
+      },
+      "level_2": {
+        "what": "We replace the cabin air filter in your {{year}} {{make}} {{model}}, which filters dust, pollen, exhaust fumes, and other pollutants from the air that comes through your heating and air conditioning system.",
+        "why": "Over time, the cabin filter gets clogged with debris, reducing airflow through your vents and allowing allergens and pollutants into the cabin. At {{mileage}} miles, a fresh filter means cleaner air and better HVAC performance.",
+        "consequences": "A clogged cabin filter reduces heating and AC airflow, creates musty odors, and forces allergy sufferers to breathe in pollen and dust. It also puts extra strain on your blower motor, which can shorten its lifespan."
+      },
+      "template_vehicle_line": "Your {{year}} {{make}} {{model}}'s cabin filter should be replaced every 15,000–25,000 miles or more frequently in dusty or high-pollen environments."
+    },
+    {
+      "id": "transmission_fluid",
+      "name": "Transmission Fluid Drain and Fill",
+      "aliases": ["Transmission Fluid", "Transmission Fluid Change", "Transmission Fluid Service", "Transmission Service"],
+      "level_1": {
+        "summary": "Drains old transmission fluid and replaces it with fresh fluid to keep your transmission shifting smoothly."
+      },
+      "level_2": {
+        "what": "We drain the used transmission fluid from your {{year}} {{make}} {{model}} and refill it with the manufacturer-specified fluid. This is a drain-and-fill service (not a full flush), which is the safer method recommended by most manufacturers.",
+        "why": "Transmission fluid degrades from heat and friction over time, losing its ability to lubricate gears and maintain hydraulic pressure. At {{mileage}} miles, fresh fluid helps your transmission shift smoothly and stay cool.",
+        "consequences": "Old, degraded transmission fluid causes rough or delayed shifting, overheating, and accelerated wear on internal gears and clutch packs. Transmission repairs or replacement typically cost $3,000–$6,000 — making fluid changes one of the best-value preventive services."
+      },
+      "template_vehicle_line": "Your {{year}} {{make}} {{model}} with {{drive_type}} typically needs a transmission fluid service every 30,000–60,000 miles."
+    },
+    {
+      "id": "battery_service",
+      "name": "Battery Service",
+      "aliases": ["Battery Test", "Battery Replacement", "Battery Check", "Battery Inspection"],
+      "level_1": {
+        "summary": "Tests your battery's health and cleans the connections to ensure reliable starting."
+      },
+      "level_2": {
+        "what": "We test the voltage and cold-cranking amps of your {{year}} {{make}} {{model}}'s battery, clean the terminal connections, apply anti-corrosion treatment, and advise on replacement if the battery is weakening.",
+        "why": "Car batteries typically last 3–5 years and gradually lose their ability to hold a charge. At {{mileage}} miles, a battery test gives you advance warning before a no-start situation leaves you stranded.",
+        "consequences": "A failing battery can leave you stranded without warning, and a weak battery forces the alternator to work overtime — potentially shortening its life too. Battery failures are the #1 cause of roadside assistance calls."
+      },
+      "template_vehicle_line": "The battery in your {{year}} {{make}} {{model}} should be tested annually, especially if it's more than 3 years old."
+    },
+    {
+      "id": "brake_fluid_flush",
+      "name": "Brake Fluid Flush",
+      "aliases": ["Brake Fluid Service", "Brake Fluid Change", "Brake Fluid Replacement"],
+      "level_1": {
+        "summary": "Replaces old brake fluid to maintain strong, responsive braking performance."
+      },
+      "level_2": {
+        "what": "We flush the old brake fluid from your {{year}} {{make}} {{model}}'s entire brake system — master cylinder, lines, calipers — and replace it with fresh, clean fluid that meets manufacturer specifications.",
+        "why": "Brake fluid absorbs moisture from the air over time, which lowers its boiling point and can cause spongy brakes or brake fade during heavy use. At {{mileage}} miles, a fluid flush restores full braking confidence.",
+        "consequences": "Moisture-contaminated brake fluid can boil during hard braking (like going down a hill), causing temporary loss of braking power. It also corrodes internal brake components from the inside, leading to caliper and line failures."
+      },
+      "template_vehicle_line": "Your {{year}} {{make}} {{model}} typically needs a brake fluid flush every 2–3 years or 30,000 miles, whichever comes first."
+    },
+    {
+      "id": "coolant_service",
+      "name": "Coolant Service",
+      "aliases": ["Coolant Flush", "Coolant System Service", "Radiator Flush", "Radiator Service", "Antifreeze Change"],
+      "level_1": {
+        "summary": "Replaces old coolant to keep your engine at the right temperature and prevent corrosion."
+      },
+      "level_2": {
+        "what": "We drain the old coolant from your {{year}} {{make}} {{model}}'s cooling system, flush out contaminants, and refill with fresh coolant that meets your vehicle's specific requirements.",
+        "why": "Coolant breaks down over time, becoming acidic and losing its ability to prevent corrosion and maintain the proper operating temperature. At {{mileage}} miles, fresh coolant protects your engine, water pump, and radiator.",
+        "consequences": "Old coolant can cause internal corrosion that damages the radiator, water pump, heater core, and head gasket. Overheating from coolant failure can warp the cylinder head — a repair that often costs $1,500–$3,000."
+      },
+      "template_vehicle_line": "Your {{year}} {{make}} {{model}} typically needs a coolant service every 30,000–50,000 miles or per the maintenance schedule."
+    },
+    {
+      "id": "spark_plugs",
+      "name": "Spark Plug Replacement",
+      "aliases": ["Spark Plugs", "Spark Plug Service", "Ignition Tune-Up"],
+      "level_1": {
+        "summary": "Replaces worn spark plugs so your engine fires efficiently and runs smoothly."
+      },
+      "level_2": {
+        "what": "We remove the old spark plugs from your {{year}} {{make}} {{model}}'s {{engine_type}} and install new ones gapped to the manufacturer's specification. This ensures each cylinder fires cleanly and efficiently.",
+        "why": "Spark plugs wear down over thousands of ignition cycles, causing weaker sparks that reduce power, fuel economy, and emissions performance. At {{mileage}} miles, fresh plugs restore crisp throttle response and smooth idling.",
+        "consequences": "Worn spark plugs cause misfires, rough idling, poor acceleration, increased fuel consumption, and can damage the catalytic converter — a component that costs $1,000–$2,500 to replace."
+      },
+      "template_vehicle_line": "The {{engine_type}} in your {{year}} {{make}} {{model}} typically needs spark plugs replaced every 60,000–100,000 miles depending on plug type."
+    },
+    {
+      "id": "serpentine_belt",
+      "name": "Serpentine Belt",
+      "aliases": ["Drive Belt Inspection", "Drive Belt", "Belt Replacement", "Belts and Hoses"],
+      "level_1": {
+        "summary": "Replaces the belt that drives your alternator, power steering, AC compressor, and water pump."
+      },
+      "level_2": {
+        "what": "We inspect and/or replace the serpentine belt on your {{year}} {{make}} {{model}}'s {{engine_type}} — the single belt that powers your alternator, AC compressor, power steering pump, and water pump.",
+        "why": "Serpentine belts stretch and crack with age and heat exposure. At {{mileage}} miles, inspecting or replacing the belt prevents a sudden failure that would disable multiple critical systems simultaneously.",
+        "consequences": "A broken serpentine belt causes immediate loss of power steering, AC, and the alternator (battery charging). The water pump also stops, which can cause the engine to overheat within minutes."
+      },
+      "template_vehicle_line": "The serpentine belt on your {{year}} {{make}} {{model}} should be inspected every 30,000 miles and replaced every 60,000–100,000 miles."
+    },
+    {
+      "id": "differential_service",
+      "name": "Differential Service",
+      "aliases": ["Differential Fluid", "Differential Fluid Change", "Rear Differential", "Front Differential"],
+      "level_1": {
+        "summary": "Replaces the gear oil in your differential to keep the drivetrain running smoothly."
+      },
+      "level_2": {
+        "what": "We drain the old gear oil from your {{year}} {{make}} {{model}}'s differential(s) and replace it with fresh fluid that meets manufacturer specifications for your {{drive_type}} system.",
+        "why": "Differential fluid breaks down from heat and metal wear particles accumulate over time. At {{mileage}} miles, fresh fluid reduces friction and heat in the ring and pinion gears, extending the life of your drivetrain.",
+        "consequences": "Neglected differential fluid causes excessive gear wear, whining noises during turns or at speed, and can eventually lead to differential failure — a repair that typically costs $1,500–$4,000."
+      },
+      "template_vehicle_line": "Your {{drive_type}} {{year}} {{make}} {{model}} typically needs differential fluid changed every 30,000–60,000 miles."
+    },
+    {
+      "id": "wiper_blades",
+      "name": "Wiper Blade Replacement",
+      "aliases": ["Wiper Blades", "Windshield Wipers", "Wiper Service"],
+      "level_1": {
+        "summary": "Installs new wiper blades for clear, streak-free visibility in rain and snow."
+      },
+      "level_2": {
+        "what": "We replace the front (and rear, if applicable) windshield wiper blades on your {{year}} {{make}} {{model}} with the correct size and fitment.",
+        "why": "Wiper blades are made of rubber that degrades from UV exposure, heat, and use. After about 6–12 months, the rubber loses flexibility and begins to streak, skip, or smear — reducing visibility during rain.",
+        "consequences": "Worn wipers create dangerous blind spots during rain, reduce reaction time, and can scratch your windshield if the rubber deteriorates enough to expose the metal frame."
+      },
+      "template_vehicle_line": "Wiper blades on your {{year}} {{make}} {{model}} should be replaced every 6–12 months or at the first sign of streaking."
+    },
+    {
+      "id": "front_brake_pads",
+      "name": "Front Brake Pads",
+      "aliases": ["Front Brake Pad Replacement", "Front Brakes", "Brake Pad Replacement"],
+      "level_1": {
+        "summary": "Replaces the worn front brake pads so your vehicle stops safely and smoothly."
+      },
+      "level_2": {
+        "what": "We remove the worn front brake pads on your {{year}} {{make}} {{model}} and install new ones, then inspect the rotors and calipers to ensure everything is working properly.",
+        "why": "Front brakes do 60–70% of the stopping work on most vehicles. At {{mileage}} miles, if your pads are worn below safe thickness, replacing them restores full braking power and protects the more expensive rotors.",
+        "consequences": "Driving on worn brake pads causes metal-to-metal contact with the rotors, creating a grinding noise, dramatically increasing stopping distance, and turning a pad-only job into a pads-and-rotors replacement at 2–3x the cost."
+      },
+      "template_vehicle_line": "Front brake pads on your {{year}} {{make}} {{model}} typically last 30,000–50,000 miles depending on driving style."
+    },
+    {
+      "id": "rear_brake_pads",
+      "name": "Rear Brake Pads",
+      "aliases": ["Rear Brake Pad Replacement", "Rear Brakes"],
+      "level_1": {
+        "summary": "Replaces the worn rear brake pads to maintain balanced, safe braking."
+      },
+      "level_2": {
+        "what": "We remove the worn rear brake pads on your {{year}} {{make}} {{model}} and install new ones. Rear brakes often include an electronic parking brake mechanism that we inspect and service as part of the replacement.",
+        "why": "While rear brakes handle less force than the fronts, they're essential for balanced stopping and stability. At {{mileage}} miles, replacing worn rear pads maintains even braking and prevents damage to rear rotors.",
+        "consequences": "Worn rear pads compromise braking balance, causing the vehicle to pull or become unstable during stops. Left too long, metal-on-metal contact destroys rear rotors and can damage the parking brake mechanism."
+      },
+      "template_vehicle_line": "Rear brake pads on your {{year}} {{make}} {{model}} typically last 40,000–70,000 miles."
+    },
+    {
+      "id": "suspension_inspection",
+      "name": "Suspension Inspection",
+      "aliases": ["Front Suspension Inspection", "Rear Suspension Inspection", "Suspension Check"],
+      "level_1": {
+        "summary": "Checks your shocks, struts, bushings, and ball joints for wear that affects ride quality and safety."
+      },
+      "level_2": {
+        "what": "We inspect the suspension components on your {{year}} {{make}} {{model}} — including struts/shocks, control arm bushings, ball joints, tie rods, and sway bar links — checking for leaks, play, and wear.",
+        "why": "Suspension components wear gradually, so you may not notice the decline in handling and ride quality. At {{mileage}} miles, an inspection catches worn parts before they cause tire wear, alignment issues, or unsafe handling.",
+        "consequences": "Worn suspension components cause uneven tire wear, poor handling, longer braking distances, and can lead to loss of vehicle control. A failed ball joint or tie rod can cause a wheel to separate from the vehicle."
+      },
+      "template_vehicle_line": "Suspension inspection on your {{year}} {{make}} {{model}} is recommended every 30,000–50,000 miles or if you notice any unusual noises or handling changes."
+    }
+  ]
+}

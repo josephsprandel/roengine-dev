@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import type { Hotspot } from '@/lib/generate-hotspots'
+import type { VehicleContext } from '@/lib/service-explanations'
 import { ZoneServicesModal } from './ZoneServicesModal'
 
 interface VehicleEstimateDiagramProps {
@@ -10,6 +11,7 @@ interface VehicleEstimateDiagramProps {
   hotspots: Hotspot[]
   onServiceToggle: (serviceId: number) => void
   selectedServiceIds?: Set<number>
+  vehicle?: VehicleContext
 }
 
 const hotspotColors = {
@@ -138,6 +140,7 @@ export function VehicleEstimateDiagram({
   hotspots,
   onServiceToggle,
   selectedServiceIds = new Set(),
+  vehicle,
 }: VehicleEstimateDiagramProps) {
   const [activeZone, setActiveZone] = useState<Hotspot | null>(null)
 
@@ -205,6 +208,7 @@ export function VehicleEstimateDiagram({
           selectedServiceIds={selectedServiceIds}
           onServiceToggle={onServiceToggle}
           onClose={() => setActiveZone(null)}
+          vehicle={vehicle}
         />
       )}
     </div>
