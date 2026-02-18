@@ -242,19 +242,19 @@ export function ZoneServicesModal({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm animate-in fade-in-0 duration-200"
+        className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm animate-in fade-in-0 duration-200"
         onClick={onClose}
       />
 
       {/* Modal — bottom sheet on mobile, centered on desktop */}
       <div
-        className="fixed z-50 
-          inset-x-0 bottom-0 
-          sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2
+        className="fixed z-[60] 
+          inset-x-0 bottom-0 pb-[env(safe-area-inset-bottom)]
+          sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:pb-0
           sm:max-w-md sm:w-full sm:mx-4
           animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:fade-in-0 sm:zoom-in-95 duration-300"
       >
-        <div className="bg-background rounded-t-2xl sm:rounded-2xl shadow-2xl border border-border overflow-hidden max-h-[85vh] flex flex-col">
+        <div className="bg-background rounded-t-2xl sm:rounded-2xl shadow-2xl border border-border overflow-hidden max-h-[70vh] sm:max-h-[85vh] flex flex-col">
           {/* Drag handle — mobile only */}
           <div className="flex justify-center pt-3 sm:hidden">
             <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
