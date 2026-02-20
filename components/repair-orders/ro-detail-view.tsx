@@ -17,6 +17,7 @@ import {
   FileText,
   Calendar,
   Clock,
+  User,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -163,6 +164,8 @@ interface WorkOrder {
   job_state_color: string | null
   job_state_icon: string | null
   job_state_slug: string | null
+  assigned_tech_id: number | null
+  tech_name: string | null
 }
 
 export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => void }) {
@@ -710,15 +713,25 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
             )}
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2 bg-transparent mt-2"
-            onClick={() => setTransferDialogOpen(true)}
-          >
-            <ArrowRightLeft size={16} />
-            Transfer
-          </Button>
+          {/* Current owner + Transfer button — grouped together */}
+          <div className="flex flex-col items-end gap-1 mt-2">
+            {/* Current owner chip */}
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 border border-border/60 text-xs text-muted-foreground transition-all">
+              <User size={11} className="shrink-0" />
+              <span className="font-medium text-foreground">
+                {(workOrder as any).tech_name || "Unassigned"}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 bg-transparent"
+              onClick={() => setTransferDialogOpen(true)}
+            >
+              <ArrowRightLeft size={16} />
+              Transfer
+            </Button>
+          </div>
         </div>
       </div>
 
