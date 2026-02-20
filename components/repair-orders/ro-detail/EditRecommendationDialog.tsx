@@ -17,6 +17,8 @@ interface EditRecommendationDialogProps {
   onOpenChange: (open: boolean) => void
   recommendation: Recommendation | null
   onEdited: () => void
+  /** When provided with no recommendation, operates in "create" mode */
+  vehicleId?: number
 }
 
 type Priority = 'critical' | 'recommended' | 'suggested'
@@ -40,8 +42,10 @@ export function EditRecommendationDialog({
   open,
   onOpenChange,
   recommendation,
-  onEdited
+  onEdited,
+  vehicleId
 }: EditRecommendationDialogProps) {
+  const isCreateMode = !recommendation && !!vehicleId
   const [serviceTitle, setServiceTitle] = useState("")
   const [reason, setReason] = useState("")
   const [priority, setPriority] = useState<Priority>('recommended')
@@ -53,22 +57,30 @@ export function EditRecommendationDialog({
   const [isCatalogOpen, setIsCatalogOpen] = useState(false)
   const [catalogItemIndex, setCatalogItemIndex] = useState<number | undefined>(undefined)
 
-  // Reset form when dialog opens with recommendation data
+  // Reset form when dialog opens
   useEffect(() => {
-    if (open && recommendation) {
-      setServiceTitle(recommendation.service_title)
-      setReason(recommendation.reason)
-      setPriority(recommendation.priority)
-      setRecommendedMileage(recommendation.recommended_at_mileage?.toString() || "")
-      setLaborItems(recommendation.labor_items || [])
-      setPartsItems(recommendation.parts_items || [])
+    if (open) {
+      if (recommendation) {
+        setServiceTitle(recommendation.service_title)
+        setReason(recommendation.reason)
+        setPriority(recommendation.priority)
+        setRecommendedMileage(recommendation.recommended_at_mileage?.toString() || "")
+        setLaborItems(recommendation.labor_items || [])
+        setPartsItems(recommendation.parts_items || [])
+      } else {
+        // Create mode: blank form
+        setServiceTitle("")
+        setReason("")
+        setPriority('recommended')
+        setRecommendedMileage("")
+        setLaborItems([])
+        setPartsItems([])
+      }
       setError(null)
     }
   }, [open, recommendation])
 
   const handleSave = async () => {
-    if (!recommendation) return
-
     // Validation
     if (!serviceTitle.trim()) {
       setError('Service title is required')
@@ -84,32 +96,44 @@ export function EditRecommendationDialog({
     setError(null)
 
     try {
-      const res = await fetch(`/api/vehicle-recommendations/${recommendation.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          service_title: serviceTitle.trim(),
-          reason: reason.trim(),
-          priority,
-          recommended_at_mileage: recommendedMileage ? parseInt(recommendedMileage) : null,
-          labor_items: laborItems,
-          parts_items: partsItems.map(item => ({ ...item, total: item.qty * item.price })),
-          estimated_cost: estimatedCost
+      const payload = {
+        service_title: serviceTitle.trim(),
+        reason: reason.trim(),
+        priority,
+        recommended_at_mileage: recommendedMileage ? parseInt(recommendedMileage) : null,
+        labor_items: laborItems,
+        parts_items: partsItems.map(item => ({ ...item, total: item.qty * item.price })),
+        estimated_cost: estimatedCost
+      }
+
+      let res: Response
+      if (isCreateMode) {
+        res = await fetch(`/api/vehicles/${vehicleId}/recommendations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         })
-      })
+      } else {
+        if (!recommendation) return
+        res = await fetch(`/api/vehicle-recommendations/${recommendation.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+      }
 
       if (!res.ok) {
         const errorData = await res.json()
-        throw new Error(errorData.error || 'Failed to update recommendation')
+        throw new Error(errorData.error || (isCreateMode ? 'Failed to create recommendation' : 'Failed to update recommendation'))
       }
 
-      toast.success('Recommendation updated')
+      toast.success(isCreateMode ? 'Recommendation created' : 'Recommendation updated')
       onEdited()
       onOpenChange(false)
 
     } catch (err: any) {
-      console.error('Error updating recommendation:', err)
-      setError(err.message || 'Failed to update recommendation')
+      console.error('Error saving recommendation:', err)
+      setError(err.message || 'Failed to save recommendation')
     } finally {
       setSaving(false)
     }
@@ -175,7 +199,7 @@ export function EditRecommendationDialog({
     setCatalogItemIndex(undefined)
   }
 
-  if (!recommendation) return null
+  if (!recommendation && !isCreateMode) return null
 
   const laborTotal = laborItems.reduce((sum, item) => sum + item.total, 0)
   const partsTotal = partsItems.reduce((sum, item) => sum + (item.qty * item.price), 0)
@@ -186,7 +210,7 @@ export function EditRecommendationDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Recommendation</DialogTitle>
+            <DialogTitle>{isCreateMode ? 'Add Recommendation' : 'Edit Recommendation'}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -444,7 +468,7 @@ export function EditRecommendationDialog({
               {saving ? 'Saving...' : (
                 <>
                   <Save className="mr-2 h-4 w-4" />
-                  Save Changes
+                  {isCreateMode ? 'Create Recommendation' : 'Save Changes'}
                 </>
               )}
             </Button>

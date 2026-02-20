@@ -2,6 +2,69 @@ import { NextRequest, NextResponse } from "next/server"
 import { getClient } from "@/lib/db"
 
 /**
+ * POST /api/vehicles/[id]/recommendations
+ *
+ * Creates a new manual recommendation for a vehicle.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const client = await getClient()
+
+  try {
+    const { id } = await params
+    const vehicleId = parseInt(id, 10)
+
+    if (isNaN(vehicleId)) {
+      return NextResponse.json({ error: "Invalid vehicle ID" }, { status: 400 })
+    }
+
+    const body = await request.json()
+    const {
+      service_title = 'New Recommendation',
+      reason = '',
+      priority = 'recommended',
+      estimated_cost = 0,
+      labor_items = [],
+      parts_items = [],
+      recommended_at_mileage = null,
+    } = body
+
+    const result = await client.query(
+      `INSERT INTO vehicle_recommendations (
+        vehicle_id, service_title, reason, priority, estimated_cost,
+        labor_items, parts_items, status, recommended_at_mileage,
+        source, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'awaiting_approval', $8, 'manual', NOW(), NOW())
+      RETURNING *`,
+      [
+        vehicleId,
+        service_title,
+        reason,
+        priority,
+        estimated_cost,
+        JSON.stringify(labor_items),
+        JSON.stringify(parts_items),
+        recommended_at_mileage,
+      ]
+    )
+
+    return NextResponse.json({ recommendation: result.rows[0] }, { status: 201 })
+
+  } catch (error: any) {
+    console.error("Error creating vehicle recommendation:", error)
+    return NextResponse.json(
+      { error: error.message || "Failed to create recommendation" },
+      { status: 500 }
+    )
+  } finally {
+    client.release()
+  }
+}
+
+
+/**
  * GET /api/vehicles/[id]/recommendations
  *
  * Fetches maintenance recommendations for a specific vehicle.

@@ -3,7 +3,7 @@
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Check, X, AlertCircle, AlertTriangle, Wrench, Package, Plus, Clock, Send } from "lucide-react"
+import { Check, X, AlertCircle, AlertTriangle, Wrench, Package, Plus, Clock, Send, Sparkles } from "lucide-react"
 import type { Recommendation } from "../hooks/useRecommendationsManagement"
 
 interface RecommendationCardProps {
@@ -168,6 +168,12 @@ export function RecommendationCard({
           {urgency && (
             <Badge variant="outline" className={`text-xs ${urgencyBadges[urgency].className}`}>
               {urgencyBadges[urgency].icon} {urgencyBadges[urgency].label}
+            </Badge>
+          )}
+          {recommendation.source === 'ai_generated' && (
+            <Badge variant="outline" className="text-xs bg-blue-500/20 text-blue-700 dark:text-blue-400 border-blue-500/20">
+              <Sparkles className="h-2.5 w-2.5 mr-1" />
+              AI Generated
             </Badge>
           )}
           {needsParts && (

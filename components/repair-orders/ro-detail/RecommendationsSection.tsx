@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Sparkles, ChevronDown, ChevronRight, Loader2, AlertTriangle, Trash2 } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronRight, Loader2, AlertTriangle, Trash2, Plus, ClipboardList } from "lucide-react"
 import { toast } from "sonner" // TODO: REMOVE - only needed for dev delete button
 import { useRecommendationsManagement } from "../hooks/useRecommendationsManagement"
 import { RecommendationCard } from "./RecommendationCard"
@@ -39,9 +39,12 @@ export function RecommendationsSection({
     reloadRecommendations
   } = useRecommendationsManagement({ vehicleId })
 
-  // Derive counts by status
+  // Separate AI vs manual recommendations
+  const aiRecommendations = activeRecommendations.filter(r => r.source === 'ai_generated')
+  const manualRecommendations = activeRecommendations.filter(r => r.source !== 'ai_generated')
+
+  // Derive counts
   const customerApprovedCount = activeRecommendations.filter(r => r.status === 'customer_approved').length
-  const awaitingApprovalOnly = activeRecommendations.filter(r => r.status === 'awaiting_approval')
   const estimatableRecs = activeRecommendations.filter(r => r.status !== 'approved' && r.status !== 'superseded')
 
   // Expose reload function to parent component on mount
@@ -55,6 +58,7 @@ export function RecommendationsSection({
   const [approveDialogOpen, setApproveDialogOpen] = useState(false)
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [selectedRecommendation, setSelectedRecommendation] = useState<Recommendation | null>(null)
   const [deleting, setDeleting] = useState(false) // TODO: REMOVE - dev only
 
@@ -78,45 +82,55 @@ export function RecommendationsSection({
     }
   }
 
-  // Handle approve click
   const handleApproveClick = (recommendation: Recommendation) => {
     setSelectedRecommendation(recommendation)
     setApproveDialogOpen(true)
   }
 
-  // Handle decline click
   const handleDeclineClick = (recommendation: Recommendation) => {
     setSelectedRecommendation(recommendation)
     setDeclineDialogOpen(true)
   }
 
-  // Handle edit click
   const handleEditClick = (recommendation: Recommendation) => {
     setSelectedRecommendation(recommendation)
     setEditDialogOpen(true)
   }
 
-  // Handle approve success
   const handleApproved = () => {
     reloadRecommendations()
-    onRecommendationApproved() // Refresh services in parent
+    onRecommendationApproved()
   }
 
-  // Handle decline success
   const handleDeclined = () => {
     reloadRecommendations()
   }
 
-  // Handle edit success
   const handleEdited = () => {
     reloadRecommendations()
   }
 
-  // Handle "Add to Services" for customer-approved items (same flow as approve)
   const handleAddToServices = (recommendation: Recommendation) => {
     setSelectedRecommendation(recommendation)
     setApproveDialogOpen(true)
   }
+
+  const RecommendationGrid = ({ recs }: { recs: Recommendation[] }) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+      {recs.map((recommendation) => (
+        <RecommendationCard
+          key={recommendation.id}
+          recommendation={recommendation}
+          currentMileage={currentMileage}
+          onApprove={() => handleApproveClick(recommendation)}
+          onDecline={() => handleDeclineClick(recommendation)}
+          onAddToServices={() => handleAddToServices(recommendation)}
+          onEdit={() => handleEditClick(recommendation)}
+          showActions={true}
+        />
+      ))}
+    </div>
+  )
 
   // Loading state
   if (loading && activeRecommendations.length === 0 && approvedRecommendations.length === 0) {
@@ -135,8 +149,8 @@ export function RecommendationsSection({
     return (
       <Card className="p-6 border-border">
         <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="h-5 w-5 text-blue-500" />
-          <h3 className="font-semibold text-lg">AI Maintenance Recommendations</h3>
+          <ClipboardList className="h-5 w-5 text-blue-500" />
+          <h3 className="font-semibold text-lg">Recommendations</h3>
         </div>
         <div className="text-sm text-destructive bg-destructive/10 border border-destructive px-4 py-3 rounded-lg">
           {error}
@@ -149,9 +163,15 @@ export function RecommendationsSection({
   if (activeRecommendations.length === 0 && approvedRecommendations.length === 0) {
     return (
       <Card className="p-6 border-border">
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="h-5 w-5 text-blue-500" />
-          <h3 className="font-semibold text-lg">AI Maintenance Recommendations</h3>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="h-5 w-5 text-blue-500" />
+            <h3 className="font-semibold text-lg">Recommendations</h3>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setCreateDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            Add Recommendation
+          </Button>
         </div>
         <div className="text-center py-8">
           <p className="text-muted-foreground mb-4">No pending recommendations</p>
@@ -163,6 +183,14 @@ export function RecommendationsSection({
             Generate Recommendations
           </Button>
         </div>
+
+        <EditRecommendationDialog
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          recommendation={null}
+          vehicleId={vehicleId}
+          onEdited={handleEdited}
+        />
       </Card>
     )
   }
@@ -173,8 +201,8 @@ export function RecommendationsSection({
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-blue-500" />
-            <h3 className="font-semibold text-lg">AI Maintenance Recommendations</h3>
+            <ClipboardList className="h-5 w-5 text-blue-500" />
+            <h3 className="font-semibold text-lg">Recommendations</h3>
             {activeRecommendations.length > 0 && (
               <Badge variant="secondary" className="bg-amber-500/20 text-amber-700 dark:text-amber-400">
                 {activeRecommendations.length}
@@ -193,6 +221,14 @@ export function RecommendationsSection({
                 recommendations={activeRecommendations}
               />
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCreateDialogOpen(true)}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add Recommendation
+            </Button>
             {/* TODO: REMOVE this delete button before production - dev/testing only */}
             <Button
               variant="ghost"
@@ -217,23 +253,34 @@ export function RecommendationsSection({
           </div>
         )}
 
-        {/* Active Recommendations */}
-        {activeRecommendations.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {activeRecommendations.map((recommendation) => (
-              <RecommendationCard
-                key={recommendation.id}
-                recommendation={recommendation}
-                currentMileage={currentMileage}
-                onApprove={() => handleApproveClick(recommendation)}
-                onDecline={() => handleDeclineClick(recommendation)}
-                onAddToServices={() => handleAddToServices(recommendation)}
-                onEdit={() => handleEditClick(recommendation)}
-                showActions={true}
-              />
-            ))}
+        {/* Manual Recommendations — shown first, no special background */}
+        {manualRecommendations.length > 0 && (
+          <div className="mb-5">
+            {aiRecommendations.length > 0 && (
+              <div className="flex items-center gap-2 mb-3">
+                <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">Added by Service Advisor</span>
+              </div>
+            )}
+            <RecommendationGrid recs={manualRecommendations} />
           </div>
-        ) : (
+        )}
+
+        {/* AI-Generated Recommendations — visually separated with tinted background */}
+        {aiRecommendations.length > 0 && (
+          <div className={`rounded-xl p-4 ${manualRecommendations.length > 0 ? 'bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/50 dark:border-blue-800/30' : ''}`}>
+            {manualRecommendations.length > 0 && (
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="h-4 w-4 text-blue-500" />
+                <span className="text-sm font-medium text-blue-700 dark:text-blue-400">AI Generated</span>
+              </div>
+            )}
+            <RecommendationGrid recs={aiRecommendations} />
+          </div>
+        )}
+
+        {/* No active recommendations but there are approved ones */}
+        {activeRecommendations.length === 0 && approvedRecommendations.length > 0 && (
           <div className="text-center py-4 text-sm text-muted-foreground">
             No pending recommendations
           </div>
@@ -294,6 +341,15 @@ export function RecommendationsSection({
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         recommendation={selectedRecommendation}
+        onEdited={handleEdited}
+      />
+
+      {/* Create new recommendation dialog */}
+      <EditRecommendationDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        recommendation={null}
+        vehicleId={vehicleId}
         onEdited={handleEdited}
       />
     </>
