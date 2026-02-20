@@ -7,9 +7,11 @@ interface JobStateBadgeProps {
   color: string
   icon: string
   size?: "sm" | "md"
+  /** If true, plays a brief glow animation to indicate the state just changed */
+  flash?: boolean
 }
 
-export function JobStateBadge({ name, color, icon, size = "md" }: JobStateBadgeProps) {
+export function JobStateBadge({ name, color, icon, size = "md", flash = false }: JobStateBadgeProps) {
   const Icon = getIcon(icon)
   const style = jobStateBadgeStyle(color)
 
@@ -21,8 +23,15 @@ export function JobStateBadge({ name, color, icon, size = "md" }: JobStateBadgeP
 
   return (
     <span
-      className={`inline-flex items-center ${sizeClasses} rounded-full font-medium border`}
-      style={style}
+      className={`inline-flex items-center ${sizeClasses} rounded-full font-medium border transition-all ${
+        flash ? "animate-job-state-flash" : ""
+      }`}
+      style={{
+        ...style,
+        ...(flash
+          ? { boxShadow: `0 0 0 3px ${color}40, 0 0 12px ${color}60` }
+          : {}),
+      }}
     >
       <Icon size={iconSize} />
       {name}

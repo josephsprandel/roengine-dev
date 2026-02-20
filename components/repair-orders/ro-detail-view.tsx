@@ -187,6 +187,10 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
   const [transferRefreshKey, setTransferRefreshKey] = useState(0)
 
+  // Polling: track last known job_state_id and flash when it changes
+  const lastJobStateIdRef = useRef<number | null | undefined>(undefined)
+  const [jobStateFlash, setJobStateFlash] = useState(false)
+
   // Schedule date editing
   const [editingArrival, setEditingArrival] = useState(false)
   const [editingCompletion, setEditingCompletion] = useState(false)
@@ -441,6 +445,8 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         }
         
         setWorkOrder(woData.work_order)
+        // Initialize the ref so polling knows the baseline state
+        lastJobStateIdRef.current = woData.work_order.job_state_id
         console.log('✓ Work order loaded')
         
         // Fetch payments
@@ -485,6 +491,46 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     if (roId) {
       fetchWorkOrder()
     }
+  }, [roId])
+
+  // Poll every 10 seconds for job state changes on this RO
+  useEffect(() => {
+    if (!roId) return
+
+    const POLL_INTERVAL = 10_000
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/work-orders/${roId}`)
+        if (!res.ok) return
+
+        const data = await res.json()
+        const freshWO = data.work_order
+        if (!freshWO) return
+
+        const freshStateId = freshWO.job_state_id
+
+        // lastJobStateIdRef.current is `undefined` until the initial load sets it,
+        // so we only compare when it has been initialized.
+        if (
+          lastJobStateIdRef.current !== undefined &&
+          freshStateId !== lastJobStateIdRef.current
+        ) {
+          // State changed — update work order data, refresh transfer history, flash badge
+          setWorkOrder(freshWO)
+          lastJobStateIdRef.current = freshStateId
+          setTransferRefreshKey((k) => k + 1)
+          setJobStateFlash(true)
+          // Reset flash after animation completes (0.7s + buffer)
+          setTimeout(() => setJobStateFlash(false), 1000)
+        }
+      } catch {
+        // Silent fail — network blip, try again next cycle
+      }
+    }
+
+    const intervalId = setInterval(poll, POLL_INTERVAL)
+    return () => clearInterval(intervalId)
   }, [roId])
 
   // NOW we can do early returns - ALL HOOKS are called above
@@ -581,6 +627,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
               name={workOrder.job_state_name}
               color={workOrder.job_state_color}
               icon={workOrder.job_state_icon || "circle"}
+              flash={jobStateFlash}
             />
           )}
         </div>

@@ -270,3 +270,15 @@
     transform: translateX(0);
   }
 }
+
+/* Job state badge flash — plays once when state changes on RO detail */
+@keyframes jobStateBadgeFlash {
+  0%   { transform: scale(1); }
+  20%  { transform: scale(1.12); }
+  50%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+.animate-job-state-flash {
+  animation: jobStateBadgeFlash 0.7s ease-out forwards;
+}
