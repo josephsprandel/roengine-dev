@@ -14,13 +14,16 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit
 
     let sql = `
-      SELECT 
+      SELECT
         wo.id, wo.ro_number, wo.customer_id, wo.vehicle_id,
         wo.state, wo.date_opened, wo.date_promised, wo.date_closed,
         wo.customer_concern, wo.label, wo.needs_attention,
         wo.labor_total, wo.parts_total, wo.sublets_total,
         wo.tax_amount, wo.total, wo.payment_status, wo.amount_paid,
         wo.created_at, wo.updated_at,
+        wo.job_state_id,
+        js.name as job_state_name, js.color as job_state_color,
+        js.icon as job_state_icon, js.slug as job_state_slug,
         c.customer_name, c.phone_primary, c.email,
         v.year, v.make, v.model, v.vin, v.license_plate,
         u.id as created_by_id
@@ -28,6 +31,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN customers c ON wo.customer_id = c.id
       LEFT JOIN vehicles v ON wo.vehicle_id = v.id
       LEFT JOIN users u ON wo.created_by = u.id
+      LEFT JOIN job_states js ON wo.job_state_id = js.id
       WHERE wo.is_active = true AND wo.deleted_at IS NULL
     `
     const params: any[] = []

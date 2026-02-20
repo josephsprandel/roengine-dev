@@ -183,9 +183,10 @@ export async function POST(request: NextRequest) {
             status,
             recommended_at_mileage,
             source,
+            category_id,
             created_at,
             updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::integer, $10, NOW(), NOW())
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::integer, $10, $11, NOW(), NOW())
           RETURNING id
         `, [
           vehicle_id,
@@ -197,7 +198,8 @@ export async function POST(request: NextRequest) {
           JSON.stringify(partsItems),
           'awaiting_approval',
           service.mileage_interval || null,  // Explicitly pass null instead of undefined
-          'ai_generated'
+          'ai_generated',
+          1  // AI-generated recommendations are always maintenance category
         ])
 
         const newId = insertResult.rows[0].id

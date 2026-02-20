@@ -13,6 +13,7 @@ interface GenerateEstimateParams {
   recommendationIds: number[]
   createdByUserId: number
   expiresInHours?: number
+  estimateType?: 'maintenance' | 'repair'
 }
 
 interface GenerateEstimateResult {
@@ -30,7 +31,8 @@ export async function generateEstimate({
   workOrderId,
   recommendationIds,
   createdByUserId,
-  expiresInHours = 72
+  expiresInHours = 72,
+  estimateType = 'maintenance'
 }: GenerateEstimateParams): Promise<GenerateEstimateResult> {
   const client = await getClient()
 
@@ -86,8 +88,8 @@ export async function generateEstimate({
     const estimateResult = await client.query(`
       INSERT INTO estimates (
         token, work_order_id, customer_id, vehicle_id, created_by,
-        services, status, total_amount, sent_at, expires_at, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, NOW(), $8, NOW(), NOW())
+        services, status, total_amount, sent_at, expires_at, estimate_type, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, NOW(), $8, $9, NOW(), NOW())
       RETURNING id, token, expires_at
     `, [
       token,
@@ -97,7 +99,8 @@ export async function generateEstimate({
       createdByUserId,
       JSON.stringify(recommendationIds),
       totalAmount,
-      expiresAt.toISOString()
+      expiresAt.toISOString(),
+      estimateType
     ])
 
     const estimate = estimateResult.rows[0]
@@ -132,10 +135,11 @@ export async function generateEstimate({
     await client.query('COMMIT')
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    const urlPath = estimateType === 'repair' ? 'repair-estimate' : 'estimates'
 
     return {
       token: estimate.token,
-      url: `${baseUrl}/estimates/${estimate.token}`,
+      url: `${baseUrl}/${urlPath}/${estimate.token}`,
       estimateId: estimate.id,
       expiresAt: estimate.expires_at
     }

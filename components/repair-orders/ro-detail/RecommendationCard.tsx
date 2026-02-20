@@ -3,7 +3,7 @@
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Check, X, AlertCircle, AlertTriangle, Wrench, Package, Plus, Clock, Send, Sparkles } from "lucide-react"
+import { Check, X, AlertCircle, AlertTriangle, Wrench, Package, Plus, Clock, Send, Sparkles, RotateCcw } from "lucide-react"
 import type { Recommendation } from "../hooks/useRecommendationsManagement"
 
 interface RecommendationCardProps {
@@ -57,7 +57,20 @@ function formatTimeAgo(dateStr: string | null): string {
   const diffHrs = Math.floor(diffMin / 60)
   if (diffHrs < 24) return `${diffHrs}h ago`
   const diffDays = Math.floor(diffHrs / 24)
-  return `${diffDays}d ago`
+  if (diffDays < 30) return `${diffDays}d ago`
+  const diffMonths = Math.floor(diffDays / 30)
+  if (diffMonths < 12) return `${diffMonths} month${diffMonths !== 1 ? 's' : ''} ago`
+  const diffYears = Math.floor(diffMonths / 12)
+  return `${diffYears} year${diffYears !== 1 ? 's' : ''} ago`
+}
+
+/** Check if a recommendation is resurfaced from a previous visit (> 24h old) */
+function isResurfaced(recommendation: Recommendation): boolean {
+  if (!recommendation.created_at) return false
+  const created = new Date(recommendation.created_at)
+  const now = new Date()
+  const hoursOld = (now.getTime() - created.getTime()) / (1000 * 60 * 60)
+  return hoursOld > 24
 }
 
 function StatusBadge({ status, recommendation }: { status: string; recommendation: Recommendation }) {
@@ -176,6 +189,11 @@ export function RecommendationCard({
               AI Generated
             </Badge>
           )}
+          {recommendation.category_name && recommendation.category_name !== 'maintenance' && (
+            <Badge variant="outline" className="text-xs">
+              {recommendation.category_name.charAt(0).toUpperCase() + recommendation.category_name.slice(1)}
+            </Badge>
+          )}
           {needsParts && (
             <Badge variant="outline" className="text-xs bg-orange-500/20 text-orange-700 dark:text-orange-400 border-orange-500/20">
               <AlertTriangle className="h-2.5 w-2.5 mr-1" />
@@ -205,6 +223,35 @@ export function RecommendationCard({
           </div>
         )}
       </div>
+
+      {/* Resurfacing indicator — shows when maintenance item is from a previous visit */}
+      {isResurfaced(recommendation) && (
+        <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+          <RotateCcw className="h-3 w-3" />
+          <span>
+            {recommendation.recommended_at_mileage
+              ? `Previously recommended at ${formatMileage(recommendation.recommended_at_mileage)} mi`
+              : `Recommended ${formatTimeAgo(recommendation.created_at)}`
+            }
+          </span>
+        </div>
+      )}
+
+      {/* Tech notes preview */}
+      {recommendation.tech_notes && (
+        <p className="text-xs text-muted-foreground italic line-clamp-2">
+          Tech: {recommendation.tech_notes}
+        </p>
+      )}
+
+      {/* Photo thumbnail */}
+      {recommendation.photo_path && (
+        <img
+          src={recommendation.photo_path}
+          alt="Recommendation photo"
+          className="w-full h-20 object-cover rounded-md"
+        />
+      )}
 
       {/* Customer response info */}
       {isCustomerApproved && recommendation.customer_responded_at && (
@@ -335,6 +382,27 @@ export function RecommendationCard({
             className="flex-1 text-xs h-7 px-2"
           >
             Approve Anyway
+          </Button>
+        </div>
+      )}
+
+      {showActions && recommendation.status === 'declined_for_now' && (
+        <div className="flex gap-2">
+          <Button
+            onClick={(e) => { e.stopPropagation(); onApprove() }}
+            size="sm"
+            className="flex-1 text-xs h-7 px-2"
+          >
+            <Check className="h-3 w-3 mr-1" />
+            Approve
+          </Button>
+          <Button
+            onClick={(e) => { e.stopPropagation(); onDecline() }}
+            size="sm"
+            variant="outline"
+            className="text-xs h-7 px-2"
+          >
+            <X className="h-3 w-3" />
           </Button>
         </div>
       )}

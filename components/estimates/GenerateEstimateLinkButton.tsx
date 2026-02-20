@@ -18,11 +18,13 @@ interface Recommendation {
 interface GenerateEstimateLinkButtonProps {
   workOrderId: number
   recommendations: Recommendation[]
+  estimateType?: 'maintenance' | 'repair'
 }
 
 export function GenerateEstimateLinkButton({
   workOrderId,
-  recommendations
+  recommendations,
+  estimateType = 'maintenance'
 }: GenerateEstimateLinkButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [selectedRecs, setSelectedRecs] = useState<number[]>([])
@@ -71,7 +73,8 @@ export function GenerateEstimateLinkButton({
         },
         body: JSON.stringify({
           recommendationIds: selectedRecs,
-          expiresInHours: 72
+          expiresInHours: 72,
+          estimateType
         })
       })
 
@@ -102,7 +105,7 @@ export function GenerateEstimateLinkButton({
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2">
           <Send className="w-4 h-4" />
-          Send Estimate
+          {estimateType === 'repair' ? 'Send Repair Estimate' : 'Send Maintenance Estimate'}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">

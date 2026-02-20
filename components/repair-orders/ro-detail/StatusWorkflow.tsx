@@ -4,9 +4,12 @@ import { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChevronRight, LucideIcon, Calendar, Clock } from "lucide-react"
+import { ChevronRight, Calendar, Clock, LucideIcon } from "lucide-react"
 import { format } from "date-fns"
+import { getIcon, jobStateBadgeStyle } from "@/lib/job-states"
+import type { JobState } from "@/lib/job-states"
 
+// Keep legacy interface for backward compatibility if needed
 export interface WorkflowStage {
   id: string
   label: string
@@ -16,7 +19,8 @@ export interface WorkflowStage {
 }
 
 interface StatusWorkflowProps {
-  stages: WorkflowStage[]
+  jobStates: JobState[]
+  currentStateId: number | null
   scheduledStart: string | null
   scheduledEnd: string | null
   onDateChange: (field: "scheduled_start" | "scheduled_end", value: string) => void
@@ -38,32 +42,58 @@ function formatDisplay(iso: string | null): string {
   return format(new Date(iso), "EEE, MMM d · h:mm a")
 }
 
-export function StatusWorkflow({ stages, scheduledStart, scheduledEnd, onDateChange }: StatusWorkflowProps) {
+export function StatusWorkflow({
+  jobStates,
+  currentStateId,
+  scheduledStart,
+  scheduledEnd,
+  onDateChange,
+}: StatusWorkflowProps) {
   const [editingArrival, setEditingArrival] = useState(false)
   const [editingCompletion, setEditingCompletion] = useState(false)
+
+  // Find current state index to determine completed/active/pending
+  const currentIndex = jobStates.findIndex((s) => s.id === currentStateId)
 
   return (
     <Card className="p-4 border-border">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Left: Status pipeline */}
-        <div className="flex items-center justify-between overflow-x-auto">
-          {stages.map((stage, idx) => {
-            const Icon = stage.icon
+        {/* Left: Dynamic job state pipeline */}
+        <div className="flex items-center justify-between overflow-x-auto gap-1">
+          {jobStates.map((state, idx) => {
+            const Icon = getIcon(state.icon)
+            const isCompleted = currentIndex >= 0 && idx < currentIndex
+            const isActive = idx === currentIndex
+
+            // Completed states: use the state's own color with full style
+            // Active state: use the state's color with highlighted style
+            // Pending states: muted
+            let pillStyle: React.CSSProperties = {}
+            let pillClass = "bg-muted text-muted-foreground"
+
+            if (isCompleted) {
+              pillStyle = {
+                backgroundColor: `${state.color}25`,
+                color: state.color,
+              }
+              pillClass = ""
+            } else if (isActive) {
+              pillStyle = jobStateBadgeStyle(state.color)
+              pillClass = "ring-1"
+            }
+
             return (
-              <div key={stage.id} className="flex items-center gap-2 flex-shrink-0">
+              <div key={state.id} className="flex items-center gap-1 flex-shrink-0">
                 <div
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs ${
-                    stage.completed
-                      ? "bg-green-500/20 text-green-600 dark:text-green-400"
-                      : stage.active
-                        ? "bg-blue-500/20 text-blue-600 dark:text-blue-400"
-                        : "bg-muted text-muted-foreground"
-                  }`}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-transparent ${pillClass}`}
+                  style={pillStyle}
                 >
                   <Icon size={14} />
-                  <span className="font-medium whitespace-nowrap">{stage.label}</span>
+                  <span className="whitespace-nowrap">{state.name}</span>
                 </div>
-                {idx < stages.length - 1 && <ChevronRight size={14} className="text-border flex-shrink-0" />}
+                {idx < jobStates.length - 1 && (
+                  <ChevronRight size={14} className="text-border flex-shrink-0" />
+                )}
               </div>
             )
           })}

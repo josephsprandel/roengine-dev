@@ -123,7 +123,11 @@ export async function PATCH(
       'recommended_at_mileage',
       'labor_items',
       'parts_items',
-      'estimated_cost'
+      'estimated_cost',
+      // Category & repair fields
+      'category_id',
+      'tech_notes',
+      'photo_path'
     ]
 
     // Validate status if provided

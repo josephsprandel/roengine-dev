@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Sparkles, ChevronDown, ChevronRight, Loader2, AlertTriangle, Trash2, Plus, ClipboardList } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronRight, Loader2, AlertTriangle, Trash2, Plus, ClipboardList, Wrench, Check } from "lucide-react"
 import { toast } from "sonner" // TODO: REMOVE - only needed for dev delete button
 import { useRecommendationsManagement } from "../hooks/useRecommendationsManagement"
 import { RecommendationCard } from "./RecommendationCard"
@@ -32,20 +32,23 @@ export function RecommendationsSection({
   onReady
 }: RecommendationsSectionProps) {
   const {
-    activeRecommendations,
+    maintenanceRecommendations,
+    repairRecommendations,
     approvedRecommendations,
     loading,
     error,
     reloadRecommendations
   } = useRecommendationsManagement({ vehicleId })
 
-  // Separate AI vs manual recommendations
-  const aiRecommendations = activeRecommendations.filter(r => r.source === 'ai_generated')
-  const manualRecommendations = activeRecommendations.filter(r => r.source !== 'ai_generated')
+  // Within maintenance, separate AI vs manual
+  const aiMaintenanceRecs = maintenanceRecommendations.filter(r => r.source === 'ai_generated')
+  const manualMaintenanceRecs = maintenanceRecommendations.filter(r => r.source !== 'ai_generated')
 
   // Derive counts
-  const customerApprovedCount = activeRecommendations.filter(r => r.status === 'customer_approved').length
-  const estimatableRecs = activeRecommendations.filter(r => r.status !== 'approved' && r.status !== 'superseded')
+  const maintenanceApprovedCount = maintenanceRecommendations.filter(r => r.status === 'customer_approved').length
+  const repairApprovedCount = repairRecommendations.filter(r => r.status === 'customer_approved').length
+  const maintenanceEstimatable = maintenanceRecommendations.filter(r => r.status !== 'approved' && r.status !== 'superseded')
+  const repairEstimatable = repairRecommendations.filter(r => r.status !== 'approved' && r.status !== 'superseded')
 
   // Expose reload function to parent component on mount
   useEffect(() => {
@@ -58,7 +61,8 @@ export function RecommendationsSection({
   const [approveDialogOpen, setApproveDialogOpen] = useState(false)
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [createMaintenanceOpen, setCreateMaintenanceOpen] = useState(false)
+  const [createRepairOpen, setCreateRepairOpen] = useState(false)
   const [selectedRecommendation, setSelectedRecommendation] = useState<Recommendation | null>(null)
   const [deleting, setDeleting] = useState(false) // TODO: REMOVE - dev only
 
@@ -133,7 +137,7 @@ export function RecommendationsSection({
   )
 
   // Loading state
-  if (loading && activeRecommendations.length === 0 && approvedRecommendations.length === 0) {
+  if (loading && maintenanceRecommendations.length === 0 && repairRecommendations.length === 0 && approvedRecommendations.length === 0) {
     return (
       <Card className="p-6 border-border">
         <div className="flex items-center justify-center py-8">
@@ -159,72 +163,40 @@ export function RecommendationsSection({
     )
   }
 
-  // Empty state - no recommendations at all
-  if (activeRecommendations.length === 0 && approvedRecommendations.length === 0) {
-    return (
-      <Card className="p-6 border-border">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <ClipboardList className="h-5 w-5 text-blue-500" />
-            <h3 className="font-semibold text-lg">Recommendations</h3>
-          </div>
-          <Button size="sm" variant="outline" onClick={() => setCreateDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" />
-            Add Recommendation
-          </Button>
-        </div>
-        <div className="text-center py-8">
-          <p className="text-muted-foreground mb-4">No pending recommendations</p>
-          <p className="text-xs text-muted-foreground mb-4">
-            Generate AI-powered maintenance recommendations based on the vehicle's manual and current mileage.
-          </p>
-          <Button size="sm" variant="outline" onClick={onGenerateClick}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            Generate Recommendations
-          </Button>
-        </div>
-
-        <EditRecommendationDialog
-          open={createDialogOpen}
-          onOpenChange={setCreateDialogOpen}
-          recommendation={null}
-          vehicleId={vehicleId}
-          onEdited={handleEdited}
-        />
-      </Card>
-    )
-  }
-
   return (
     <>
+      {/* ================================================================ */}
+      {/* MAINTENANCE RECOMMENDATIONS SECTION                              */}
+      {/* ================================================================ */}
       <Card className="p-6 border-border">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <ClipboardList className="h-5 w-5 text-blue-500" />
-            <h3 className="font-semibold text-lg">Recommendations</h3>
-            {activeRecommendations.length > 0 && (
+            <h3 className="font-semibold text-lg">Maintenance Recommendations</h3>
+            {maintenanceRecommendations.length > 0 && (
               <Badge variant="secondary" className="bg-amber-500/20 text-amber-700 dark:text-amber-400">
-                {activeRecommendations.length}
+                {maintenanceRecommendations.length}
               </Badge>
             )}
-            {customerApprovedCount > 0 && (
+            {maintenanceApprovedCount > 0 && (
               <Badge className="bg-green-600 text-white animate-pulse">
-                {customerApprovedCount} Approved
+                {maintenanceApprovedCount} Approved
               </Badge>
             )}
           </div>
           <div className="flex items-center gap-2">
-            {estimatableRecs.length > 0 && (
+            {maintenanceEstimatable.length > 0 && (
               <GenerateEstimateLinkButton
                 workOrderId={workOrderId}
-                recommendations={activeRecommendations}
+                recommendations={maintenanceRecommendations}
+                estimateType="maintenance"
               />
             )}
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setCreateDialogOpen(true)}
+              onClick={() => setCreateMaintenanceOpen(true)}
             >
               <Plus className="h-4 w-4 mr-1" />
               Add Recommendation
@@ -244,82 +216,152 @@ export function RecommendationsSection({
         </div>
 
         {/* Action Required Banner */}
-        {customerApprovedCount > 0 && (
+        {maintenanceApprovedCount > 0 && (
           <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
             <span className="text-sm font-medium text-green-800 dark:text-green-300">
-              {customerApprovedCount} service{customerApprovedCount > 1 ? 's' : ''} approved by customer — review and add to work order
+              {maintenanceApprovedCount} service{maintenanceApprovedCount > 1 ? 's' : ''} approved by customer — review and add to work order
             </span>
           </div>
         )}
 
-        {/* Manual Recommendations — shown first, no special background */}
-        {manualRecommendations.length > 0 && (
-          <div className="mb-5">
-            {aiRecommendations.length > 0 && (
-              <div className="flex items-center gap-2 mb-3">
-                <ClipboardList className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium text-muted-foreground">Added by Service Advisor</span>
+        {maintenanceRecommendations.length > 0 ? (
+          <>
+            {/* Manual Maintenance Recommendations */}
+            {manualMaintenanceRecs.length > 0 && (
+              <div className="mb-5">
+                {aiMaintenanceRecs.length > 0 && (
+                  <div className="flex items-center gap-2 mb-3">
+                    <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium text-muted-foreground">Added by Service Advisor</span>
+                  </div>
+                )}
+                <RecommendationGrid recs={manualMaintenanceRecs} />
               </div>
             )}
-            <RecommendationGrid recs={manualRecommendations} />
-          </div>
-        )}
 
-        {/* AI-Generated Recommendations — visually separated with tinted background */}
-        {aiRecommendations.length > 0 && (
-          <div className={`rounded-xl p-4 ${manualRecommendations.length > 0 ? 'bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/50 dark:border-blue-800/30' : ''}`}>
-            {manualRecommendations.length > 0 && (
-              <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="h-4 w-4 text-blue-500" />
-                <span className="text-sm font-medium text-blue-700 dark:text-blue-400">AI Generated</span>
+            {/* AI-Generated Maintenance Recommendations */}
+            {aiMaintenanceRecs.length > 0 && (
+              <div className={`rounded-xl p-4 ${manualMaintenanceRecs.length > 0 ? 'bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/50 dark:border-blue-800/30' : ''}`}>
+                {manualMaintenanceRecs.length > 0 && (
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm font-medium text-blue-700 dark:text-blue-400">AI Generated</span>
+                  </div>
+                )}
+                <RecommendationGrid recs={aiMaintenanceRecs} />
               </div>
             )}
-            <RecommendationGrid recs={aiRecommendations} />
-          </div>
-        )}
-
-        {/* No active recommendations but there are approved ones */}
-        {activeRecommendations.length === 0 && approvedRecommendations.length > 0 && (
-          <div className="text-center py-4 text-sm text-muted-foreground">
-            No pending recommendations
-          </div>
-        )}
-
-        {/* Previously Approved Section (Collapsible) */}
-        {approvedRecommendations.length > 0 && (
-          <div className="mt-6 pt-6 border-t border-border">
-            <button
-              onClick={() => setApprovedExpanded(!approvedExpanded)}
-              className="flex items-center gap-2 w-full text-left hover:text-foreground transition-colors"
-            >
-              {approvedExpanded ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              )}
-              <span className="text-sm font-medium text-muted-foreground">
-                Previously Approved ({approvedRecommendations.length})
-              </span>
-            </button>
-
-            {approvedExpanded && (
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {approvedRecommendations.map((recommendation) => (
-                  <RecommendationCard
-                    key={recommendation.id}
-                    recommendation={recommendation}
-                    currentMileage={currentMileage}
-                    onApprove={() => {}}
-                    onDecline={() => {}}
-                    showActions={false}
-                  />
-                ))}
-              </div>
-            )}
+          </>
+        ) : (
+          <div className="text-center py-8">
+            <p className="text-muted-foreground mb-4">No pending maintenance recommendations</p>
+            <p className="text-xs text-muted-foreground mb-4">
+              Generate AI-powered maintenance recommendations based on the vehicle&apos;s manual and current mileage.
+            </p>
+            <Button size="sm" variant="outline" onClick={onGenerateClick}>
+              <Sparkles className="h-4 w-4 mr-2" />
+              Generate Recommendations
+            </Button>
           </div>
         )}
       </Card>
+
+      {/* ================================================================ */}
+      {/* REPAIR RECOMMENDATIONS SECTION                                   */}
+      {/* ================================================================ */}
+      <Card className="p-6 border-border">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Wrench className="h-5 w-5 text-orange-500" />
+            <h3 className="font-semibold text-lg">Repair Recommendations</h3>
+            {repairRecommendations.length > 0 && (
+              <Badge variant="secondary" className="bg-orange-500/20 text-orange-700 dark:text-orange-400">
+                {repairRecommendations.length}
+              </Badge>
+            )}
+            {repairApprovedCount > 0 && (
+              <Badge className="bg-green-600 text-white animate-pulse">
+                {repairApprovedCount} Approved
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {repairEstimatable.length > 0 && (
+              <GenerateEstimateLinkButton
+                workOrderId={workOrderId}
+                recommendations={repairRecommendations}
+                estimateType="repair"
+              />
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCreateRepairOpen(true)}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add Recommendation
+            </Button>
+          </div>
+        </div>
+
+        {/* Action Required Banner */}
+        {repairApprovedCount > 0 && (
+          <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+            <span className="text-sm font-medium text-green-800 dark:text-green-300">
+              {repairApprovedCount} service{repairApprovedCount > 1 ? 's' : ''} approved by customer — review and add to work order
+            </span>
+          </div>
+        )}
+
+        {repairRecommendations.length > 0 ? (
+          <RecommendationGrid recs={repairRecommendations} />
+        ) : (
+          <div className="text-center py-6 text-sm text-muted-foreground">
+            No repair recommendations for this visit
+          </div>
+        )}
+      </Card>
+
+      {/* ================================================================ */}
+      {/* APPROVED SERVICES SECTION (Collapsible)                          */}
+      {/* ================================================================ */}
+      {approvedRecommendations.length > 0 && (
+        <Card className="p-6 border-border">
+          <button
+            onClick={() => setApprovedExpanded(!approvedExpanded)}
+            className="flex items-center gap-2 w-full text-left hover:text-foreground transition-colors"
+          >
+            {approvedExpanded ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+            <Check className="h-5 w-5 text-green-500" />
+            <span className="font-semibold text-lg">Approved Services</span>
+            <Badge variant="secondary" className="bg-green-500/20 text-green-700 dark:text-green-400">
+              {approvedRecommendations.length}
+            </Badge>
+          </button>
+
+          {approvedExpanded && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {approvedRecommendations.map((recommendation) => (
+                <RecommendationCard
+                  key={recommendation.id}
+                  recommendation={recommendation}
+                  currentMileage={currentMileage}
+                  onApprove={() => {}}
+                  onDecline={() => {}}
+                  showActions={false}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Dialogs */}
       <ApproveRecommendationDialog
@@ -344,12 +386,23 @@ export function RecommendationsSection({
         onEdited={handleEdited}
       />
 
-      {/* Create new recommendation dialog */}
+      {/* Create maintenance recommendation dialog */}
       <EditRecommendationDialog
-        open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
+        open={createMaintenanceOpen}
+        onOpenChange={setCreateMaintenanceOpen}
         recommendation={null}
         vehicleId={vehicleId}
+        defaultCategoryId={1}
+        onEdited={handleEdited}
+      />
+
+      {/* Create repair recommendation dialog */}
+      <EditRecommendationDialog
+        open={createRepairOpen}
+        onOpenChange={setCreateRepairOpen}
+        recommendation={null}
+        vehicleId={vehicleId}
+        defaultCategoryId={2}
         onEdited={handleEdited}
       />
     </>

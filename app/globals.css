@@ -258,3 +258,15 @@
 .animate-hotspot-pulse-red {
   animation: hotspot-pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* Transfer notification — slide in from right */
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(calc(100% + 1rem));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

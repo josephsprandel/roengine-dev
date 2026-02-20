@@ -36,6 +36,9 @@ export async function GET(
         wo.tax_amount, wo.total, wo.payment_status, wo.amount_paid,
         wo.scheduled_start, wo.scheduled_end, wo.bay_assignment, wo.assigned_tech_id,
         wo.created_at, wo.updated_at,
+        wo.job_state_id,
+        js.name as job_state_name, js.color as job_state_color,
+        js.icon as job_state_icon, js.slug as job_state_slug,
         c.customer_name, c.phone_primary, c.phone_secondary, c.phone_mobile,
         c.email, c.address_line1, c.address_line2, c.city, c.state as customer_state, c.zip,
         v.year, v.make, v.model, v.submodel, v.engine, v.transmission,
@@ -48,6 +51,7 @@ export async function GET(
       LEFT JOIN vehicles v ON wo.vehicle_id = v.id
       LEFT JOIN users u ON wo.created_by = u.id
       LEFT JOIN users tech ON wo.assigned_tech_id = tech.id
+      LEFT JOIN job_states js ON wo.job_state_id = js.id
       WHERE wo.id = $1 AND wo.is_active = true`,
       [workOrderId]
     )
@@ -107,6 +111,7 @@ export async function PATCH(
       scheduled_end: 'scheduled_end',
       bay_assignment: 'bay_assignment',
       assigned_tech_id: 'assigned_tech_id',
+      job_state_id: 'job_state_id',
     }
 
     const setClauses: string[] = []

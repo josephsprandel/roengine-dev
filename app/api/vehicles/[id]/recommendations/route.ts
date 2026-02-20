@@ -29,14 +29,16 @@ export async function POST(
       labor_items = [],
       parts_items = [],
       recommended_at_mileage = null,
+      category_id = 1,
+      tech_notes = null,
     } = body
 
     const result = await client.query(
       `INSERT INTO vehicle_recommendations (
         vehicle_id, service_title, reason, priority, estimated_cost,
         labor_items, parts_items, status, recommended_at_mileage,
-        source, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'awaiting_approval', $8, 'manual', NOW(), NOW())
+        source, category_id, tech_notes, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'awaiting_approval', $8, 'manual', $9, $10, NOW(), NOW())
       RETURNING *`,
       [
         vehicleId,
@@ -47,6 +49,8 @@ export async function POST(
         JSON.stringify(labor_items),
         JSON.stringify(parts_items),
         recommended_at_mileage,
+        category_id,
+        tech_notes,
       ]
     )
 
@@ -108,28 +112,31 @@ export async function GET(
     }
 
     // Build query with optional status filter
-    const query = `
+    const queryText = `
       SELECT
-        id, vehicle_id, service_title, reason, priority, estimated_cost,
-        labor_items, parts_items, status, recommended_at_mileage,
-        approved_at, approved_by_work_order_id, approval_method, approval_notes,
-        declined_count, last_declined_at, decline_reason, source,
-        estimate_sent_at, estimate_viewed_at, customer_responded_at, customer_response_method,
-        created_at, updated_at
-      FROM vehicle_recommendations
-      WHERE vehicle_id = $1
-        AND ($2::text IS NULL OR status = $2)
+        vr.id, vr.vehicle_id, vr.service_title, vr.reason, vr.priority, vr.estimated_cost,
+        vr.labor_items, vr.parts_items, vr.status, vr.recommended_at_mileage,
+        vr.approved_at, vr.approved_by_work_order_id, vr.approval_method, vr.approval_notes,
+        vr.declined_count, vr.last_declined_at, vr.decline_reason, vr.source,
+        vr.estimate_sent_at, vr.estimate_viewed_at, vr.customer_responded_at, vr.customer_response_method,
+        vr.category_id, vr.tech_notes, vr.photo_path,
+        sc.name as category_name,
+        vr.created_at, vr.updated_at
+      FROM vehicle_recommendations vr
+      LEFT JOIN service_categories sc ON vr.category_id = sc.id
+      WHERE vr.vehicle_id = $1
+        AND ($2::text IS NULL OR vr.status = $2)
       ORDER BY
-        CASE priority
+        CASE vr.priority
           WHEN 'critical' THEN 1
           WHEN 'recommended' THEN 2
           WHEN 'suggested' THEN 3
           ELSE 4
         END,
-        created_at DESC
+        vr.created_at DESC
     `
 
-    const result = await client.query(query, [vehicleId, statusFilter || null])
+    const result = await client.query(queryText, [vehicleId, statusFilter || null])
 
     return NextResponse.json({
       recommendations: result.rows,

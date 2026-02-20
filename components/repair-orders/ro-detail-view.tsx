@@ -10,16 +10,18 @@ import { Checkbox } from "@/components/ui/checkbox"
 import {
   ArrowLeft,
   Plus,
-  Printer,
   Check,
-  Clock,
-  AlertCircle,
   Loader2,
   Sparkles,
   CheckCircle,
   FileText,
+  Calendar,
+  Clock,
 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { format } from "date-fns"
 import type { ServiceData, LineItem } from "./ro-creation-wizard"
 import { EditableServiceCard, createLineItem } from "./editable-service-card"
 import type { LineItemCategory } from "./editable-service-card"
@@ -31,52 +33,18 @@ import { usePartsGeneration } from "./hooks/usePartsGeneration"
 import { useServiceManagement } from "./hooks/useServiceManagement"
 import { CustomerInfoCard } from "./ro-detail/CustomerInfoCard"
 import { VehicleInfoCard } from "./ro-detail/VehicleInfoCard"
-import { StatusWorkflow, WorkflowStage } from "./ro-detail/StatusWorkflow"
 import { PricingSummary } from "./ro-detail/PricingSummary"
 import { ActionButtons } from "./ro-detail/ActionButtons"
 import { RecommendationsSection } from "./ro-detail/RecommendationsSection"
 import { InvoiceActionsPanel } from "@/components/invoices/InvoiceActionsPanel"
 import { PaymentHistory } from "@/components/invoices/PaymentHistory"
 import { InvoiceCalculations } from "@/components/invoices/InvoiceCalculations"
+import { JobStateBadge } from "./ro-detail/JobStateBadge"
+import { TransferDialog } from "./ro-detail/TransferDialog"
+import { TransferHistory } from "./ro-detail/TransferHistory"
+import type { JobState } from "@/lib/job-states"
 
-// Workflow stages - MOVED OUTSIDE to prevent re-creation on every render
-const WORKFLOW_STAGES = [
-  {
-    id: "intake",
-    label: "Intake",
-    icon: AlertCircle,
-    active: false,
-    completed: true,
-  },
-  {
-    id: "diagnostic",
-    label: "Diagnostic",
-    icon: Clock,
-    active: true,
-    completed: false,
-  },
-  {
-    id: "approval",
-    label: "Approval",
-    icon: AlertCircle,
-    active: false,
-    completed: false,
-  },
-  {
-    id: "service",
-    label: "Service",
-    icon: Clock,
-    active: false,
-    completed: false,
-  },
-  {
-    id: "completion",
-    label: "Complete",
-    icon: Check,
-    active: false,
-    completed: false,
-  },
-]
+import { ArrowRightLeft } from "lucide-react"
 
 /**
  * Convert database services with items to ServiceData format
@@ -190,6 +158,11 @@ interface WorkOrder {
   amount_paid: string
   created_at: string
   updated_at: string
+  job_state_id: number | null
+  job_state_name: string | null
+  job_state_color: string | null
+  job_state_icon: string | null
+  job_state_slug: string | null
 }
 
 export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => void }) {
@@ -208,6 +181,15 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   // Customer and Vehicle edit states
   const [customerEditOpen, setCustomerEditOpen] = useState(false)
   const [vehicleEditOpen, setVehicleEditOpen] = useState(false)
+
+  // Job state pipeline
+  const [jobStates, setJobStates] = useState<JobState[]>([])
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false)
+  const [transferRefreshKey, setTransferRefreshKey] = useState(0)
+
+  // Schedule date editing
+  const [editingArrival, setEditingArrival] = useState(false)
+  const [editingCompletion, setEditingCompletion] = useState(false)
   
   const handleSave = useCallback(() => {
     setIsEditing(false)
@@ -424,6 +406,19 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     showToast("Vehicle updated successfully", "success")
   }, [workOrder, showToast])
 
+  const handleTransferComplete = useCallback(async () => {
+    // Reload work order to get new job_state_id
+    try {
+      const woResponse = await fetch(`/api/work-orders/${roId}`)
+      if (woResponse.ok) {
+        const woData = await woResponse.json()
+        setWorkOrder(woData.work_order)
+      }
+    } catch {}
+    setTransferRefreshKey((k) => k + 1)
+    showToast("Work order transferred", "success")
+  }, [roId, showToast])
+
   // Load work order and items from database
   useEffect(() => {
     const fetchWorkOrder = async () => {
@@ -469,8 +464,15 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           setInvoiceSettings(settingsData.settings)
         }
         
+        // Fetch job states for pipeline
+        const jobStatesResponse = await fetch('/api/job-states')
+        if (jobStatesResponse.ok) {
+          const jobStatesData = await jobStatesResponse.json()
+          setJobStates(jobStatesData.job_states || [])
+        }
+
         // Services are loaded automatically by useServiceManagement hook
-        
+
       } catch (err: any) {
         console.error('=== WORK ORDER FETCH ERROR ===')
         console.error('Error:', err.message)
@@ -565,7 +567,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
 
   return (
     <div className="space-y-4">
-      {/* Header with RO Number and Actions */}
+      {/* Header with RO Number, Job State Badge, Schedule Dates, and Actions */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {onClose && (
@@ -574,11 +576,101 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
             </Button>
           )}
           <h1 className="text-3xl font-bold text-foreground">{workOrder.ro_number}</h1>
+          {workOrder.job_state_name && workOrder.job_state_color && (
+            <JobStateBadge
+              name={workOrder.job_state_name}
+              color={workOrder.job_state_color}
+              icon={workOrder.job_state_icon || "circle"}
+            />
+          )}
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <Button variant="outline" size="sm" className="gap-2 bg-transparent">
-            <Printer size={16} />
-            Print
+        <div className="flex items-center gap-4 flex-shrink-0">
+          {/* Arrival date */}
+          <div>
+            <Label className="text-[10px] uppercase text-muted-foreground tracking-wide flex items-center gap-1 mb-0.5">
+              <Calendar size={10} />
+              Arrival
+            </Label>
+            {editingArrival ? (
+              <Input
+                type="datetime-local"
+                defaultValue={workOrder.scheduled_start ? (() => {
+                  const d = new Date(workOrder.scheduled_start!)
+                  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}T${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`
+                })() : ""}
+                autoFocus
+                className="h-7 text-xs w-[180px]"
+                onBlur={(e) => {
+                  setEditingArrival(false)
+                  if (e.target.value) {
+                    handleDateChange("scheduled_start", new Date(e.target.value).toISOString())
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur()
+                  else if (e.key === "Escape") setEditingArrival(false)
+                }}
+              />
+            ) : (
+              <button
+                onClick={() => setEditingArrival(true)}
+                className="text-xs font-medium text-foreground hover:text-primary transition-colors cursor-pointer text-left"
+              >
+                {workOrder.scheduled_start
+                  ? format(new Date(workOrder.scheduled_start), "EEE, MMM d · h:mm a")
+                  : "Not scheduled"}
+              </button>
+            )}
+          </div>
+
+          <span className="text-muted-foreground/30 mt-3">–</span>
+
+          {/* Expected Completion date */}
+          <div>
+            <Label className="text-[10px] uppercase text-muted-foreground tracking-wide flex items-center gap-1 mb-0.5">
+              <Clock size={10} />
+              Completion
+            </Label>
+            {editingCompletion ? (
+              <Input
+                type="datetime-local"
+                defaultValue={workOrder.scheduled_end ? (() => {
+                  const d = new Date(workOrder.scheduled_end!)
+                  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}T${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`
+                })() : ""}
+                autoFocus
+                className="h-7 text-xs w-[180px]"
+                onBlur={(e) => {
+                  setEditingCompletion(false)
+                  if (e.target.value) {
+                    handleDateChange("scheduled_end", new Date(e.target.value).toISOString())
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur()
+                  else if (e.key === "Escape") setEditingCompletion(false)
+                }}
+              />
+            ) : (
+              <button
+                onClick={() => setEditingCompletion(true)}
+                className="text-xs font-medium text-foreground hover:text-primary transition-colors cursor-pointer text-left"
+              >
+                {workOrder.scheduled_end
+                  ? format(new Date(workOrder.scheduled_end), "EEE, MMM d · h:mm a")
+                  : "Not scheduled"}
+              </button>
+            )}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 bg-transparent mt-2"
+            onClick={() => setTransferDialogOpen(true)}
+          >
+            <ArrowRightLeft size={16} />
+            Transfer
           </Button>
         </div>
       </div>
@@ -608,13 +700,6 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           onEdit={() => setVehicleEditOpen(true)}
         />
       </div>
-
-      <StatusWorkflow
-        stages={WORKFLOW_STAGES as WorkflowStage[]}
-        scheduledStart={workOrder.scheduled_start}
-        scheduledEnd={workOrder.scheduled_end}
-        onDateChange={handleDateChange}
-      />
 
       {/* AI Maintenance Recommendations */}
       <RecommendationsSection
@@ -817,6 +902,11 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           }}
         />
 
+        <TransferHistory
+          workOrderId={workOrder.id}
+          refreshKey={transferRefreshKey}
+        />
+
         <ActionButtons
           onApprove={handleApprove}
           onComplete={handleComplete}
@@ -878,6 +968,15 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           updated_at: workOrder.updated_at,
         } : null}
         onSuccess={handleVehicleUpdateSuccess}
+      />
+
+      {/* Transfer Dialog */}
+      <TransferDialog
+        open={transferDialogOpen}
+        onOpenChange={setTransferDialogOpen}
+        workOrderId={workOrder.id}
+        currentStateId={workOrder.job_state_id}
+        onTransferComplete={handleTransferComplete}
       />
 
       {toast && (

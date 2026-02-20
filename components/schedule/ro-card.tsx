@@ -23,6 +23,10 @@ export interface ScheduledOrder {
   total: string
   booking_source?: string | null
   appointment_type?: string | null
+  job_state_id?: number | null
+  job_state_name?: string | null
+  job_state_color?: string | null
+  job_state_icon?: string | null
 }
 
 // Calendar-specific status colors
@@ -78,8 +82,20 @@ export function ROCard({ order, isDragOverlay, compact, onResize, style: externa
     ...(isBeingDragged ? { opacity: 0.3 } : {}),
   }
 
-  const colorClass = STATUS_COLORS[order.state] || STATUS_COLORS.estimate
-  const dotColor = STATUS_DOTS[order.state] || STATUS_DOTS.estimate
+  // Use dynamic job state color if available, otherwise fall back to hardcoded
+  const hasDynamicColor = !!order.job_state_color
+  const colorClass = hasDynamicColor ? "" : (STATUS_COLORS[order.state] || STATUS_COLORS.estimate)
+  const dotColor = hasDynamicColor ? "" : (STATUS_DOTS[order.state] || STATUS_DOTS.estimate)
+  const dynamicCardStyle = hasDynamicColor
+    ? {
+        backgroundColor: `${order.job_state_color}15`,
+        borderColor: `${order.job_state_color}50`,
+        color: order.job_state_color!,
+      }
+    : undefined
+  const dynamicDotStyle = hasDynamicColor
+    ? { backgroundColor: order.job_state_color! }
+    : undefined
 
   // Extract last name
   const lastName = order.customer_name?.split(" ").pop() || order.customer_name || "Unknown"
@@ -157,7 +173,7 @@ export function ROCard({ order, isDragOverlay, compact, onResize, style: externa
     return (
       <div
         ref={setNodeRef}
-        style={combinedStyle}
+        style={{ ...combinedStyle, ...dynamicCardStyle }}
         {...mergedListeners}
         {...attributes}
         onClick={handleClick}
@@ -169,7 +185,7 @@ export function ROCard({ order, isDragOverlay, compact, onResize, style: externa
         `}
       >
         <div className="flex items-center gap-1.5">
-          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />
+          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} style={dynamicDotStyle} />
           {order.booking_source === "online" && (
             <span className="flex-shrink-0 w-3.5 h-3.5 rounded-full bg-indigo-500 text-white text-[7px] font-bold flex items-center justify-center" title="Online booking">&#9679;</span>
           )}
@@ -189,7 +205,7 @@ export function ROCard({ order, isDragOverlay, compact, onResize, style: externa
   return (
     <div
       ref={setNodeRef}
-      style={combinedStyle}
+      style={{ ...combinedStyle, ...dynamicCardStyle }}
       {...mergedListeners}
       {...attributes}
       onClick={handleClick}

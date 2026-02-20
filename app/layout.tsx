@@ -4,6 +4,8 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 import { ThemeInitializer } from "@/components/theme-initializer"
 import { AuthProvider } from "@/contexts/auth-context"
+import { TransferNotificationsProvider } from "@/contexts/transfer-notifications-context"
+import { TransferNotification } from "@/components/layout/TransferNotification"
 import { Toaster } from "sonner"
 import "./globals.css"
 import "./print.css"
@@ -61,7 +63,10 @@ export default function RootLayout({
         >
           <ThemeInitializer />
           <AuthProvider>
-            {children}
+            <TransferNotificationsProvider>
+              {children}
+              <TransferNotification />
+            </TransferNotificationsProvider>
           </AuthProvider>
           <Toaster position="top-right" richColors />
         </ThemeProvider>

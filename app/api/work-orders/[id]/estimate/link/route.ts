@@ -27,7 +27,7 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { recommendationIds, expiresInHours } = body
+    const { recommendationIds, expiresInHours, estimateType } = body
 
     if (!Array.isArray(recommendationIds) || recommendationIds.length === 0) {
       return NextResponse.json(
@@ -40,7 +40,8 @@ export async function POST(
       workOrderId,
       recommendationIds,
       createdByUserId: user.id,
-      expiresInHours: expiresInHours || 72
+      expiresInHours: expiresInHours || 72,
+      estimateType: estimateType || 'maintenance'
     })
 
     return NextResponse.json(result)

@@ -20,6 +20,9 @@ export async function GET(request: NextRequest) {
         wo.scheduled_start, wo.scheduled_end,
         wo.bay_assignment, wo.assigned_tech_id,
         wo.customer_concern, wo.total, wo.booking_source, wo.appointment_type,
+        wo.job_state_id,
+        js.name as job_state_name, js.color as job_state_color,
+        js.icon as job_state_icon,
         c.customer_name,
         v.year, v.make, v.model,
         tech.full_name as tech_name,
@@ -42,6 +45,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN customers c ON wo.customer_id = c.id
       LEFT JOIN vehicles v ON wo.vehicle_id = v.id
       LEFT JOIN users tech ON wo.assigned_tech_id = tech.id
+      LEFT JOIN job_states js ON wo.job_state_id = js.id
       WHERE wo.scheduled_start >= $1
         AND wo.scheduled_start < $2
         AND wo.is_active = true

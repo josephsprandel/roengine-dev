@@ -25,6 +25,10 @@ export interface Recommendation {
   estimate_viewed_at: string | null
   customer_responded_at: string | null
   customer_response_method: string | null
+  category_id: number
+  category_name: string | null
+  tech_notes: string | null
+  photo_path: string | null
   created_at: string
   updated_at: string
 }
@@ -34,8 +38,12 @@ interface UseRecommendationsManagementParams {
 }
 
 interface UseRecommendationsManagementReturn {
-  /** customer_approved + awaiting_approval + sent_to_customer + customer_declined */
+  /** All active recommendations (union of maintenance + repair) */
   activeRecommendations: Recommendation[]
+  /** category_id = 1 (maintenance), includes declined_for_now for resurfacing */
+  maintenanceRecommendations: Recommendation[]
+  /** category_id != 1 (repair/tires/other), active statuses only */
+  repairRecommendations: Recommendation[]
   /** approved (added to RO) */
   approvedRecommendations: Recommendation[]
   loading: boolean
@@ -54,16 +62,25 @@ const STATUS_SORT_ORDER: Record<string, number> = {
   superseded: 7,
 }
 
+/** Active statuses that SA needs to act on */
+const ACTIVE_STATUSES = ['customer_approved', 'sent_to_customer', 'awaiting_approval', 'customer_declined']
+
+/** Maintenance items also resurface declined_for_now from previous ROs */
+const MAINTENANCE_ACTIVE_STATUSES = [...ACTIVE_STATUSES, 'declined_for_now']
+
 /**
  * Hook: useRecommendationsManagement
  *
- * Manages fetching and state for AI maintenance recommendations.
- * Fetches all non-terminal statuses as "active" and approved as historical.
+ * Manages fetching and state for vehicle recommendations.
+ * Splits recommendations into maintenance (vehicle-level, persists across ROs)
+ * and repair (RO-specific) categories.
  */
 export function useRecommendationsManagement({
   vehicleId
 }: UseRecommendationsManagementParams): UseRecommendationsManagementReturn {
   const [activeRecommendations, setActiveRecommendations] = useState<Recommendation[]>([])
+  const [maintenanceRecommendations, setMaintenanceRecommendations] = useState<Recommendation[]>([])
+  const [repairRecommendations, setRepairRecommendations] = useState<Recommendation[]>([])
   const [approvedRecommendations, setApprovedRecommendations] = useState<Recommendation[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -71,6 +88,8 @@ export function useRecommendationsManagement({
   const reloadRecommendations = useCallback(async () => {
     if (!vehicleId) {
       setActiveRecommendations([])
+      setMaintenanceRecommendations([])
+      setRepairRecommendations([])
       setApprovedRecommendations([])
       return
     }
@@ -90,18 +109,35 @@ export function useRecommendationsManagement({
       const data = await response.json()
       const all: Recommendation[] = data.recommendations || []
 
-      // Active = anything the SA needs to see and act on
+      const sortByStatus = (a: Recommendation, b: Recommendation) =>
+        (STATUS_SORT_ORDER[a.status] || 99) - (STATUS_SORT_ORDER[b.status] || 99)
+
+      // Maintenance: category_id = 1, includes declined_for_now for resurfacing
+      const maintenance = all
+        .filter(r => (r.category_id === 1 || !r.category_id) && MAINTENANCE_ACTIVE_STATUSES.includes(r.status))
+        .sort(sortByStatus)
+
+      // Repair: category_id != 1, standard active statuses only (no resurfacing)
+      const repair = all
+        .filter(r => r.category_id !== 1 && r.category_id != null && ACTIVE_STATUSES.includes(r.status))
+        .sort(sortByStatus)
+
+      // Active = union of maintenance + repair (backward compat)
       const active = all
-        .filter(r => ['customer_approved', 'sent_to_customer', 'awaiting_approval', 'customer_declined'].includes(r.status))
-        .sort((a, b) => (STATUS_SORT_ORDER[a.status] || 99) - (STATUS_SORT_ORDER[b.status] || 99))
+        .filter(r => ACTIVE_STATUSES.includes(r.status))
+        .sort(sortByStatus)
 
       const approved = all.filter(r => r.status === 'approved')
 
       setActiveRecommendations(active)
+      setMaintenanceRecommendations(maintenance)
+      setRepairRecommendations(repair)
       setApprovedRecommendations(approved)
     } catch (err: any) {
       setError(err.message || 'Failed to load recommendations')
       setActiveRecommendations([])
+      setMaintenanceRecommendations([])
+      setRepairRecommendations([])
       setApprovedRecommendations([])
     } finally {
       setLoading(false)
@@ -114,6 +150,8 @@ export function useRecommendationsManagement({
 
   return {
     activeRecommendations,
+    maintenanceRecommendations,
+    repairRecommendations,
     approvedRecommendations,
     loading,
     error,

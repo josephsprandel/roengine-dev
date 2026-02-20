@@ -14,7 +14,8 @@ import { RolesSettings } from "@/components/settings/roles-settings"
 import { UsersSettings } from "@/components/settings/users-settings"
 import { InvoicingSettings } from "@/components/settings/invoicing-settings"
 import { SchedulingSettings } from "@/components/settings/scheduling-settings"
-import { Settings, Database, Building2, Users, CreditCard, Palette, DollarSign, Package, Shield, UserCog, Receipt, CalendarClock } from "lucide-react"
+import { JobStatesSettings } from "@/components/settings/job-states-settings"
+import { Settings, Database, Building2, Users, CreditCard, Palette, DollarSign, Package, Shield, UserCog, Receipt, CalendarClock, GitBranchPlus } from "lucide-react"
 
 export default function SettingsPage() {
   return (
@@ -79,6 +80,10 @@ export default function SettingsPage() {
                   <CalendarClock size={16} />
                   Scheduling
                 </TabsTrigger>
+                <TabsTrigger value="job-states" className="flex items-center gap-2 data-[state=active]:bg-background">
+                  <GitBranchPlus size={16} />
+                  Job States
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="data-sources">
@@ -134,6 +139,10 @@ export default function SettingsPage() {
 
               <TabsContent value="scheduling">
                 <SchedulingSettings />
+              </TabsContent>
+
+              <TabsContent value="job-states">
+                <JobStatesSettings />
               </TabsContent>
             </Tabs>
           </div>

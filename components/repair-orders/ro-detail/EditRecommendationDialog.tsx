@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Save, Plus, Trash2, Search, Wrench, Package } from "lucide-react"
+import { Loader2, Save, Plus, Trash2, Search, Wrench, Package, Camera, X } from "lucide-react"
 import { toast } from "sonner"
 import type { Recommendation } from "../hooks/useRecommendationsManagement"
 import { PartsCatalogModal } from "../parts-catalog-modal"
@@ -19,6 +19,8 @@ interface EditRecommendationDialogProps {
   onEdited: () => void
   /** When provided with no recommendation, operates in "create" mode */
   vehicleId?: number
+  /** Pre-set category when opening from a specific section */
+  defaultCategoryId?: number
 }
 
 type Priority = 'critical' | 'recommended' | 'suggested'
@@ -38,12 +40,19 @@ interface PartItem {
   price: number
 }
 
+interface ServiceCategory {
+  id: number
+  name: string
+  sort_order: number
+}
+
 export function EditRecommendationDialog({
   open,
   onOpenChange,
   recommendation,
   onEdited,
-  vehicleId
+  vehicleId,
+  defaultCategoryId
 }: EditRecommendationDialogProps) {
   const isCreateMode = !recommendation && !!vehicleId
   const [serviceTitle, setServiceTitle] = useState("")
@@ -57,6 +66,25 @@ export function EditRecommendationDialog({
   const [isCatalogOpen, setIsCatalogOpen] = useState(false)
   const [catalogItemIndex, setCatalogItemIndex] = useState<number | undefined>(undefined)
 
+  // Category & repair-specific fields
+  const [categories, setCategories] = useState<ServiceCategory[]>([])
+  const [categoryId, setCategoryId] = useState<number>(defaultCategoryId || 1)
+  const [techNotes, setTechNotes] = useState("")
+  const [photoPath, setPhotoPath] = useState<string | null>(null)
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Fetch categories on mount
+  useEffect(() => {
+    fetch('/api/service-categories')
+      .then(r => r.json())
+      .then(d => setCategories(d.categories || []))
+      .catch(() => {})
+  }, [])
+
+  const isRepairCategory = categoryId !== 1
+
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
@@ -67,6 +95,9 @@ export function EditRecommendationDialog({
         setRecommendedMileage(recommendation.recommended_at_mileage?.toString() || "")
         setLaborItems(recommendation.labor_items || [])
         setPartsItems(recommendation.parts_items || [])
+        setCategoryId(recommendation.category_id || defaultCategoryId || 1)
+        setTechNotes(recommendation.tech_notes || "")
+        setPhotoPath(recommendation.photo_path || null)
       } else {
         // Create mode: blank form
         setServiceTitle("")
@@ -75,10 +106,38 @@ export function EditRecommendationDialog({
         setRecommendedMileage("")
         setLaborItems([])
         setPartsItems([])
+        setCategoryId(defaultCategoryId || 1)
+        setTechNotes("")
+        setPhotoPath(null)
       }
+      setPhotoFile(null)
       setError(null)
     }
-  }, [open, recommendation])
+  }, [open, recommendation, defaultCategoryId])
+
+  const uploadPhoto = async (recId: number, file: File) => {
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('photo', file)
+      const res = await fetch(`/api/recommendations/${recId}/photo`, {
+        method: 'POST',
+        body: formData
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to upload photo')
+      }
+      const data = await res.json()
+      setPhotoPath(data.photo_path)
+      return data.photo_path
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to upload photo')
+      return null
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const handleSave = async () => {
     // Validation
@@ -96,14 +155,16 @@ export function EditRecommendationDialog({
     setError(null)
 
     try {
-      const payload = {
+      const payload: Record<string, any> = {
         service_title: serviceTitle.trim(),
         reason: reason.trim(),
         priority,
         recommended_at_mileage: recommendedMileage ? parseInt(recommendedMileage) : null,
         labor_items: laborItems,
         parts_items: partsItems.map(item => ({ ...item, total: item.qty * item.price })),
-        estimated_cost: estimatedCost
+        estimated_cost: estimatedCost,
+        category_id: categoryId,
+        tech_notes: techNotes.trim() || null,
       }
 
       let res: Response
@@ -125,6 +186,16 @@ export function EditRecommendationDialog({
       if (!res.ok) {
         const errorData = await res.json()
         throw new Error(errorData.error || (isCreateMode ? 'Failed to create recommendation' : 'Failed to update recommendation'))
+      }
+
+      const result = await res.json()
+
+      // Upload photo if a file was selected
+      if (photoFile) {
+        const recId = isCreateMode ? result.recommendation?.id : recommendation?.id
+        if (recId) {
+          await uploadPhoto(recId, photoFile)
+        }
       }
 
       toast.success(isCreateMode ? 'Recommendation created' : 'Recommendation updated')
@@ -199,6 +270,37 @@ export function EditRecommendationDialog({
     setCatalogItemIndex(undefined)
   }
 
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Invalid file type. Use PNG, JPEG, or WebP.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File too large. Max 10MB.')
+      return
+    }
+
+    setPhotoFile(file)
+    // Show local preview
+    setPhotoPath(URL.createObjectURL(file))
+
+    // If editing existing recommendation, upload immediately
+    if (recommendation?.id) {
+      uploadPhoto(recommendation.id, file)
+    }
+  }
+
+  const removePhoto = () => {
+    setPhotoFile(null)
+    setPhotoPath(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   if (!recommendation && !isCreateMode) return null
 
   const laborTotal = laborItems.reduce((sum, item) => sum + item.total, 0)
@@ -250,7 +352,38 @@ export function EditRecommendationDialog({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
+              {/* Category */}
+              <div className="space-y-2">
+                <Label htmlFor="category" className="text-sm font-medium">
+                  Category
+                </Label>
+                <Select
+                  value={categoryId.toString()}
+                  onValueChange={(value) => setCategoryId(parseInt(value))}
+                  disabled={saving}
+                >
+                  <SelectTrigger id="category">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map(cat => (
+                      <SelectItem key={cat.id} value={cat.id.toString()}>
+                        {cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}
+                      </SelectItem>
+                    ))}
+                    {categories.length === 0 && (
+                      <>
+                        <SelectItem value="1">Maintenance</SelectItem>
+                        <SelectItem value="2">Repair</SelectItem>
+                        <SelectItem value="3">Tires</SelectItem>
+                        <SelectItem value="4">Other</SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Priority */}
               <div className="space-y-2">
                 <Label htmlFor="priority" className="text-sm font-medium">
@@ -287,6 +420,69 @@ export function EditRecommendationDialog({
                 />
               </div>
             </div>
+
+            {/* Tech Notes - shown for repair categories */}
+            {isRepairCategory && (
+              <div className="space-y-2">
+                <Label htmlFor="tech-notes" className="text-sm font-medium">
+                  Tech Notes
+                </Label>
+                <Textarea
+                  id="tech-notes"
+                  value={techNotes}
+                  onChange={(e) => setTechNotes(e.target.value)}
+                  placeholder="Technician observations, measurements, findings..."
+                  rows={3}
+                  disabled={saving}
+                />
+              </div>
+            )}
+
+            {/* Photo Upload - shown for repair categories */}
+            {isRepairCategory && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Photo</Label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  onChange={handlePhotoSelect}
+                  className="hidden"
+                />
+                {photoPath ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={photoPath}
+                      alt="Recommendation photo"
+                      className="w-40 h-28 object-cover rounded-lg border border-border"
+                    />
+                    <button
+                      type="button"
+                      onClick={removePhoto}
+                      className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-0.5"
+                    >
+                      <X size={14} />
+                    </button>
+                    {uploading && (
+                      <div className="absolute inset-0 bg-background/60 flex items-center justify-center rounded-lg">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={saving}
+                  >
+                    <Camera size={14} className="mr-2" />
+                    Add Photo
+                  </Button>
+                )}
+              </div>
+            )}
 
             {/* Labor Items */}
             <div className="space-y-2">
