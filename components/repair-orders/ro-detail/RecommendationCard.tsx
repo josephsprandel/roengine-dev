@@ -137,10 +137,12 @@ export function RecommendationCard({
   const isSentToCustomer = recommendation.status === 'sent_to_customer'
   const isAwaitingApproval = recommendation.status === 'awaiting_approval'
 
-  const estimatedCost = parseFloat(recommendation.estimated_cost as any) || 0
   const laborTotal = recommendation.labor_items.reduce((sum, item) => sum + item.total, 0)
   const partsCount = recommendation.parts_items.length
-  const partsTotal = recommendation.parts_items.reduce((sum, item) => sum + (item.total || 0), 0)
+  const partsTotal = recommendation.parts_items.reduce((sum, item) => sum + (item.total || ((item.qty || 1) * (item.price || 0))), 0)
+  // Compute total dynamically from items; fall back to stored value if items are empty
+  const computedTotal = laborTotal + partsTotal
+  const estimatedCost = computedTotal > 0 ? computedTotal : (parseFloat(recommendation.estimated_cost as any) || 0)
 
   // Parts are "needed" if the service has parts listed but none are priced yet
   const hasUnpricedParts = partsCount > 0 && recommendation.parts_items.every(p => !p.price || p.price === 0)

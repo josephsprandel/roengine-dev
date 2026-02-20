@@ -93,7 +93,7 @@ export function EditRecommendationDialog({
           priority,
           recommended_at_mileage: recommendedMileage ? parseInt(recommendedMileage) : null,
           labor_items: laborItems,
-          parts_items: partsItems,
+          parts_items: partsItems.map(item => ({ ...item, total: item.qty * item.price })),
           estimated_cost: estimatedCost
         })
       })
