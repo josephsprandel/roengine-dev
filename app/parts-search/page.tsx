@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { Sidebar } from '@/components/layout/sidebar';
+import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -180,7 +182,12 @@ export default function PartsSearchPage() {
   const priceRange = results ? getPriceRange() : null;
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
+    <div className="flex h-screen bg-background">
+      <Sidebar />
+      <div className="flex flex-1 flex-col overflow-hidden min-h-0">
+        <Header />
+        <main className="flex-1 overflow-y-auto p-6 min-h-0">
+    <div className="max-w-7xl mx-auto">
       <div className="flex justify-between items-start mb-6">
         <div>
           <h1 className="text-3xl font-bold mb-2">PartsTech Search</h1>
@@ -502,6 +509,9 @@ export default function PartsSearchPage() {
           </CardContent>
         </Card>
       )}
+    </div>
+        </main>
+      </div>
     </div>
   );
 }
