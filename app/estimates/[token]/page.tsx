@@ -36,7 +36,7 @@ export default async function EstimatePage({
     }
 
     const data = await res.json()
-    return <EstimateClient estimate={data.estimate} token={token} />
+    return <EstimateClient estimate={data.estimate} token={token} shopProfile={data.shopProfile} />
   } catch {
     return <EstimateError />
   }

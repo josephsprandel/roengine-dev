@@ -9,8 +9,16 @@ import { useSearchParams } from "next/navigation"
 function ROCreationWrapper() {
   const searchParams = useSearchParams()
   const customerId = searchParams.get("customerId") || undefined
-  
-  return <ROCreationWizard initialCustomerId={customerId} />
+  const scheduledStart = searchParams.get("scheduledStart") || undefined
+  const bay = searchParams.get("bay") || undefined
+
+  return (
+    <ROCreationWizard
+      initialCustomerId={customerId}
+      initialScheduledStart={scheduledStart}
+      initialBay={bay}
+    />
+  )
 }
 
 export default function NewROPage() {

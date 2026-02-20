@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle, ChevronDown, ChevronUp, Car, User, Clock } from 'lucide-react'
+import { CheckCircle, ChevronDown, ChevronUp, Car, User, Clock, Phone } from 'lucide-react'
+import Image from 'next/image'
 import { toast } from 'sonner'
 import { VehicleEstimateDiagram } from './VehicleEstimateDiagram'
 import type { Hotspot } from '@/lib/generate-hotspots'
@@ -32,18 +33,26 @@ interface EstimateData {
     make: string
     model: string
     vin: string
+    mileage: number | null
   }
   services: EstimateService[]
   vehicleImagePath?: string | null
   hotspots?: Hotspot[]
 }
 
+interface ShopProfile {
+  shopName: string
+  phone: string | null
+  logoUrl: string | null
+}
+
 interface EstimateClientProps {
   estimate: EstimateData
   token: string
+  shopProfile?: ShopProfile | null
 }
 
-export function EstimateClient({ estimate, token }: EstimateClientProps) {
+export function EstimateClient({ estimate, token, shopProfile }: EstimateClientProps) {
   const [selectedServices, setSelectedServices] = useState<Set<number>>(
     new Set(estimate.services.filter(s => s.status !== 'declined').map(s => s.id))
   )
@@ -207,26 +216,60 @@ export function EstimateClient({ estimate, token }: EstimateClientProps) {
     <div className="min-h-screen bg-background pb-36">
       {/* Header */}
       <div className="bg-card border-b border-border px-4 py-5 sm:px-6">
-        <div className="max-w-lg mx-auto">
-          <h1 className="text-xl font-bold text-foreground mb-1">
-            Service Estimate
-          </h1>
-          <div className="flex items-center gap-2 text-muted-foreground mb-3">
-            <User className="w-4 h-4 flex-shrink-0" />
-            <span className="text-base">
-              {estimate.customer.firstName} {estimate.customer.lastName}
-            </span>
+        <div className="max-w-lg mx-auto flex items-start justify-between gap-4">
+          {/* Left column: title, customer, vehicle, expiration */}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-bold text-foreground mb-1">
+              Service Estimate
+            </h1>
+            <div className="flex items-center gap-2 text-muted-foreground mb-1.5">
+              <User className="w-4 h-4 flex-shrink-0" />
+              <span className="text-base">
+                {estimate.customer.firstName} {estimate.customer.lastName}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground mb-1.5">
+              <Car className="w-4 h-4 flex-shrink-0" />
+              <span className="text-base">
+                {estimate.vehicle.year} {estimate.vehicle.make} {estimate.vehicle.model}
+                {estimate.vehicle.mileage && (
+                  <span className="text-sm ml-1">
+                    &middot; {estimate.vehicle.mileage.toLocaleString()} mi
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <Clock className="w-4 h-4 flex-shrink-0" />
+              <span className="text-sm font-medium">{expiresText}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-muted-foreground mb-3">
-            <Car className="w-4 h-4 flex-shrink-0" />
-            <span className="text-base">
-              {estimate.vehicle.year} {estimate.vehicle.make} {estimate.vehicle.model}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-            <Clock className="w-4 h-4 flex-shrink-0" />
-            <span className="text-sm font-medium">{expiresText}</span>
-          </div>
+
+          {/* Right column: shop logo + call button */}
+          {shopProfile && (shopProfile.logoUrl || shopProfile.phone) && (
+            <div className="flex flex-col items-center gap-2 flex-shrink-0">
+              {shopProfile.logoUrl && (
+                <Image
+                  src={shopProfile.logoUrl}
+                  alt={shopProfile.shopName || 'Shop logo'}
+                  width={56}
+                  height={56}
+                  className="w-14 h-14 object-contain rounded-lg"
+                  unoptimized
+                />
+              )}
+              {shopProfile.phone && (
+                <a
+                  href={`tel:${shopProfile.phone.replace(/\D/g, '')}`}
+                  className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                  aria-label={`Call ${shopProfile.shopName || 'shop'}`}
+                >
+                  <Phone className="w-3.5 h-3.5" />
+                  <span>Call</span>
+                </a>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

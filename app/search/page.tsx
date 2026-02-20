@@ -22,6 +22,7 @@ import {
   DollarSign,
   Wrench
 } from "lucide-react"
+import { formatPhoneNumber } from "@/lib/utils/phone-format"
 
 interface SearchResult {
   id: string
@@ -134,7 +135,7 @@ function SearchResultsContent() {
               <div className="text-sm text-muted-foreground flex items-center gap-4 mt-1">
                 {customer.phone_primary && (
                   <span className="flex items-center gap-1">
-                    <Phone className="h-3 w-3" /> {customer.phone_primary}
+                    <Phone className="h-3 w-3" /> {formatPhoneNumber(customer.phone_primary)}
                   </span>
                 )}
                 {customer.email && (

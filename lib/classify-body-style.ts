@@ -26,7 +26,7 @@ const MID_TRUCKS = [
 const FULL_SUVS = [
   'tahoe', 'suburban', 'yukon', 'escalade', 'expedition',
   'navigator', 'sequoia', 'armada', 'qx80', 'land cruiser',
-  'gx', 'lx', 'wagoneer', 'grand wagoneer',
+  'gx', 'lx', 'xc90', 'wagoneer', 'grand wagoneer',
 ]
 
 const SEDANS = [
@@ -53,13 +53,25 @@ const MID_SUVS = [
   'telluride', 'palisade', 'atlas', 'tiguan',
   'q5', 'q7', 'q8', 'x3', 'x5', 'x7',
   'glc', 'gle', 'gls', 'rx', 'nx', 'mdx', 'rdx',
-  'xc60', 'xc90', 'cayenne', 'macan', 'urus',
+  'xc60', 'cayenne', 'macan', 'urus',
   'model x', 'model y',
   'gv70', 'gv80',
   'sorento', 'santa fe', 'murano', 'terrain',
   'blazer', 'trailblazer', 'trax', 'encore', 'envision',
   'edge', 'flex', 'durango', 'grand cherokee', 'cherokee', 'compass',
 ]
+
+/**
+ * Match a model name against a pattern. Short patterns (<=2 chars) like
+ * Lexus 'es', 'is' use word-boundary matching to avoid false positives
+ * (e.g. 'es' matching inside 'escape' or 'forester').
+ */
+function matchesModel(modelLower: string, pattern: string): boolean {
+  if (pattern.length <= 2) {
+    return new RegExp(`\\b${pattern}\\b`).test(modelLower)
+  }
+  return modelLower.includes(pattern)
+}
 
 /**
  * Classify vehicle body style using multiple data sources.
@@ -80,20 +92,21 @@ export async function classifyBodyStyle(vehicle: Vehicle): Promise<BodyStyle> {
   const modelLower = (vehicle.model || '').toLowerCase()
 
   // 2. Model name pattern matching
-  if (FULL_TRUCKS.some(t => modelLower.includes(t))) {
+  //    Check order: trucks → full SUVs → mid SUVs → sedans (most specific first)
+  if (FULL_TRUCKS.some(t => matchesModel(modelLower, t))) {
     return saveAndReturn(vehicle.id, 'full_truck')
   }
-  if (MID_TRUCKS.some(t => modelLower.includes(t))) {
+  if (MID_TRUCKS.some(t => matchesModel(modelLower, t))) {
     return saveAndReturn(vehicle.id, 'mid_truck')
   }
-  if (FULL_SUVS.some(s => modelLower.includes(s))) {
+  if (FULL_SUVS.some(s => matchesModel(modelLower, s))) {
     return saveAndReturn(vehicle.id, 'full_suv')
   }
-  if (SEDANS.some(s => modelLower.includes(s))) {
-    return saveAndReturn(vehicle.id, 'sedan')
-  }
-  if (MID_SUVS.some(s => modelLower.includes(s))) {
+  if (MID_SUVS.some(s => matchesModel(modelLower, s))) {
     return saveAndReturn(vehicle.id, 'mid_suv')
+  }
+  if (SEDANS.some(s => matchesModel(modelLower, s))) {
+    return saveAndReturn(vehicle.id, 'sedan')
   }
 
   // 3. NHTSA taxonomy lookup

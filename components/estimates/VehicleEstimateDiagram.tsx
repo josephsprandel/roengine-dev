@@ -150,7 +150,8 @@ export function VehicleEstimateDiagram({
     return priority[a.urgency] - priority[b.urgency]
   })
 
-  const totalServices = hotspots.reduce((sum, h) => sum + h.count, 0)
+  // Deduplicated count: a service appearing in multiple zones counts once
+  const totalServices = new Set(hotspots.flatMap(h => h.services.map(s => s.id))).size
   const criticalCount = hotspots.filter(h => h.urgency === 'critical').length
 
   return (

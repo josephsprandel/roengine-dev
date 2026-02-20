@@ -28,23 +28,26 @@ export async function GET(
 
     console.log('Executing SQL query for ID:', workOrderId)
     const result = await query(
-      `SELECT 
+      `SELECT
         wo.id, wo.ro_number, wo.customer_id, wo.vehicle_id,
         wo.state, wo.date_opened, wo.date_promised, wo.date_closed,
         wo.customer_concern, wo.label, wo.needs_attention,
         wo.labor_total, wo.parts_total, wo.sublets_total,
         wo.tax_amount, wo.total, wo.payment_status, wo.amount_paid,
+        wo.scheduled_start, wo.scheduled_end, wo.bay_assignment, wo.assigned_tech_id,
         wo.created_at, wo.updated_at,
-        c.customer_name, c.phone_primary, c.phone_secondary, c.phone_mobile, 
+        c.customer_name, c.phone_primary, c.phone_secondary, c.phone_mobile,
         c.email, c.address_line1, c.address_line2, c.city, c.state as customer_state, c.zip,
-        v.year, v.make, v.model, v.submodel, v.engine, v.transmission, 
-        v.color, v.vin, v.license_plate, v.license_plate_state, 
+        v.year, v.make, v.model, v.submodel, v.engine, v.transmission,
+        v.color, v.vin, v.license_plate, v.license_plate_state,
         v.mileage, v.manufacture_date,
-        u.id as created_by_id
+        u.id as created_by_id,
+        tech.full_name as tech_name
       FROM work_orders wo
       LEFT JOIN customers c ON wo.customer_id = c.id
       LEFT JOIN vehicles v ON wo.vehicle_id = v.id
       LEFT JOIN users u ON wo.created_by = u.id
+      LEFT JOIN users tech ON wo.assigned_tech_id = tech.id
       WHERE wo.id = $1 AND wo.is_active = true`,
       [workOrderId]
     )
@@ -96,21 +99,45 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { status } = body as { status?: string }
 
-    if (!status) {
+    // Allowlist of updatable fields: request key → column name
+    const ALLOWED_FIELDS: Record<string, string> = {
+      status: 'state',
+      scheduled_start: 'scheduled_start',
+      scheduled_end: 'scheduled_end',
+      bay_assignment: 'bay_assignment',
+      assigned_tech_id: 'assigned_tech_id',
+    }
+
+    const setClauses: string[] = []
+    const params: any[] = []
+    let paramIndex = 1
+
+    for (const [bodyKey, colName] of Object.entries(ALLOWED_FIELDS)) {
+      if (body[bodyKey] !== undefined) {
+        setClauses.push(`${colName} = $${paramIndex}`)
+        params.push(body[bodyKey])
+        paramIndex++
+      }
+    }
+
+    if (setClauses.length === 0) {
       return NextResponse.json(
-        { error: 'No fields provided for update' },
+        { error: 'No valid fields provided for update' },
         { status: 400 }
       )
     }
 
+    setClauses.push('updated_at = NOW()')
+    params.push(workOrderId)
+
     const updateResult = await query(
       `UPDATE work_orders
-       SET state = $1, updated_at = NOW()
-       WHERE id = $2 AND is_active = true
-       RETURNING id, ro_number, state, updated_at`,
-      [status, workOrderId]
+       SET ${setClauses.join(', ')}
+       WHERE id = $${paramIndex} AND is_active = true
+       RETURNING id, ro_number, state, scheduled_start, scheduled_end,
+                 bay_assignment, assigned_tech_id, updated_at`,
+      params
     )
 
     if (updateResult.rows.length === 0) {

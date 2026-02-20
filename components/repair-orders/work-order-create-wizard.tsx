@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Search, Phone, Mail, Plus, Loader2, ChevronRight, ChevronLeft, Check } from "lucide-react"
+import { formatPhoneNumber } from "@/lib/utils/phone-format"
 import { CustomerCreateDialog } from "@/components/customers/customer-create-dialog"
 import { VehicleEditDialog } from "@/components/customers/vehicle-edit-dialog"
 
@@ -267,7 +268,7 @@ export function WorkOrderCreateWizard({ open, onOpenChange, onSuccess }: WorkOrd
                             <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
                               <span className="flex items-center gap-1">
                                 <Phone size={14} />
-                                {customer.phone_primary}
+                                {formatPhoneNumber(customer.phone_primary)}
                               </span>
                               {customer.email && (
                                 <span className="flex items-center gap-1">
@@ -298,7 +299,7 @@ export function WorkOrderCreateWizard({ open, onOpenChange, onSuccess }: WorkOrd
                 <Card className="p-4 bg-muted/30">
                   <p className="text-sm text-muted-foreground mb-1">Selected Customer</p>
                   <p className="font-semibold">{selectedCustomer.customer_name}</p>
-                  <p className="text-sm text-muted-foreground">{selectedCustomer.phone_primary}</p>
+                  <p className="text-sm text-muted-foreground">{formatPhoneNumber(selectedCustomer.phone_primary)}</p>
                 </Card>
 
                 <div className="flex items-center justify-between">

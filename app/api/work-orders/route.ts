@@ -162,9 +162,10 @@ export async function POST(request: NextRequest) {
       INSERT INTO work_orders (
         ro_number, customer_id, vehicle_id, state,
         date_opened, date_promised, customer_concern, label,
+        scheduled_start, scheduled_end, bay_assignment, assigned_tech_id,
         created_at, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW()
       )
       RETURNING *
     `
@@ -178,6 +179,10 @@ export async function POST(request: NextRequest) {
       body.date_promised || null,
       body.customer_concern || null,
       body.label || null,
+      body.scheduled_start || null,
+      body.scheduled_end || null,
+      body.bay_assignment || null,
+      body.assigned_tech_id || null,
     ]
 
     const result = await query(sql, params)

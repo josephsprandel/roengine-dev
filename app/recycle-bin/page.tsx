@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RotateCcw, Trash2, AlertCircle, Clock, Wrench, Users, Car } from 'lucide-react'
+import { formatPhoneNumber } from '@/lib/utils/phone-format'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth-context'
 
@@ -261,7 +262,7 @@ export default function RecycleBinPage() {
                             <div className="flex-1">
                               <h3 className="font-semibold text-foreground">{customer.customer_name}</h3>
                               <p className="text-sm text-muted-foreground mt-1">
-                                {customer.phone_primary || customer.email || 'No contact info'}
+                                {customer.phone_primary ? formatPhoneNumber(customer.phone_primary) : (customer.email || 'No contact info')}
                               </p>
                               <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                                 <span className="flex items-center gap-1">

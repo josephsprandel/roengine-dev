@@ -70,7 +70,13 @@ export interface ServiceData {
   fees: LineItem[]
 }
 
-export function ROCreationWizard({ initialCustomerId }: { initialCustomerId?: string }) {
+interface ROCreationWizardProps {
+  initialCustomerId?: string
+  initialScheduledStart?: string
+  initialBay?: string
+}
+
+export function ROCreationWizard({ initialCustomerId, initialScheduledStart, initialBay }: ROCreationWizardProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const [customerData, setCustomerData] = useState<CustomerData | null>(null)
   const [vehicleData, setVehicleData] = useState<VehicleData | null>(null)
@@ -235,7 +241,12 @@ export function ROCreationWizard({ initialCustomerId }: { initialCustomerId?: st
           state: 'estimate',
           date_opened: new Date().toISOString().slice(0, 10),
           customer_concern: notes || null,
-          label: selectedServices.length > 0 ? selectedServices[0].name : null
+          label: selectedServices.length > 0 ? selectedServices[0].name : null,
+          scheduled_start: initialScheduledStart || null,
+          scheduled_end: initialScheduledStart
+            ? new Date(new Date(initialScheduledStart).getTime() + 60 * 60 * 1000).toISOString()
+            : null,
+          bay_assignment: initialBay || null,
         })
       })
 

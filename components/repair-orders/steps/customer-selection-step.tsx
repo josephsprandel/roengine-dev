@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Search, Plus, Check, Phone, Mail, User, Loader2 } from "lucide-react"
+import { formatPhoneNumber } from "@/lib/utils/phone-format"
 import { CustomerCreateDialog } from "@/components/customers/customer-create-dialog"
 import type { CustomerData } from "../ro-creation-wizard"
 
@@ -176,7 +177,7 @@ export function CustomerSelectionStep({
                         <div className="flex items-center gap-4 text-sm text-muted-foreground mt-0.5">
                           <span className="flex items-center gap-1">
                             <Phone size={14} />
-                            {customer.phone_primary}
+                            {formatPhoneNumber(customer.phone_primary)}
                           </span>
                           {customer.email && (
                             <span className="flex items-center gap-1">

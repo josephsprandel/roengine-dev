@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { List, X, Wrench, SquaresFour, Users, ChatCircle, Gear, Lightning, ChartBar, Package, Trash, SignOut, UserCircle, CaretUp } from "@phosphor-icons/react"
+import { List, X, Wrench, SquaresFour, Users, ChatCircle, Gear, Lightning, ChartBar, Package, Trash, SignOut, UserCircle, CaretUp, CalendarBlank } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
 import Image from "next/image"
 import { useAuth } from "@/contexts/auth-context"
@@ -61,6 +61,7 @@ export function Sidebar() {
 
   const navItems = [
     { icon: SquaresFour, label: "Dashboard", href: "/" },
+    { icon: CalendarBlank, label: "Schedule", href: "/schedule" },
     { icon: Wrench, label: "Repair Orders", href: "/repair-orders" },
     { icon: Users, label: "Customers", href: "/customers" },
     { icon: Package, label: "Parts Manager", href: "/parts-manager" },

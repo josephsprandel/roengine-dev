@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Plus, Download, ChevronRight, Search, Loader2, Trash2 } from "lucide-react"
+import { formatPhoneNumber } from "@/lib/utils/phone-format"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { useAuth } from "@/contexts/auth-context"
@@ -99,6 +100,7 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
       estimate: 0,
       approved: 0,
       in_progress: 0,
+      waiting_on_parts: 0,
       completed: 0,
     }
 
@@ -106,6 +108,7 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
       if (wo.state === "estimate") counts.estimate++
       else if (wo.state === "approved") counts.approved++
       else if (wo.state === "in_progress") counts.in_progress++
+      else if (wo.state === "waiting_on_parts") counts.waiting_on_parts++
       else if (wo.state === "completed") counts.completed++
     })
 
@@ -119,6 +122,7 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
     { id: "estimate", label: "Estimates", count: counts.estimate },
     { id: "approved", label: "Approved", count: counts.approved },
     { id: "in_progress", label: "In Progress", count: counts.in_progress },
+    { id: "waiting_on_parts", label: "Waiting on Parts", count: counts.waiting_on_parts },
     { id: "completed", label: "Completed", count: counts.completed },
   ]
 
@@ -130,6 +134,8 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
         return "bg-purple-500/10 text-purple-700 dark:text-purple-400"
       case "in_progress":
         return "bg-blue-500/10 text-blue-700 dark:text-blue-400"
+      case "waiting_on_parts":
+        return "bg-amber-500/10 text-amber-700 dark:text-amber-400"
       case "completed":
         return "bg-green-500/10 text-green-700 dark:text-green-400"
       default:
@@ -145,6 +151,8 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
         return "✓ Approved"
       case "in_progress":
         return "⚙ In Progress"
+      case "waiting_on_parts":
+        return "Waiting on Parts"
       case "completed":
         return "✓ Completed"
       default:
@@ -245,7 +253,7 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">{wo.customer_name}</p>
-                      <p className="text-xs text-muted-foreground">{wo.phone_primary}</p>
+                      <p className="text-xs text-muted-foreground">{formatPhoneNumber(wo.phone_primary)}</p>
                     </div>
                     <div className="flex items-center gap-1">
                       {hasPermission('delete_ro') && (

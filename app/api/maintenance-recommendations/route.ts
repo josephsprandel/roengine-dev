@@ -1,20 +1,18 @@
 /**
  * VIN-to-Maintenance Recommendations API Endpoint
- * 
+ *
+ * PRIMARY PATH: Database lookup against maintenance_schedules tables (82K+ entries).
+ * FALLBACK: Gemini AI real-time owner's manual search.
+ *
  * @see /docs/vin-to-maintenance-architecture.md - System architecture and flow
  * @see /docs/gemini-prompt-guide.md - Prompt engineering decisions
- * @see /docs/why-no-database-for-schedules.md - Why we don't cache
- * 
- * NO CACHING STRATEGY:
- * This endpoint does NOT query or store maintenance schedules in the database.
- * Philosophy: "We don't need to print the internet" - AI references data in real-time.
- * Database stores transactions we own (customers, ROs, invoices).
- * AI references specs owned by manufacturers (schedules, VIN decodes, part numbers).
- * See: /docs/why-no-database-for-schedules.md for full rationale.
+ * @see maintenance_schedule/docs/ARCHITECTURE.md - Database schema architecture
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { decodeVIN } from '@/lib/vin-decoder'
+import { lookupMaintenanceSchedule, type LookupParams } from '@/lib/maintenance-lookup'
 
 /**
  * Labor Hour Fallback Standards
@@ -71,35 +69,39 @@ const STANDARD_SERVICE_NAMES = [
  * @see /docs/vin-to-maintenance-architecture.md#urgency-levels
  */
 function calculateUrgency(currentMileage: number, interval: number) {
-  const mileageOverdue = currentMileage - interval
+  // Calculate position within the current service cycle,
+  // assuming the last service was conducted on schedule.
+  const lastDueAt = Math.floor(currentMileage / interval) * interval
+  const milesSinceLastDue = currentMileage - lastDueAt
+  const milesUntilNextDue = interval - milesSinceLastDue
 
-  if (mileageOverdue > 5000) {
+  if (milesSinceLastDue > 5000) {
     return {
       urgency: 'OVERDUE' as const,
       priority: 1,
-      mileage_until_due: -mileageOverdue,
-      reason: `Overdue by ${mileageOverdue.toLocaleString()} miles`,
+      mileage_until_due: -milesSinceLastDue,
+      reason: `Overdue by ${milesSinceLastDue.toLocaleString()} miles`,
     }
-  } else if (mileageOverdue >= 0) {
+  } else if (milesUntilNextDue <= 2000) {
     return {
       urgency: 'DUE_NOW' as const,
       priority: 2,
-      mileage_until_due: -mileageOverdue,
+      mileage_until_due: milesUntilNextDue,
       reason: 'Due now',
     }
-  } else if (interval - currentMileage <= 3000) {
+  } else if (milesUntilNextDue <= 3000) {
     return {
       urgency: 'COMING_SOON' as const,
       priority: 3,
-      mileage_until_due: interval - currentMileage,
-      reason: `Due in ${(interval - currentMileage).toLocaleString()} miles`,
+      mileage_until_due: milesUntilNextDue,
+      reason: `Due in ${milesUntilNextDue.toLocaleString()} miles`,
     }
   } else {
     return {
       urgency: 'NOT_DUE' as const,
       priority: 4,
-      mileage_until_due: interval - currentMileage,
-      reason: `Due in ${(interval - currentMileage).toLocaleString()} miles`,
+      mileage_until_due: milesUntilNextDue,
+      reason: `Due in ${milesUntilNextDue.toLocaleString()} miles`,
     }
   }
 }
@@ -186,6 +188,88 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // =================================================================
+    // PRIMARY PATH: Database lookup against maintenance_schedules tables
+    // =================================================================
+    try {
+      let lookupParams: Partial<LookupParams> = { mileage }
+
+      if (hasVIN) {
+        const decoded = await decodeVIN(vin)
+        if (!decoded.error && decoded.year && decoded.make && decoded.model) {
+          lookupParams = {
+            year: parseInt(decoded.year, 10),
+            make: decoded.make,
+            model: decoded.model,
+            mileage,
+            vin,
+            trim: decoded.trim,
+            displacement_liters: decoded.displacement_liters,
+            cylinder_count: decoded.cylinder_count,
+            engine_code: decoded.engine_code,
+            fuel_type: decoded.fuel_type,
+            drive_type: decoded.drive_type,
+            transmission_type: decoded.transmission_type,
+          }
+        }
+      } else if (hasYMM) {
+        lookupParams = { year, make, model, mileage }
+      }
+
+      if (lookupParams.year && lookupParams.make && lookupParams.model) {
+        const dbResult = await lookupMaintenanceSchedule(lookupParams as LookupParams)
+
+        if (dbResult.success) {
+          const duration = ((Date.now() - startTime) / 1000).toFixed(1)
+
+          if (dbResult.multiple_variants) {
+            // Multiple powertrain configs found — let user select
+            const processedVariants = dbResult.variants!.map((variant) => ({
+              ...variant,
+              services: variant.services
+                .map((s) => applyLaborFallback(s))
+                .filter((s: any) => s.urgency !== 'NOT_DUE')
+                .sort((a: any, b: any) => a.priority - b.priority),
+            }))
+
+            return NextResponse.json({
+              source: 'database',
+              duration: parseFloat(duration),
+              multiple_variants: true,
+              variants: processedVariants,
+              message: dbResult.message,
+            })
+          } else {
+            // Single powertrain config matched
+            const processedServices = dbResult.services!
+              .map((s) => applyLaborFallback(s))
+              .filter((s: any) => s.urgency !== 'NOT_DUE')
+              .sort((a: any, b: any) => a.priority - b.priority)
+
+            if (processedServices.length > 0) {
+              return NextResponse.json({
+                source: 'database',
+                duration: parseFloat(duration),
+                vehicle_info: dbResult.vehicle_info,
+                manual_source: null,
+                pdf_url: null,
+                services: processedServices,
+              })
+            }
+            // If all services were NOT_DUE, fall through to Gemini
+          }
+        }
+        // No DB match — fall through to Gemini
+        console.log('[DB Lookup] No match found, falling back to Gemini')
+      }
+    } catch (dbError: any) {
+      console.error('[DB Lookup] Error, falling back to Gemini:', dbError.message)
+    }
+
+    // =================================================================
+    // FALLBACK: Gemini AI real-time owner's manual search
+    // =================================================================
 
     // Initialize Gemini AI
     if (!process.env.GOOGLE_AI_API_KEY) {

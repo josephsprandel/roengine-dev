@@ -87,7 +87,7 @@ export default async function PrintInvoicePage({
               <h1 className="shop-name">{shop.shop_name || "Auto Repair Shop"}</h1>
               <div className="shop-details">
                 {shop.address && <div>{shop.address}</div>}
-                {shop.phone && <div>Phone: {shop.phone}</div>}
+                {shop.phone && <div>Phone: {formatPhoneNumber(shop.phone)}</div>}
                 {shop.email && <div>Email: {shop.email}</div>}
               </div>
             </div>
@@ -392,7 +392,7 @@ export default async function PrintInvoicePage({
               <strong>Thank you for your business!</strong>
               <p>
                 If you have any questions about this invoice, please contact us at{" "}
-                {shop.phone || "the shop"}.
+                {shop.phone ? formatPhoneNumber(shop.phone) : "the shop"}.
               </p>
             </div>
             {!isPaid && !isVoided && (

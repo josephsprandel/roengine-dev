@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { User, Car, Wrench, Clock, DollarSign, FileText, Phone, Mail } from "lucide-react"
+import { formatPhoneNumber } from "@/lib/utils/phone-format"
 import type { CustomerData, VehicleData, ServiceData } from "../ro-creation-wizard"
 
 interface ReviewStepProps {
@@ -92,7 +93,7 @@ export function ReviewStep({
                 <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Phone size={14} />
-                    {customerData.phone}
+                    {formatPhoneNumber(customerData.phone)}
                   </span>
                   {customerData.email && (
                     <span className="flex items-center gap-1">

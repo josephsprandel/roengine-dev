@@ -229,12 +229,14 @@ export function CustomerProfile({ customerId, onClose }: { customerId: string; o
                     estimate: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
                     approved: "bg-purple-500/10 text-purple-700 dark:text-purple-400",
                     in_progress: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+                    waiting_on_parts: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
                     completed: "bg-green-500/10 text-green-700 dark:text-green-400",
                   }
                   const statusLabel: Record<string, string> = {
                     estimate: "Estimate",
                     approved: "Approved",
                     in_progress: "In Progress",
+                    waiting_on_parts: "Waiting on Parts",
                     completed: "Completed",
                   }
                   const paymentColor =

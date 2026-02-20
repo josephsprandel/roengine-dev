@@ -47,12 +47,20 @@ export async function generateHotspots(
   )
 
   // 3. Group services by zone (case-insensitive lookup)
+  //    Deduplicate: each service only appears in the first zone it maps to,
+  //    so multi-zone mappings don't inflate the service count.
   const serviceByName = new Map(services.map(s => [s.name.toLowerCase(), s]))
   const zoneServiceMap = new Map<string, Service[]>()
+  const assignedServices = new Set<string>()
 
   for (const mapping of mappingResult.rows) {
-    const service = serviceByName.get(mapping.service_name.toLowerCase())
+    const serviceKey = mapping.service_name.toLowerCase()
+    if (assignedServices.has(serviceKey)) continue
+
+    const service = serviceByName.get(serviceKey)
     if (!service) continue
+
+    assignedServices.add(serviceKey)
 
     const list = zoneServiceMap.get(mapping.zone_name)
     if (list) {

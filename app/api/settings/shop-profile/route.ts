@@ -64,6 +64,11 @@ export async function PATCH(request: NextRequest) {
             services_description = $11,
             tags = $12,
             parts_markup_percent = COALESCE($13, parts_markup_percent),
+            waiter_cutoff_time = COALESCE($15, waiter_cutoff_time),
+            max_waiters_per_slot = COALESCE($16, max_waiters_per_slot),
+            max_dropoffs_per_day = COALESCE($17, max_dropoffs_per_day),
+            dropoff_start_time = COALESCE($18, dropoff_start_time),
+            dropoff_end_time = COALESCE($19, dropoff_end_time),
             updated_at = NOW()
           WHERE id = $14
         `, [
@@ -80,7 +85,12 @@ export async function PATCH(request: NextRequest) {
           profile.services_description || null,
           profile.tags || [],
           profile.parts_markup_percent,
-          existingProfile.rows[0].id
+          existingProfile.rows[0].id,
+          profile.waiter_cutoff_time || null,
+          profile.max_waiters_per_slot != null ? profile.max_waiters_per_slot : null,
+          profile.max_dropoffs_per_day != null ? profile.max_dropoffs_per_day : null,
+          profile.dropoff_start_time || null,
+          profile.dropoff_end_time || null,
         ])
       } else {
         // Insert new profile

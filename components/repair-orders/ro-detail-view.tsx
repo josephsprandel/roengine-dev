@@ -173,6 +173,8 @@ interface WorkOrder {
   license_plate_state: string | null
   mileage: number | null
   manufacture_date: string | null
+  scheduled_start: string | null
+  scheduled_end: string | null
   date_opened: string
   date_promised: string | null
   date_closed: string | null
@@ -362,6 +364,30 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     await updateStatus("cancelled", { successMessage: "Repair order cancelled" })
   }, [workOrder, updateStatus])
 
+  const handleDateChange = useCallback(
+    async (field: "scheduled_start" | "scheduled_end", value: string) => {
+      if (!workOrder) return
+      // Optimistic update
+      setWorkOrder((prev) => prev ? { ...prev, [field]: value } : prev)
+      try {
+        const response = await fetch(`/api/work-orders/${workOrder.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [field]: value }),
+        })
+        if (!response.ok) throw new Error("Failed to update")
+        showToast("Schedule updated", "success")
+      } catch {
+        // Revert on failure
+        setWorkOrder((prev) =>
+          prev ? { ...prev, [field]: field === "scheduled_start" ? workOrder.scheduled_start : workOrder.scheduled_end } : prev
+        )
+        showToast("Failed to update schedule", "error")
+      }
+    },
+    [workOrder, showToast]
+  )
+
   const handleCustomerEditSuccess = useCallback(async () => {
     // Re-fetch work order to get updated customer data
     try {
@@ -482,6 +508,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     draft: "Draft",
     open: "Open",
     in_progress: "In Progress",
+    waiting_on_parts: "Waiting on Parts",
     waiting_approval: "Waiting Approval",
     approved: "Approved",
     completed: "Completed",
@@ -492,6 +519,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     draft: "bg-muted text-muted-foreground border-border",
     open: "bg-blue-500/20 text-blue-700 dark:text-blue-400 border-blue-500/20",
     in_progress: "bg-blue-500/20 text-blue-700 dark:text-blue-400 border-blue-500/20",
+    waiting_on_parts: "bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/20",
     waiting_approval: "bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/20",
     approved: "bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/20",
     completed: "bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/20",
@@ -581,7 +609,12 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         />
       </div>
 
-      <StatusWorkflow stages={WORKFLOW_STAGES as WorkflowStage[]} />
+      <StatusWorkflow
+        stages={WORKFLOW_STAGES as WorkflowStage[]}
+        scheduledStart={workOrder.scheduled_start}
+        scheduledEnd={workOrder.scheduled_end}
+        onDateChange={handleDateChange}
+      />
 
       {/* AI Maintenance Recommendations */}
       <RecommendationsSection
@@ -613,6 +646,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
                 <option value="draft">Draft</option>
                 <option value="open">Open</option>
                 <option value="in_progress">In Progress</option>
+                <option value="waiting_on_parts">Waiting on Parts</option>
                 <option value="waiting_approval">Waiting Approval</option>
                 <option value="approved">Approved</option>
                 <option value="completed">Completed</option>

@@ -29,7 +29,7 @@ export async function GET(
         e.expires_at, e.viewed_at, e.responded_at, e.customer_notes,
         e.vehicle_id,
         c.first_name, c.last_name, c.customer_name, c.email, c.phone_primary,
-        v.year, v.make, v.model, v.vin, v.color, v.body_style
+        v.year, v.make, v.model, v.vin, v.color, v.body_style, v.mileage
       FROM estimates e
       JOIN customers c ON e.customer_id = c.id
       JOIN vehicles v ON e.vehicle_id = v.id
@@ -41,6 +41,14 @@ export async function GET(
     }
 
     const est = estimateResult.rows[0]
+
+    // Fetch shop profile (logo + phone for header)
+    const shopResult = await query(`
+      SELECT shop_name, phone, logo_url
+      FROM shop_profile
+      LIMIT 1
+    `)
+    const shopProfile = shopResult.rows[0] || null
 
     // Check expiration
     if (est.expires_at && new Date(est.expires_at) < new Date()) {
@@ -133,7 +141,8 @@ export async function GET(
           year: est.year,
           make: est.make,
           model: est.model,
-          vin: est.vin
+          vin: est.vin,
+          mileage: est.mileage ? parseInt(est.mileage) : null
         },
         services: servicesResult.rows.map((s: any) => ({
           id: s.id,
@@ -144,7 +153,12 @@ export async function GET(
         })),
         vehicleImagePath,
         hotspots,
-      }
+      },
+      shopProfile: shopProfile ? {
+        shopName: shopProfile.shop_name,
+        phone: shopProfile.phone,
+        logoUrl: shopProfile.logo_url,
+      } : null,
     })
   } catch (error: any) {
     return NextResponse.json(
