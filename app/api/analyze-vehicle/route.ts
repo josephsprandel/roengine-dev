@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || '')
 
 /**
  * Classify image into category
@@ -287,9 +287,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('=== ANALYZING VEHICLE IMAGES ===')
-    console.log('Number of images:', images.length)
-
     // Convert images to base64 and classify
     const classifiedImages: Array<{base64: string, category: string}> = []
     
@@ -300,8 +297,7 @@ export async function POST(request: NextRequest) {
       
       // Classify image
       const category = await classifyImage(base64)
-      console.log(`Image classified as: ${category}`)
-      
+
       classifiedImages.push({ base64, category })
     }
 
@@ -322,12 +318,10 @@ export async function POST(request: NextRequest) {
 
     // Process DOOR_JAMB images - merge data from all
     const doorJambImages = classifiedImages.filter(img => img.category === 'DOOR_JAMB')
-    console.log(`Processing ${doorJambImages.length} door jamb image(s)`)
-    
+
     for (const img of doorJambImages) {
       const data = await extractDoorJambData(img.base64)
       if (data) {
-        console.log('Door jamb data extracted:', data)
         if (!result.vin && data.vin) result.vin = data.vin
         if (!result.build_date && data.build_date) result.build_date = data.build_date
         if (!result.tire_size && data.tire_size) result.tire_size = data.tire_size
@@ -336,13 +330,11 @@ export async function POST(request: NextRequest) {
 
     // Process DASHBOARD images - try all until we get mileage
     const dashboardImages = classifiedImages.filter(img => img.category === 'DASHBOARD')
-    console.log(`Processing ${dashboardImages.length} dashboard image(s)`)
-    
+
     for (const img of dashboardImages) {
       if (!result.mileage) {
         const mileage = await extractOdometer(img.base64)
         if (mileage) {
-          console.log('Odometer extracted:', mileage)
           result.mileage = mileage
           break
         }
@@ -351,13 +343,11 @@ export async function POST(request: NextRequest) {
 
     // Process LICENSE_PLATE images
     const licenseImages = classifiedImages.filter(img => img.category === 'LICENSE_PLATE')
-    console.log(`Processing ${licenseImages.length} license plate image(s)`)
-    
+
     for (const img of licenseImages) {
       if (!result.licensePlate) {
         const plateData = await extractLicensePlate(img.base64)
         if (plateData && plateData.number) {
-          console.log('License plate extracted:', plateData)
           result.licensePlate = plateData.number
           if (plateData.state) result.licensePlateState = plateData.state
           break
@@ -374,7 +364,6 @@ export async function POST(request: NextRequest) {
       if (!result.color) {
         const color = await extractPaintColor(img.base64)
         if (color) {
-          console.log('Paint color extracted:', color)
           result.color = color
           break
         }
@@ -388,7 +377,6 @@ export async function POST(request: NextRequest) {
       if (!result.make || !result.model) {
         const vehicleInfo = await extractVehicleInfo(img.base64)
         if (vehicleInfo) {
-          console.log('Vehicle info extracted:', vehicleInfo)
           if (!result.year && vehicleInfo.year) result.year = vehicleInfo.year
           if (!result.make && vehicleInfo.make) result.make = vehicleInfo.make
           if (!result.model && vehicleInfo.model) result.model = vehicleInfo.model
@@ -396,9 +384,6 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-
-    console.log('Final extracted data:', result)
-    console.log('================================')
 
     return NextResponse.json({
       success: true,

@@ -11,6 +11,20 @@ import {
 } from "react"
 import { useAuth } from "@/contexts/auth-context"
 
+export interface GlobalActivityEvent {
+  id: number
+  work_order_id: number
+  user_id: number | null
+  actor_type: "staff" | "customer" | "system"
+  action: string
+  description: string
+  metadata: Record<string, any> | null
+  created_at: string
+  ro_number: string | null
+  customer_name: string | null
+  actor_name: string | null
+}
+
 export interface TransferNotification {
   id: number
   work_order_id: number
@@ -44,6 +58,8 @@ interface TransferNotificationsContextType {
   dismissPopup: (transferId: number) => void
   /** Total count of unaccepted transfers */
   pendingCount: number
+  /** Global activity feed events (last 100) — refreshed every 20s */
+  globalActivity: GlobalActivityEvent[]
 }
 
 const TransferNotificationsContext = createContext<
@@ -57,11 +73,14 @@ export function TransferNotificationsProvider({ children }: { children: ReactNod
 
   const [pendingTransfers, setPendingTransfers] = useState<TransferNotification[]>([])
   const [newTransfers, setNewTransfers] = useState<TransferNotification[]>([])
+  const [globalActivity, setGlobalActivity] = useState<GlobalActivityEvent[]>([])
 
   // Track which IDs we've already alerted about (persists across polls)
   const seenIdsRef = useRef<Set<number>>(new Set())
   // Track which popups have been manually dismissed this session
   const dismissedIdsRef = useRef<Set<number>>(new Set())
+  // Counter for piggybacking activity fetch on every other poll cycle (20s)
+  const pollCycleRef = useRef(0)
 
   const playChime = useCallback(() => {
     try {
@@ -94,6 +113,17 @@ export function TransferNotificationsProvider({ children }: { children: ReactNod
       setTimeout(() => ctx.close(), 1500)
     } catch {
       // Web Audio not available — silent fail
+    }
+  }, [])
+
+  const fetchGlobalActivity = useCallback(async () => {
+    try {
+      const res = await fetch("/api/activity/global")
+      if (!res.ok) return
+      const data = await res.json()
+      setGlobalActivity(data.activities || [])
+    } catch {
+      // Silent fail — retry next cycle
     }
   }, [])
 
@@ -131,7 +161,13 @@ export function TransferNotificationsProvider({ children }: { children: ReactNod
     } catch {
       // Network error — silent fail, try again next poll
     }
-  }, [user, playChime])
+
+    // Piggyback global activity fetch on every other poll cycle (effectively 20s)
+    pollCycleRef.current += 1
+    if (pollCycleRef.current % 2 === 0) {
+      fetchGlobalActivity()
+    }
+  }, [user, playChime, fetchGlobalActivity])
 
   // Start polling when authenticated
   useEffect(() => {
@@ -143,10 +179,11 @@ export function TransferNotificationsProvider({ children }: { children: ReactNod
 
     // Fetch immediately on mount / login
     fetchPending()
+    fetchGlobalActivity()
 
     const interval = setInterval(fetchPending, POLL_INTERVAL_MS)
     return () => clearInterval(interval)
-  }, [isLoading, isAuthenticated, user, fetchPending])
+  }, [isLoading, isAuthenticated, user, fetchPending, fetchGlobalActivity])
 
   const acceptTransfer = useCallback(
     async (transferId: number, workOrderId: number) => {
@@ -186,6 +223,7 @@ export function TransferNotificationsProvider({ children }: { children: ReactNod
         acceptTransfer,
         dismissPopup,
         pendingCount: pendingTransfers.length,
+        globalActivity,
       }}
     >
       {children}

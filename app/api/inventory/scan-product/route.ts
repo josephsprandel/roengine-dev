@@ -37,7 +37,6 @@ export async function POST(request: NextRequest) {
     }
 
     const imageCount = (frontImage ? 1 : 0) + (backImage ? 1 : 0)
-    console.log(`📸 Processing ${imageCount} label photo(s) for product scan...`)
 
     // Convert images to base64 for Gemini vision
     const imageParts: any[] = []
@@ -286,7 +285,6 @@ IMPORTANT:
 ${imageCount === 2 ? '- Combine information from BOTH photos for the most complete data' : ''}`
 
     // Call Gemini vision API
-    console.log('🤖 Calling Gemini vision for comprehensive product extraction...')
     const result = await model.generateContent([prompt, ...imageParts])
     const responseText = result.response.text()
 
@@ -302,12 +300,8 @@ ${imageCount === 2 ? '- Combine information from BOTH photos for the most comple
       )
     }
 
-    console.log('✓ Extracted:', scanData.brand, scanData.productName)
-    console.log(`  Confidence: ${(scanData.confidenceScore * 100).toFixed(0)}%`)
-
     // Normalize OEM approvals using mapping table
     if (scanData.oemApprovals && scanData.oemApprovals.length > 0) {
-      console.log(`🔄 Normalizing ${scanData.oemApprovals.length} OEM approval(s)...`)
       
       scanData.oemApprovals = await Promise.all(
         scanData.oemApprovals.map(async (approval: any) => {
@@ -320,7 +314,6 @@ ${imageCount === 2 ? '- Combine information from BOTH photos for the most comple
 
           if (mappingResult.rows.length > 0) {
             const mapping = mappingResult.rows[0]
-            console.log(`  ✓ Mapped "${approval.rawText}" → ${mapping.normalized_code}`)
             return {
               ...approval,
               normalizedCode: mapping.normalized_code,
@@ -329,7 +322,6 @@ ${imageCount === 2 ? '- Combine information from BOTH photos for the most comple
             }
           }
 
-          console.log(`  ⚠️ No mapping for "${approval.rawText}" - using AI normalization`)
           return { ...approval, wasNormalized: false }
         })
       )
@@ -354,9 +346,6 @@ ${imageCount === 2 ? '- Combine information from BOTH photos for the most comple
       partNumberSource = 'generated'
       scanData.warnings = scanData.warnings || []
       scanData.warnings.push(`Generated part number: ${partNumber} (no manufacturer PN visible on bottle)`)
-      console.log(`  ⚡ Generated part number: ${partNumber}`)
-    } else {
-      console.log(`  ✓ Manufacturer part number: ${partNumber}`)
     }
 
     // Determine if needs review
@@ -364,8 +353,6 @@ ${imageCount === 2 ? '- Combine information from BOTH photos for the most comple
       scanData.confidenceScore < 0.8 ||
       (scanData.warnings && scanData.warnings.length > 0) ||
       partNumberSource === 'generated'
-
-    console.log(`✓ Product scan complete - ${needsReview ? '⚠️ NEEDS REVIEW' : '✅ VERIFIED'}`)
 
     // Build response
     return NextResponse.json({

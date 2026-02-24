@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
         `, [
           partNumber.trim(),
           (record as any).Description || '',
-          (record as any)['Primary Vendor'] || (record as any).Manufacturer || (record as any).Brand || 'AutoHouse',
+          (record as any)['Primary Vendor'] || (record as any).Manufacturer || (record as any).Brand || 'Shop Inventory',
           cost,
           price,
           qtyOnHand,

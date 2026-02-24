@@ -12,7 +12,7 @@ export interface VendorPreference {
  * @param make - The vehicle make (e.g., "Toyota", "Ford", "BMW")
  * @returns The preferred vendor info for this vehicle's origin
  */
-export async function getPreferredVendorForVehicle(make: string): Promise<VendorPreference> {
+export async function getPreferredVendorForVehicle(make: string): Promise<VendorPreference | null> {
   try {
     // 1. Look up vehicle origin from the mapping table
     const originResult = await query(
@@ -21,7 +21,7 @@ export async function getPreferredVendorForVehicle(make: string): Promise<Vendor
     )
 
     let vehicleOrigin: string
-    
+
     if (originResult.rows.length === 0) {
       // Unknown make, default to 'domestic'
       console.log(`[VENDOR] Unknown make: ${make}, defaulting to domestic`)
@@ -35,13 +35,7 @@ export async function getPreferredVendorForVehicle(make: string): Promise<Vendor
     return getPreferredVendor(vehicleOrigin)
   } catch (error) {
     console.error('[VENDOR] Error getting preferred vendor:', error)
-    // Return default on error
-    return {
-      preferred_vendor: 'NAPA',
-      vendor_account_id: '150404',
-      priority: 1,
-      vehicle_origin: 'domestic'
-    }
+    return null
   }
 }
 
@@ -50,12 +44,12 @@ export async function getPreferredVendorForVehicle(make: string): Promise<Vendor
  * @param vehicleOrigin - The origin category ('domestic', 'asian', 'european')
  * @returns The preferred vendor info
  */
-export async function getPreferredVendor(vehicleOrigin: string): Promise<VendorPreference> {
+export async function getPreferredVendor(vehicleOrigin: string): Promise<VendorPreference | null> {
   try {
     const prefs = await query(
       `SELECT preferred_vendor, vendor_account_id, priority, vehicle_origin
-       FROM vendor_preferences 
-       WHERE vehicle_origin = $1 
+       FROM vendor_preferences
+       WHERE vehicle_origin = $1
        ORDER BY priority ASC
        LIMIT 1`,
       [vehicleOrigin.toLowerCase()]
@@ -66,22 +60,12 @@ export async function getPreferredVendor(vehicleOrigin: string): Promise<VendorP
       return prefs.rows[0]
     }
 
-    // No preference found, return default
-    console.log(`[VENDOR] No preference found for ${vehicleOrigin}, using NAPA default`)
-    return {
-      preferred_vendor: 'NAPA',
-      vendor_account_id: '150404',
-      priority: 1,
-      vehicle_origin: vehicleOrigin
-    }
+    // No preference found, return null (let caller handle)
+    console.log(`[VENDOR] No preference found for ${vehicleOrigin}`)
+    return null
   } catch (error) {
     console.error('[VENDOR] Error getting preferred vendor:', error)
-    return {
-      preferred_vendor: 'NAPA',
-      vendor_account_id: '150404',
-      priority: 1,
-      vehicle_origin: vehicleOrigin
-    }
+    return null
   }
 }
 
@@ -95,28 +79,16 @@ export async function getAllPreferredVendors(vehicleOrigin: string): Promise<Ven
   try {
     const prefs = await query(
       `SELECT preferred_vendor, vendor_account_id, priority, vehicle_origin
-       FROM vendor_preferences 
-       WHERE vehicle_origin = $1 
+       FROM vendor_preferences
+       WHERE vehicle_origin = $1
        ORDER BY priority ASC`,
       [vehicleOrigin.toLowerCase()]
     )
 
-    return prefs.rows.length > 0 
-      ? prefs.rows 
-      : [{
-          preferred_vendor: 'NAPA',
-          vendor_account_id: '150404',
-          priority: 1,
-          vehicle_origin: vehicleOrigin
-        }]
+    return prefs.rows.length > 0 ? prefs.rows : []
   } catch (error) {
     console.error('[VENDOR] Error getting all preferred vendors:', error)
-    return [{
-      preferred_vendor: 'NAPA',
-      vendor_account_id: '150404',
-      priority: 1,
-      vehicle_origin: vehicleOrigin
-    }]
+    return []
   }
 }
 

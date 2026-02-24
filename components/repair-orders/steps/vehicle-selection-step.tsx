@@ -22,6 +22,7 @@ import {
   ChevronRight,
 } from "lucide-react"
 import type { VehicleData } from "../ro-creation-wizard"
+import { toast } from "sonner"
 import { decodeVIN } from "@/lib/vin-decoder"
 
 interface VehicleSelectionStepProps {
@@ -164,9 +165,6 @@ export function VehicleSelectionStep({
     setIsAnalyzing(true)
 
     try {
-      console.log('=== STARTING VEHICLE ANALYSIS ===')
-      console.log('Number of images:', uploadedImages.length)
-
       // Mark all images as classifying
       setUploadedImages(prev => prev.map(img => ({ ...img, classifying: true })))
 
@@ -188,7 +186,6 @@ export function VehicleSelectionStep({
       }
 
       const result = await response.json()
-      console.log('Analysis result:', result)
 
       if (result.success && result.data) {
         // Update images with classifications
@@ -221,11 +218,9 @@ export function VehicleSelectionStep({
         setExtractedData(extracted)
         setManualData((prev) => ({ ...prev, ...extracted }))
         setAnalysisComplete(true)
-        console.log('Vehicle data extracted successfully')
 
         // Auto-decode VIN if we have it
         if (extracted.vin && extracted.vin.length === 17) {
-          console.log('VIN detected, auto-decoding...')
           decodeAndFillVIN(extracted.vin)
         }
       } else {
@@ -233,10 +228,9 @@ export function VehicleSelectionStep({
       }
     } catch (error: any) {
       console.error('Analysis error:', error)
-      alert(`Failed to analyze images: ${error.message}`)
+      toast.error(`Failed to analyze images: ${error.message}`)
     } finally {
       setIsAnalyzing(false)
-      console.log('=================================')
     }
   }
 
@@ -263,7 +257,6 @@ export function VehicleSelectionStep({
 
     setIsDecodingVIN(true)
     try {
-      console.log('[Vehicle Step] Decoding VIN:', vin)
       const decoded = await decodeVIN(vin)
 
       if (decoded.error) {
@@ -289,7 +282,6 @@ export function VehicleSelectionStep({
         trim: prev.trim || decoded.trim || ""
       }))
 
-      console.log('[Vehicle Step] VIN decoded successfully:', decoded)
     } catch (error) {
       console.error('[Vehicle Step] VIN decode failed:', error)
     } finally {
@@ -298,11 +290,7 @@ export function VehicleSelectionStep({
   }
 
   const handleConfirmAIData = () => {
-    console.log('[Vehicle Step] Confirming AI data...')
-    console.log('[Vehicle Step] manualData:', JSON.stringify(manualData, null, 2))
-    
     if (manualData.year && manualData.make && manualData.model && manualData.vin) {
-      console.log('[Vehicle Step] Calling onSelectVehicle with manualData')
       onSelectVehicle(manualData)
     } else {
       console.warn('[Vehicle Step] Missing required fields, not calling onSelectVehicle')

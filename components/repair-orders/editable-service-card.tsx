@@ -23,10 +23,13 @@ import {
   GripVertical,
   User,
   Search,
+  ClipboardCheck,
+  Camera,
 } from "lucide-react"
-import type { ServiceData, LineItem } from "./ro-creation-wizard"
+import type { ServiceData, LineItem, InspectionItem } from "./ro-creation-wizard"
 import { PartsCatalogModal } from "./parts-catalog-modal"
 import { PartDetailsModal } from "./part-details-modal"
+import { PhotoLightbox } from "./ro-detail/PhotoLightbox"
 
 interface EditableServiceCardProps {
   service: ServiceData
@@ -296,6 +299,279 @@ function LineItemSection({ category, label, icon: Icon, color, items, onUpdateIt
   )
 }
 
+const STATUS_COLORS: Record<string, string> = {
+  pending: "bg-gray-300 dark:bg-gray-600",
+  green: "bg-green-500",
+  yellow: "bg-yellow-400",
+  red: "bg-red-500",
+}
+
+const STATUS_CYCLE: Record<string, InspectionItem["status"]> = {
+  pending: "green",
+  green: "yellow",
+  yellow: "red",
+  red: "pending",
+}
+
+function formatInspectionTimeAgo(dateStr: string | null): string {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHrs = Math.floor(diffMin / 60)
+  if (diffHrs < 24) return `${diffHrs}h ago`
+  const diffDays = Math.floor(diffHrs / 24)
+  if (diffDays < 30) return `${diffDays}d ago`
+  return `${Math.floor(diffDays / 30)} month${Math.floor(diffDays / 30) !== 1 ? 's' : ''} ago`
+}
+
+function InspectionChecklist({
+  items,
+  onStatusChange,
+}: {
+  items: InspectionItem[]
+  onStatusChange: (id: number, newStatus: InspectionItem["status"]) => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [expandedItemId, setExpandedItemId] = useState<number | null>(null)
+  const [lightbox, setLightbox] = useState<{ photos: { src: string; itemName: string }[]; index: number } | null>(null)
+  const counts = { green: 0, yellow: 0, red: 0, pending: 0 }
+  items.forEach((i) => counts[i.status]++)
+  const inspected = counts.green + counts.yellow + counts.red
+
+  // Collect all photos across all inspection items for lightbox navigation
+  const allPhotos: { src: string; itemName: string }[] = []
+  items.forEach((item) => {
+    (item.photos || []).forEach((src) => {
+      allPhotos.push({ src, itemName: item.item_name })
+    })
+  })
+
+  const totalPhotos = allPhotos.length
+
+  const openLightbox = (item: InspectionItem, photoIndex: number) => {
+    let globalIndex = 0
+    for (const it of items) {
+      if (it.id === item.id) {
+        globalIndex += photoIndex
+        break
+      }
+      globalIndex += (it.photos || []).length
+    }
+    setLightbox({ photos: allPhotos, index: globalIndex })
+  }
+
+  const hasDetail = (item: InspectionItem) =>
+    item.tech_notes || item.ai_cleaned_notes || item.condition ||
+    item.measurement_value != null || (item.photos && item.photos.length > 0)
+
+  const toggleItemExpand = (item: InspectionItem) => {
+    if (!hasDetail(item)) return
+    setExpandedItemId(expandedItemId === item.id ? null : item.id)
+  }
+
+  // Display notes: prefer ai_cleaned_notes when available, fall back to tech_notes
+  const getDisplayNotes = (item: InspectionItem) => item.ai_cleaned_notes || item.tech_notes || null
+
+  return (
+    <div className="space-y-2">
+      <div
+        className="flex items-center justify-between cursor-pointer hover:bg-muted/30 rounded-md -mx-1 px-1 py-0.5 transition-colors"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <div className="flex items-center gap-2">
+          <ClipboardCheck size={14} className="text-indigo-500" />
+          <span className="text-sm font-medium text-foreground">Inspection</span>
+          <Badge variant="secondary" className="text-xs">
+            {inspected}/{items.length}
+          </Badge>
+          {totalPhotos > 0 && (
+            <Badge variant="outline" className="text-xs gap-1">
+              <Camera size={10} />
+              {totalPhotos}
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {counts.green > 0 && (
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                {counts.green}
+              </span>
+            )}
+            {counts.yellow > 0 && (
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" />
+                {counts.yellow}
+              </span>
+            )}
+            {counts.red > 0 && (
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+                {counts.red}
+              </span>
+            )}
+            {counts.pending > 0 && (
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600 inline-block" />
+                {counts.pending}
+              </span>
+            )}
+          </div>
+          {isOpen ? (
+            <ChevronUp size={16} className="text-muted-foreground" />
+          ) : (
+            <ChevronDown size={16} className="text-muted-foreground" />
+          )}
+        </div>
+      </div>
+      {isOpen && (
+        <div className="space-y-1 pl-1">
+          {items.map((item) => {
+            const isItemExpanded = expandedItemId === item.id
+            const itemHasDetail = hasDetail(item)
+            const photoCount = item.photos?.length || 0
+            const displayNotes = getDisplayNotes(item)
+
+            return (
+              <div key={item.id} className="space-y-0">
+                {/* Collapsed row: dot + name + condition badge + camera icon + chevron */}
+                <div
+                  className={`flex items-center gap-2.5 p-1.5 rounded-lg transition-colors ${
+                    itemHasDetail ? 'cursor-pointer hover:bg-muted/50' : ''
+                  }`}
+                  onClick={() => toggleItemExpand(item)}
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onStatusChange(item.id, STATUS_CYCLE[item.status])
+                    }}
+                    className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-full"
+                    title={`Status: ${item.status} (click to cycle)`}
+                  >
+                    <div className={`w-4 h-4 rounded-full ${STATUS_COLORS[item.status]} transition-colors`} />
+                  </button>
+                  <span className="text-[14px] text-foreground flex-1">{item.item_name}</span>
+                  {/* Right side indicators */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {!isItemExpanded && item.condition && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 capitalize">
+                        {item.condition}
+                      </Badge>
+                    )}
+                    {photoCount > 0 && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                        <Camera size={12} />
+                        {photoCount}
+                      </span>
+                    )}
+                    {itemHasDetail && (
+                      <ChevronDown
+                        size={14}
+                        className={`text-muted-foreground transition-transform ${isItemExpanded ? 'rotate-180' : ''}`}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* Expanded detail panel — two column layout */}
+                {isItemExpanded && (
+                  <div className="ml-7 pl-3 border-l-2 border-border pb-2 pt-1">
+                    <div className="flex flex-col md:flex-row gap-3">
+                      {/* Left column (60%): condition, measurement, tech notes */}
+                      <div className="flex-[3] space-y-2 min-w-0">
+                        {(item.condition || item.measurement_value != null) && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {item.condition && (
+                              <Badge variant="outline" className="text-xs capitalize">
+                                {item.condition}
+                              </Badge>
+                            )}
+                            {item.measurement_value != null && (
+                              <span className="text-[13px] font-medium text-foreground">
+                                {item.measurement_value}
+                                {item.measurement_unit && ` ${item.measurement_unit}`}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {displayNotes && (
+                          <div>
+                            <p className="text-[11px] font-medium text-muted-foreground mb-0.5">Tech Notes</p>
+                            <p className="text-[14px] text-foreground bg-muted/40 rounded px-2 py-1.5 whitespace-pre-wrap">
+                              {displayNotes}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right column (40%): photo thumbnails grid */}
+                      {photoCount > 0 && (
+                        <div className="flex-[2] min-w-0">
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {item.photos!.map((photoSrc, pi) => (
+                              <button
+                                key={pi}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openLightbox(item, pi)
+                                }}
+                                className="relative aspect-square w-full max-w-[150px] rounded-md overflow-hidden border border-border hover:border-primary/50 hover:ring-2 hover:ring-primary/20 transition-all"
+                              >
+                                <img
+                                  src={photoSrc}
+                                  alt={`${item.item_name} photo ${pi + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Below both columns: tech name + timestamp, right-aligned */}
+                    {(item.inspected_by_name || item.inspected_at) && (
+                      <div className="flex justify-end mt-2">
+                        <span className="text-[13px] text-muted-foreground flex items-center gap-1.5">
+                          {item.inspected_by_name && (
+                            <>
+                              <User size={12} />
+                              {item.inspected_by_name}
+                            </>
+                          )}
+                          {item.inspected_by_name && item.inspected_at && <span>·</span>}
+                          {item.inspected_at && formatInspectionTimeAgo(item.inspected_at)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightbox && (
+        <PhotoLightbox
+          photos={lightbox.photos}
+          initialIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
+      )}
+    </div>
+  )
+}
+
 export function EditableServiceCard({
   service,
   onUpdate,
@@ -386,14 +662,37 @@ export function EditableServiceCard({
     setEditingLineItemIndex(null)
   }
 
+  const handleInspectionStatusChange = async (resultId: number, newStatus: InspectionItem["status"]) => {
+    // Optimistic update
+    if (service.inspectionItems) {
+      const updatedItems = service.inspectionItems.map((item) =>
+        item.id === resultId ? { ...item, status: newStatus } : item
+      )
+      onUpdate({ ...service, inspectionItems: updatedItems })
+    }
+
+    try {
+      const res = await fetch(`/api/inspection-results/${resultId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (!res.ok) {
+        console.error("Failed to update inspection status")
+      }
+    } catch (err) {
+      console.error("Error updating inspection status:", err)
+    }
+  }
+
   return (
     <Card
-      className={`border-border overflow-hidden transition-all ${
+      className={`border-border overflow-hidden transition-all !py-1 !gap-0 ${
         isDragging ? "opacity-50 scale-[0.98] shadow-lg" : ""
       }`}
     >
       {/* Collapsed Header */}
-      <div className="flex items-center gap-2 p-4 hover:bg-muted/30 transition-colors">
+      <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors rounded-t-xl">
         {dragHandleProps && (
           <div
             {...dragHandleProps}
@@ -441,6 +740,12 @@ export function EditableServiceCard({
                   {service.estimatedTime}
                 </span>
                 <span>{totalLineItems} line items</span>
+                {service.inspectionItems && service.inspectionItems.length > 0 && (
+                  <span className="flex items-center gap-1">
+                    <ClipboardCheck size={12} />
+                    {service.inspectionItems.filter((i) => i.status !== "pending").length}/{service.inspectionItems.length} inspected
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -508,24 +813,65 @@ export function EditableServiceCard({
             />
           </div>
 
-          {/* Line Items by Category */}
+          {/* Line Items by Category: Parts, Labor, Inspections, Sublets, Hazmat, Fees */}
           <div className="space-y-4">
             <h4 className="text-sm font-medium text-foreground border-b border-border pb-2">
               Line Items
             </h4>
-            {lineItemCategories.map((cat) => (
-              <LineItemSection
-                key={cat.key}
-                category={cat.key}
-                label={cat.label}
-                icon={cat.icon}
-                color={cat.color}
-                items={service[cat.key]}
-                onUpdateItems={(items) => handleLineItemsUpdate(cat.key, items)}
-                onFindPart={cat.key === "parts" ? handleOpenCatalog : undefined}
-                onClickPart={cat.key === "parts" ? handleOpenPartDetails : undefined}
+            {/* Parts */}
+            <LineItemSection
+              category="parts"
+              label="Parts"
+              icon={Package}
+              color="text-blue-500"
+              items={service.parts}
+              onUpdateItems={(items) => handleLineItemsUpdate("parts", items)}
+              onFindPart={handleOpenCatalog}
+              onClickPart={handleOpenPartDetails}
+            />
+            {/* Labor */}
+            <LineItemSection
+              category="labor"
+              label="Labor"
+              icon={Wrench}
+              color="text-green-500"
+              items={service.labor}
+              onUpdateItems={(items) => handleLineItemsUpdate("labor", items)}
+            />
+            {/* Inspection Checklist (between Labor and Sublets) */}
+            {service.inspectionItems && service.inspectionItems.length > 0 && (
+              <InspectionChecklist
+                items={service.inspectionItems}
+                onStatusChange={handleInspectionStatusChange}
               />
-            ))}
+            )}
+            {/* Sublets */}
+            <LineItemSection
+              category="sublets"
+              label="Sublets"
+              icon={Users}
+              color="text-purple-500"
+              items={service.sublets}
+              onUpdateItems={(items) => handleLineItemsUpdate("sublets", items)}
+            />
+            {/* Hazmat */}
+            <LineItemSection
+              category="hazmat"
+              label="Hazmat"
+              icon={AlertTriangle}
+              color="text-amber-500"
+              items={service.hazmat}
+              onUpdateItems={(items) => handleLineItemsUpdate("hazmat", items)}
+            />
+            {/* Fees */}
+            <LineItemSection
+              category="fees"
+              label="Fees"
+              icon={Receipt}
+              color="text-slate-500"
+              items={service.fees}
+              onUpdateItems={(items) => handleLineItemsUpdate("fees", items)}
+            />
           </div>
 
           {/* Footer with Total and Remove */}

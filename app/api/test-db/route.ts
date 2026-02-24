@@ -1,8 +1,18 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { getUserFromRequest } from '@/lib/auth/session'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Validate authentication
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
     // Test the database connection
     const result = await query('SELECT NOW() as current_time, version() as pg_version')
     

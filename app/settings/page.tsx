@@ -15,7 +15,11 @@ import { UsersSettings } from "@/components/settings/users-settings"
 import { InvoicingSettings } from "@/components/settings/invoicing-settings"
 import { SchedulingSettings } from "@/components/settings/scheduling-settings"
 import { JobStatesSettings } from "@/components/settings/job-states-settings"
-import { Settings, Database, Building2, Users, CreditCard, Palette, DollarSign, Package, Shield, UserCog, Receipt, CalendarClock, GitBranchPlus } from "lucide-react"
+import { CannedJobsSettings } from "@/components/settings/canned-jobs-settings"
+import { VendorsSettings } from "@/components/settings/vendors-settings"
+import { EmailSettings } from "@/components/settings/email-settings"
+import { UISettings } from "@/components/settings/ui-settings"
+import { Settings, Database, Building2, Users, CreditCard, Palette, DollarSign, Package, Shield, UserCog, Receipt, CalendarClock, GitBranchPlus, ClipboardList, Truck, Mail, Monitor } from "lucide-react"
 
 export default function SettingsPage() {
   return (
@@ -84,6 +88,22 @@ export default function SettingsPage() {
                   <GitBranchPlus size={16} />
                   Job States
                 </TabsTrigger>
+                <TabsTrigger value="canned-jobs" className="flex items-center gap-2 data-[state=active]:bg-background">
+                  <ClipboardList size={16} />
+                  Canned Jobs
+                </TabsTrigger>
+                <TabsTrigger value="vendors" className="flex items-center gap-2 data-[state=active]:bg-background">
+                  <Truck size={16} />
+                  Vendors
+                </TabsTrigger>
+                <TabsTrigger value="email" className="flex items-center gap-2 data-[state=active]:bg-background">
+                  <Mail size={16} />
+                  Email
+                </TabsTrigger>
+                <TabsTrigger value="user-interface" className="flex items-center gap-2 data-[state=active]:bg-background">
+                  <Monitor size={16} />
+                  User Interface
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="data-sources">
@@ -143,6 +163,22 @@ export default function SettingsPage() {
 
               <TabsContent value="job-states">
                 <JobStatesSettings />
+              </TabsContent>
+
+              <TabsContent value="canned-jobs">
+                <CannedJobsSettings />
+              </TabsContent>
+
+              <TabsContent value="vendors">
+                <VendorsSettings />
+              </TabsContent>
+
+              <TabsContent value="email">
+                <EmailSettings />
+              </TabsContent>
+
+              <TabsContent value="user-interface">
+                <UISettings />
               </TabsContent>
             </Tabs>
           </div>

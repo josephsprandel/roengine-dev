@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth/session'
 import { generateEstimate } from '@/lib/estimates'
+import { logActivity } from '@/lib/activity-log'
 
 export async function POST(
   request: NextRequest,
@@ -42,6 +43,19 @@ export async function POST(
       createdByUserId: user.id,
       expiresInHours: expiresInHours || 72,
       estimateType: estimateType || 'maintenance'
+    })
+
+    await logActivity({
+      workOrderId,
+      userId: user.id,
+      actorType: 'staff',
+      action: 'estimate_generated',
+      description: `${user.name} generated estimate link`,
+      metadata: {
+        estimateId: result.estimateId,
+        estimateType: estimateType || 'maintenance',
+        recommendationCount: recommendationIds.length
+      }
     })
 
     return NextResponse.json(result)

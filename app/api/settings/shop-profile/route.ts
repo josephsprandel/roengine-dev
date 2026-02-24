@@ -1,5 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { resetShopInfoCache } from '@/lib/email-templates'
+
+function formatTimeShort(time: string): string {
+  const [h, m] = time.split(':').map(Number)
+  const period = h >= 12 ? 'PM' : 'AM'
+  const hour = h === 0 ? 12 : h > 12 ? h - 12 : h
+  return m ? `${hour}:${m.toString().padStart(2, '0')}${period}` : `${hour}${period}`
+}
+
+function generateBusinessHoursText(hours: { day_of_week: string; is_open: boolean; open_time: string | null; close_time: string | null }[]): string {
+  const dayAbbr: Record<string, string> = {
+    Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu',
+    Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun'
+  }
+  const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+  const sorted = dayOrder.map(d => hours.find(h => h.day_of_week === d)).filter(Boolean) as typeof hours
+
+  // Group consecutive days with same hours
+  const groups: { days: string[]; open: string; close: string }[] = []
+  for (const h of sorted) {
+    if (!h.is_open) continue
+    const key = `${h.open_time}-${h.close_time}`
+    const last = groups[groups.length - 1]
+    if (last && `${last.open}-${last.close}` === key) {
+      last.days.push(h.day_of_week)
+    } else {
+      groups.push({ days: [h.day_of_week], open: h.open_time!, close: h.close_time! })
+    }
+  }
+
+  if (groups.length === 0) return 'Closed'
+
+  return groups.map(g => {
+    const first = dayAbbr[g.days[0]]
+    const last = dayAbbr[g.days[g.days.length - 1]]
+    const range = g.days.length === 1 ? first : `${first}-${last}`
+    return `${range} ${formatTimeShort(g.open)}-${formatTimeShort(g.close)}`
+  }).join(', ')
+}
 
 // GET /api/settings/shop-profile - Get shop profile and operating hours
 export async function GET() {
@@ -69,6 +108,8 @@ export async function PATCH(request: NextRequest) {
             max_dropoffs_per_day = COALESCE($17, max_dropoffs_per_day),
             dropoff_start_time = COALESCE($18, dropoff_start_time),
             dropoff_end_time = COALESCE($19, dropoff_end_time),
+            timezone = COALESCE($20, timezone),
+            estimate_mode = COALESCE($21, estimate_mode),
             updated_at = NOW()
           WHERE id = $14
         `, [
@@ -91,6 +132,8 @@ export async function PATCH(request: NextRequest) {
           profile.max_dropoffs_per_day != null ? profile.max_dropoffs_per_day : null,
           profile.dropoff_start_time || null,
           profile.dropoff_end_time || null,
+          profile.timezone || null,
+          profile.estimate_mode || null,
         ])
       } else {
         // Insert new profile
@@ -134,11 +177,21 @@ export async function PATCH(request: NextRequest) {
           hours.day_of_week
         ])
       }
+
+      // Sync business_hours text on shop_profile for email templates
+      const businessHoursText = generateBusinessHoursText(operatingHours)
+      await query(
+        `UPDATE shop_profile SET business_hours = $1, updated_at = NOW()`,
+        [businessHoursText]
+      )
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Shop profile updated successfully' 
+    // Reset email template cache so new hours take effect immediately
+    resetShopInfoCache()
+
+    return NextResponse.json({
+      success: true,
+      message: 'Shop profile updated successfully'
     })
   } catch (error: any) {
     console.error('Error updating shop profile:', error)

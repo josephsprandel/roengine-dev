@@ -5,9 +5,10 @@
  * Mobile-first design, no login required.
  */
 
-import { EstimateClient } from '@/components/estimates/EstimateClient'
+import { EstimateSessionRouter } from '@/components/estimates/EstimateSessionRouter'
 import { EstimateExpired } from '@/components/estimates/EstimateExpired'
 import { EstimateNotFound } from '@/components/estimates/EstimateNotFound'
+import { EstimateNotYetAvailable } from '@/components/estimates/EstimateNotYetAvailable'
 import { EstimateError } from '@/components/estimates/EstimateError'
 
 export const dynamic = 'force-dynamic'
@@ -30,13 +31,26 @@ export default async function EstimatePage({
         return <EstimateExpired />
       }
       if (res.status === 404) {
+        try {
+          const errorData = await res.json()
+          if (errorData.reason === 'not_yet_available') {
+            return <EstimateNotYetAvailable />
+          }
+        } catch { /* fall through */ }
         return <EstimateNotFound />
       }
       return <EstimateError />
     }
 
     const data = await res.json()
-    return <EstimateClient estimate={data.estimate} token={token} shopProfile={data.shopProfile} />
+    return (
+      <EstimateSessionRouter
+        estimate={data.estimate}
+        token={token}
+        shopProfile={data.shopProfile}
+        workOrderId={data.estimate.workOrderId}
+      />
+    )
   } catch {
     return <EstimateError />
   }

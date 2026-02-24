@@ -68,7 +68,7 @@ export async function checkInventory(partDescription: string): Promise<Inventory
     return result.rows.map(row => ({
       partNumber: row.part_number,
       description: row.description,
-      vendor: row.vendor || 'AutoHouse',
+      vendor: row.vendor || 'Shop Inventory',
       cost: parseFloat(row.cost || 0),
       price: parseFloat(row.price || 0),
       quantityAvailable: row.quantity_available,
@@ -116,7 +116,7 @@ export async function getInventoryByPartNumber(partNumber: string): Promise<Inve
     return {
       partNumber: row.part_number,
       description: row.description,
-      vendor: row.vendor || 'AutoHouse',
+      vendor: row.vendor || 'Shop Inventory',
       cost: parseFloat(row.cost || 0),
       price: parseFloat(row.price || 0),
       quantityAvailable: row.quantity_available,

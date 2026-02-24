@@ -18,12 +18,19 @@ export async function GET(request: NextRequest) {
 
     switch (field) {
       case 'vendor':
-        // Get distinct vendors matching the query
+        // Get vendors from vendors table (preferred first), then fall back to parts_inventory
         result = await query(`
-          SELECT DISTINCT vendor as value, vendor as label, 'vendor' as field
-          FROM parts_inventory 
-          WHERE vendor ILIKE $1 
-          ORDER BY vendor ASC
+          SELECT value, label, field, is_preferred FROM (
+            SELECT name as value, name as label, 'vendor' as field, is_preferred
+            FROM vendors
+            WHERE is_active = true AND name ILIKE $1
+            UNION
+            SELECT DISTINCT vendor as value, vendor as label, 'vendor' as field, false as is_preferred
+            FROM parts_inventory
+            WHERE vendor ILIKE $1
+              AND vendor NOT IN (SELECT name FROM vendors WHERE is_active = true)
+          ) combined
+          ORDER BY is_preferred DESC, value ASC
           LIMIT $2
         `, [searchTerm, limit])
         break

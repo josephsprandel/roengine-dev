@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Loader2, Send, Sparkles, CheckCircle, XCircle, Clock } from "lucide-react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
+import { useAuth } from "@/contexts/auth-context"
 
 interface LogEntry {
   timestamp: string
@@ -18,6 +19,8 @@ interface LogEntry {
 }
 
 export default function AIMaintenanceDebugPage() {
+  const { isLoading, isAuthenticated } = useAuth()
+
   // Form inputs
   const [vin, setVin] = useState("1HGCV1F30JA123456")
   const [year, setYear] = useState("2020")
@@ -32,6 +35,14 @@ export default function AIMaintenanceDebugPage() {
   const [response, setResponse] = useState("")
   const [duration, setDuration] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  if (isLoading) {
+    return null
+  }
+
+  if (!isAuthenticated) {
+    return null
+  }
 
   const addLog = (type: LogEntry['type'], title: string, content: string) => {
     const timestamp = new Date().toLocaleTimeString()

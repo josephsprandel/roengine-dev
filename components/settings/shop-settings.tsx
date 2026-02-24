@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Building2, Clock, MapPin, Phone, Mail, Globe, Save, Loader2, AlertCircle, Plus, X, Upload, ImageIcon, Trash2 } from "lucide-react"
+import { Building2, Clock, MapPin, Phone, Mail, Globe, Save, Loader2, AlertCircle, Plus, X, Upload, ImageIcon, Trash2, FileText } from "lucide-react"
 import Image from "next/image"
+import { toast } from "sonner"
 
 // All 50 US States
 const US_STATES = [
@@ -68,8 +69,19 @@ const US_STATES = [
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
-const OPEN_TIMES = ["06:00", "07:00", "08:00", "09:00", "10:00"]
-const CLOSE_TIMES = ["14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"]
+const OPEN_TIMES = ["06:00", "06:30", "07:00", "07:30", "08:00", "08:30", "09:00", "09:30", "10:00"]
+const CLOSE_TIMES = ["14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "21:00"]
+
+// US timezones (most common for auto shops)
+const US_TIMEZONES = [
+  { value: "America/New_York", label: "Eastern (ET)" },
+  { value: "America/Chicago", label: "Central (CT)" },
+  { value: "America/Denver", label: "Mountain (MT)" },
+  { value: "America/Phoenix", label: "Arizona (no DST)" },
+  { value: "America/Los_Angeles", label: "Pacific (PT)" },
+  { value: "America/Anchorage", label: "Alaska (AKT)" },
+  { value: "Pacific/Honolulu", label: "Hawaii (HST)" },
+]
 
 interface ShopProfile {
   id?: number
@@ -87,6 +99,8 @@ interface ShopProfile {
   tags: string[]
   parts_markup_percent: number
   logo_url?: string | null
+  timezone: string
+  estimate_mode: string
 }
 
 interface OperatingHours {
@@ -111,6 +125,8 @@ const initialProfile: ShopProfile = {
   services_description: "",
   tags: [],
   parts_markup_percent: 35,
+  timezone: "America/Chicago",
+  estimate_mode: "full_pricing",
 }
 
 export function ShopSettings() {
@@ -139,7 +155,10 @@ export function ShopSettings() {
 
       if (data.profile) {
         setProfile({
-          ...data.profile,
+          ...initialProfile,
+          ...Object.fromEntries(
+            Object.entries(data.profile).filter(([, v]) => v != null)
+          ),
           tags: data.profile.tags || [],
           parts_markup_percent: parseFloat(data.profile.parts_markup_percent) || 35,
         })
@@ -184,8 +203,7 @@ export function ShopSettings() {
         throw new Error(data.error || "Failed to save shop profile")
       }
 
-      // Show success (you could add a toast here)
-      alert("Shop profile saved successfully!")
+      toast.success("Shop profile saved")
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -213,11 +231,10 @@ export function ShopSettings() {
   }
 
   function formatTimeDisplay(time: string): string {
-    const hour = parseInt(time.split(":")[0])
-    if (hour === 0) return "12:00 AM"
-    if (hour < 12) return `${hour}:00 AM`
-    if (hour === 12) return "12:00 PM"
-    return `${hour - 12}:00 PM`
+    const [h, m] = time.split(":").map(Number)
+    const period = h >= 12 ? "PM" : "AM"
+    const hour = h === 0 ? 12 : h > 12 ? h - 12 : h
+    return m === 0 ? `${hour}:00 ${period}` : `${hour}:${m.toString().padStart(2, "0")} ${period}`
   }
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -248,7 +265,7 @@ export function ShopSettings() {
       // Dispatch event to update sidebar
       window.dispatchEvent(new Event('shop-logo-updated'))
       
-      alert("Logo uploaded successfully!")
+      toast.success("Logo uploaded")
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -281,7 +298,7 @@ export function ShopSettings() {
       // Dispatch event to update sidebar
       window.dispatchEvent(new Event('shop-logo-updated'))
       
-      alert("Logo removed successfully!")
+      toast.success("Logo removed")
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -571,6 +588,33 @@ export function ShopSettings() {
             </div>
           ))}
         </div>
+
+        {/* Timezone */}
+        <div className="mt-6 pt-4 border-t border-border">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <Label htmlFor="timezone" className="text-sm font-medium">Shop Timezone</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Used to determine open/closed status and email timestamps
+              </p>
+            </div>
+            <Select
+              value={profile.timezone}
+              onValueChange={(value) => setProfile({ ...profile, timezone: value })}
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder="Select timezone" />
+              </SelectTrigger>
+              <SelectContent>
+                {US_TIMEZONES.map((tz) => (
+                  <SelectItem key={tz.value} value={tz.value}>
+                    {tz.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </Card>
 
       {/* Parts Markup */}
@@ -591,6 +635,65 @@ export function ShopSettings() {
             />
             <span className="text-muted-foreground">%</span>
           </div>
+        </div>
+      </Card>
+
+      {/* Estimate Display Mode */}
+      <Card className="p-6 border-border">
+        <div className="flex items-center gap-3 mb-4">
+          <FileText size={20} className="text-accent" />
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">Estimate Display Mode</h3>
+            <p className="text-sm text-muted-foreground">
+              Controls what customers see on their digital estimate
+            </p>
+          </div>
+        </div>
+        <div className="space-y-3">
+          <label
+            className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+              profile.estimate_mode === "full_pricing"
+                ? "border-primary bg-primary/5"
+                : "border-border hover:bg-accent/50"
+            }`}
+          >
+            <input
+              type="radio"
+              name="estimate_mode"
+              value="full_pricing"
+              checked={profile.estimate_mode === "full_pricing"}
+              onChange={() => setProfile({ ...profile, estimate_mode: "full_pricing" })}
+              className="mt-1"
+            />
+            <div>
+              <p className="font-medium text-foreground">Full Pricing</p>
+              <p className="text-sm text-muted-foreground">
+                Show labor, parts, and totals on customer estimates
+              </p>
+            </div>
+          </label>
+          <label
+            className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+              profile.estimate_mode === "interest_only"
+                ? "border-primary bg-primary/5"
+                : "border-border hover:bg-accent/50"
+            }`}
+          >
+            <input
+              type="radio"
+              name="estimate_mode"
+              value="interest_only"
+              checked={profile.estimate_mode === "interest_only"}
+              onChange={() => setProfile({ ...profile, estimate_mode: "interest_only" })}
+              className="mt-1"
+            />
+            <div>
+              <p className="font-medium text-foreground">Interest Only</p>
+              <p className="text-sm text-muted-foreground">
+                Show recommended services without pricing. Customer approves interest, advisor follows up with real pricing.
+              </p>
+            </div>
+          </label>
         </div>
       </Card>
 

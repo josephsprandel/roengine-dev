@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Save, Loader2, Clock, Users, Car } from "lucide-react"
+import { toast } from "sonner"
 
 export function SchedulingSettings() {
   const [loading, setLoading] = useState(true)
@@ -31,7 +32,7 @@ export function SchedulingSettings() {
           if (p.dropoff_end_time) setDropoffEndTime(p.dropoff_end_time.substring(0, 5))
         }
       })
-      .catch(() => {})
+      .catch(() => toast.error('Failed to load scheduling settings'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -57,7 +58,7 @@ export function SchedulingSettings() {
         setTimeout(() => setSaved(false), 3000)
       }
     } catch {
-      // ignore
+      toast.error('Failed to save scheduling settings')
     } finally {
       setSaving(false)
     }

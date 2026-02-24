@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
-  name VARCHAR(255) NOT NULL,
+  full_name VARCHAR(255) NOT NULL,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
@@ -142,7 +142,7 @@ ON CONFLICT DO NOTHING;
 
 -- Create initial admin user (password: "admin123")
 -- Hash generated using bcrypt with 10 salt rounds
-INSERT INTO users (email, password_hash, name, is_active) VALUES
+INSERT INTO users (email, password_hash, full_name, is_active) VALUES
   ('admin@autohouse.com', '$2b$10$ZV3VIArnR2h1CV.wmC2HBOfbkwjoJeS4AW8ZvD0g2I3NrShC6nD7a', 'Admin User', true)
 ON CONFLICT (email) DO NOTHING;
 

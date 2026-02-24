@@ -1,7 +1,18 @@
 "use client"
 
+import { useAuth } from "@/contexts/auth-context"
+
 export default function TestGoogleMaps() {
+  const { isLoading, isAuthenticated } = useAuth()
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+
+  if (isLoading) {
+    return null
+  }
+
+  if (!isAuthenticated) {
+    return null
+  }
 
   return (
     <div className="p-8 max-w-4xl mx-auto">

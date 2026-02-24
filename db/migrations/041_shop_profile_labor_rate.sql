@@ -1,0 +1,1 @@
+ALTER TABLE shop_profile ADD COLUMN IF NOT EXISTS default_labor_rate NUMERIC(10,2) DEFAULT 160.00;

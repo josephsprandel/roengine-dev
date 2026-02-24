@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query, getClient } from '@/lib/db'
+import { logActivity } from '@/lib/activity-log'
 
 export async function POST(request: NextRequest) {
   const client = await getClient()
@@ -43,11 +44,16 @@ export async function POST(request: NextRequest) {
     if (existingCustomer.rows.length > 0) {
       customerId = existingCustomer.rows[0].id
     } else {
+      // Split customer_name into first/last for new customers
+      const nameParts = customer_name.trim().split(/\s+/)
+      const firstName = nameParts[0] || null
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null
+
       const newCustomer = await client.query(
-        `INSERT INTO customers (customer_name, phone_primary, email, customer_type, customer_source, created_at, updated_at)
-         VALUES ($1, $2, $3, 'individual', 'online_booking', NOW(), NOW())
+        `INSERT INTO customers (customer_name, first_name, last_name, phone_primary, email, customer_type, customer_source, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'individual', 'online_booking', NOW(), NOW())
          RETURNING id`,
-        [customer_name, phone, email]
+        [customer_name, firstName, lastName, phone, email]
       )
       customerId = newCustomer.rows[0].id
     }
@@ -95,7 +101,8 @@ export async function POST(request: NextRequest) {
       `SELECT name FROM booking_services WHERE id = ANY($1) ORDER BY sort_order`,
       [selected_services]
     )
-    const serviceLabel = serviceNames.rows.map((r: any) => r.name).join(', ')
+    const rawLabel = serviceNames.rows.map((r: any) => r.name).join(', ')
+    const serviceLabel = rawLabel.length > 50 ? rawLabel.slice(0, 47) + '...' : rawLabel
 
     // Step 4: Generate RO number
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -141,6 +148,27 @@ export async function POST(request: NextRequest) {
     await client.query('COMMIT')
 
     const workOrder = woResult.rows[0]
+
+    logActivity({
+      workOrderId: workOrder.id,
+      actorType: 'customer',
+      action: 'ro_created',
+      description: `Online booking by ${customer_name}`,
+      metadata: {
+        roNumber,
+        source: 'online_booking',
+        appointment_type: storedAppointmentType,
+        customer_name,
+        phone,
+        email,
+        vehicle: `${year} ${make} ${model}`,
+        vin: vin || null,
+        services: serviceLabel,
+        scheduled_start,
+        scheduled_end: scheduledEnd,
+        notes: notes || null,
+      }
+    })
 
     return NextResponse.json({
       success: true,

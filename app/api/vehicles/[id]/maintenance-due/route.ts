@@ -11,7 +11,7 @@
  * Includes:
  * - Customer-friendly explanations
  * - Physics/engineering "why it matters" context
- * - Cost estimates using shop labor rate ($160/hr)
+ * - Cost estimates using shop labor rate (from shop_profile.default_labor_rate)
  *
  * Example response:
  * {
@@ -37,6 +37,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { Pool } from 'pg'
+import { getShopInfo } from '@/lib/email-templates'
 
 // Database connection pool
 const pool = new Pool({
@@ -161,17 +162,9 @@ export async function GET(
         })
       }
 
-      // Step 2: Get shop labor rate from labor_rates table
-      const shopResult = await client.query(`
-        SELECT rate_per_hour
-        FROM labor_rates
-        WHERE is_default = true
-        LIMIT 1
-      `)
-
-      const shopLaborRate = shopResult.rows.length > 0
-        ? parseFloat(shopResult.rows[0].rate_per_hour) || 160
-        : 160
+      // Step 2: Get shop labor rate from shop_profile
+      const shopInfo = await getShopInfo()
+      const shopLaborRate = shopInfo.laborRate
 
       console.log('=== AI SERVICE ADVISOR ===')
       console.log('Vehicle:', `${vehicle.year} ${vehicle.make} ${vehicle.model}`)

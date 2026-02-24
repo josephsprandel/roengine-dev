@@ -38,6 +38,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog"
 import { ChevronLeft, ChevronRight, Loader2, Ban } from "lucide-react"
+import { toast } from "sonner"
 import { BayView } from "./bay-view"
 import { DayView } from "./day-view"
 import { WeekView } from "./week-view"
@@ -154,12 +155,15 @@ export function ScheduleCalendar() {
           body: JSON.stringify(blockData),
         })
         if (res.ok) {
+          toast.success('Block created')
           fetchSchedule()
         } else {
           console.error("Failed to create block:", await res.text())
+          toast.error('Failed to update schedule')
         }
       } catch (err) {
         console.error("Failed to create block:", err)
+        toast.error('Failed to update schedule')
       }
     },
     [fetchSchedule]
@@ -173,13 +177,16 @@ export function ScheduleCalendar() {
           headers: authHeaders(),
         })
         if (res.ok) {
+          toast.success('Block removed')
           setSelectedBlock(null)
           fetchSchedule()
         } else {
           console.error("Failed to delete block:", await res.text())
+          toast.error('Failed to update schedule')
         }
       } catch (err) {
         console.error("Failed to delete block:", err)
+        toast.error('Failed to update schedule')
       }
     },
     [fetchSchedule]
@@ -207,13 +214,17 @@ export function ScheduleCalendar() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       })
-      if (!res.ok) {
+      if (res.ok) {
+        toast.success('Schedule updated')
+      } else {
         console.error("Failed to update order:", await res.text())
+        toast.error('Failed to update schedule')
         // Revert on failure
         fetchSchedule()
       }
     } catch (err) {
       console.error("Failed to update order:", err)
+      toast.error('Failed to update schedule')
       fetchSchedule()
     }
   }, [fetchSchedule])

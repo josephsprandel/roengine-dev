@@ -23,13 +23,6 @@ export async function POST(request: NextRequest) {
   try {
     const { services, vehicle } = await request.json()
 
-    console.log('=== GENERATING PARTS LIST ===')
-    console.log('Services:', services.length)
-    console.log('Vehicle:', `${vehicle.year} ${vehicle.make} ${vehicle.model}`)
-    console.log('[DEBUG] Vehicle VIN:', vehicle.vin)
-    console.log('[DEBUG] Vehicle VIN type:', typeof vehicle.vin)
-    console.log('[DEBUG] Full vehicle object:', JSON.stringify(vehicle, null, 2))
-
     // Validate inputs
     if (!services || services.length === 0) {
       return NextResponse.json(
@@ -264,10 +257,8 @@ Return EMPTY parts array for:
 `
 
     // Call Gemini AI
-    console.log('Calling Gemini AI...')
     const result = await model.generateContent(prompt)
     const text = result.response.text()
-    console.log('✓ Gemini response received')
 
     // Parse JSON (strip markdown fences if present)
     const cleanText = text
@@ -287,24 +278,12 @@ Return EMPTY parts array for:
       )
     }
 
-    console.log('✓ Generated parts for', partsList.services.length, 'services')
-
-    // Log OEM spec fields from Gemini for debugging
-    partsList.services.forEach((s: any) => {
-      s.parts.forEach((p: any) => {
-        if (p.oemSpec) {
-          console.log(`  🎯 Gemini OEM spec for "${p.description}": ${p.oemSpec}`)
-        }
-      })
-    })
-
     // Get preferred vendor for this vehicle based on its make/origin
     let preferredVendor: VendorPreference | null = null
     try {
       preferredVendor = await getPreferredVendorForVehicle(vehicle.make)
-      console.log(`✓ Preferred vendor for ${vehicle.make}: ${preferredVendor.preferred_vendor} (${preferredVendor.vehicle_origin})`)
     } catch (vendorError) {
-      console.log('⚠️ Could not get preferred vendor, using default sorting')
+      // Could not get preferred vendor, using default sorting
     }
 
     /**
@@ -315,15 +294,12 @@ Return EMPTY parts array for:
      * 
      * This ensures we ONLY show parts that fit the specific vehicle.
      */
-    console.log('Looking up vehicle-compatible parts via PartsTech...')
-    
     const servicesWithPricing = await Promise.all(
       partsList.services.map(async (service: any) => {
         const partsWithPricing = await Promise.all(
           service.parts.map(async (part: any) => {
             try {
               // STEP 1: Call PartsTech FIRST to get vehicle-compatible parts
-              console.log(`🔍 PartsTech lookup for "${part.description}" (VIN: ${vehicle.vin})`)
               const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
               const searchResponse = await fetch(`${baseUrl}/api/parts/search`, {
                 method: 'POST',
@@ -360,12 +336,6 @@ Return EMPTY parts array for:
                 
                 // Get list of compatible part numbers for inventory cross-reference
                 compatiblePartNumbers = partstechParts.map(p => p.partNumber?.toUpperCase())
-                console.log(`✓ PartsTech returned ${partstechParts.length} compatible parts for "${part.description}"`)
-                if (partstechParts.length > 0) {
-                  console.log(`  First 3 compatible: ${compatiblePartNumbers.slice(0, 3).join(', ')}`)
-                }
-              } else {
-                console.log(`⚠️ PartsTech search failed for "${part.description}"`)
               }
 
               // STEP 2: Check inventory for COMPATIBLE parts only
@@ -379,14 +349,6 @@ Return EMPTY parts array for:
                   compatiblePartNumbers.includes(inv.partNumber?.toUpperCase())
                 )
                 
-                if (inventoryMatches.length > 0) {
-                  console.log(`✓ Found ${inventoryMatches.length} COMPATIBLE parts in inventory for "${part.description}"`)
-                  console.log(`  In-stock compatible: ${inventoryMatches.map(p => p.partNumber).join(', ')}`)
-                } else if (allInventory.length > 0) {
-                  console.log(`⚠️ Inventory has ${allInventory.length} "${part.description}" but NONE match vehicle compatibility`)
-                  console.log(`  Inventory has: ${allInventory.map(p => p.partNumber).join(', ')}`)
-                  console.log(`  Vehicle needs: ${compatiblePartNumbers.slice(0, 5).join(', ')}...`)
-                }
               }
 
               // STEP 3: ENHANCED FLUID MATCHING - Check fluid_specifications table for spec-based matching
@@ -402,8 +364,6 @@ Return EMPTY parts array for:
               let aiInventoryMatch: any = null
 
               if (isFluid && partstechParts.length > 0) {
-                console.log(`🧪 FLUID DETECTED: "${part.description}" - checking inventory with spec matching`)
-                
                 try {
                   // STEP 3A: Map part description to specific fluid type
                   // CRITICAL: Only search for the SPECIFIC fluid type needed
@@ -412,207 +372,23 @@ Return EMPTY parts array for:
                   
                   if (partDescLowerForType.includes('engine oil') || partDescLowerForType.includes('motor oil')) {
                     fluidTypeFilter = ['engine_oil']
-                    console.log(`  → Searching for ENGINE OIL only`)
                   } else if (partDescLowerForType.includes('transmission')) {
                     fluidTypeFilter = ['transmission_fluid']
-                    console.log(`  → Searching for TRANSMISSION FLUID only`)
                   } else if (partDescLowerForType.includes('coolant') || partDescLowerForType.includes('antifreeze')) {
                     fluidTypeFilter = ['coolant', 'antifreeze']
-                    console.log(`  → Searching for COOLANT/ANTIFREEZE only`)
                   } else if (partDescLowerForType.includes('brake')) {
                     fluidTypeFilter = ['brake_fluid']
-                    console.log(`  → Searching for BRAKE FLUID only`)
                   } else if (partDescLowerForType.includes('differential') || partDescLowerForType.includes('gear oil')) {
                     fluidTypeFilter = ['differential_oil', 'gear_oil']
-                    console.log(`  → Searching for DIFFERENTIAL/GEAR OIL only`)
                   } else if (partDescLowerForType.includes('power steering')) {
                     fluidTypeFilter = ['power_steering_fluid']
-                    console.log(`  → Searching for POWER STEERING FLUID only`)
                   } else {
                     // Unknown fluid type - search by description only
                     fluidTypeFilter = []
-                    console.log(`  → Unknown fluid type, searching by description only`)
                   }
                   
-                  // STEP 3B: Check fluid_specifications table for spec-matched inventory
-                  // This queries items that have detailed specs extracted from labels
-                  // CRITICAL FIX: Only return fluids matching the SPECIFIC type requested
-                  const specQuery = fluidTypeFilter.length > 0
-                    ? await query(`
-                      SELECT 
-                        p.id,
-                        p.part_number,
-                        p.description,
-                        p.vendor,
-                        p.price as retail_price,
-                        p.cost,
-                        p.quantity_available,
-                        p.qty_per_package,
-                        p.location,
-                        p.bin_location,
-                        f.fluid_type,
-                        f.viscosity,
-                        f.api_service_class,
-                        f.acea_class,
-                        f.ilsac_class,
-                        f.oem_approvals,
-                        f.low_saps,
-                        f.high_mileage,
-                        f.confidence_score,
-                        f.product_name
-                      FROM parts_inventory p
-                      INNER JOIN fluid_specifications f ON p.id = f.inventory_id
-                      WHERE p.quantity_available > 0
-                        AND p.spec_verified = true
-                        AND f.fluid_type = ANY($1::text[])
-                      ORDER BY 
-                        f.confidence_score DESC,
-                        p.price ASC
-                      LIMIT 10
-                    `, [fluidTypeFilter])
-                    : await query(`
-                      SELECT 
-                        p.id,
-                        p.part_number,
-                        p.description,
-                        p.vendor,
-                        p.price as retail_price,
-                        p.cost,
-                        p.quantity_available,
-                        p.qty_per_package,
-                        p.location,
-                        p.bin_location,
-                        f.fluid_type,
-                        f.viscosity,
-                        f.api_service_class,
-                        f.acea_class,
-                        f.ilsac_class,
-                        f.oem_approvals,
-                        f.low_saps,
-                        f.high_mileage,
-                        f.confidence_score,
-                        f.product_name
-                      FROM parts_inventory p
-                      INNER JOIN fluid_specifications f ON p.id = f.inventory_id
-                      WHERE p.quantity_available > 0
-                        AND p.spec_verified = true
-                        AND (LOWER(p.description) ILIKE $1 OR LOWER(f.product_name) ILIKE $1)
-                      ORDER BY 
-                        f.confidence_score DESC,
-                        p.price ASC
-                      LIMIT 10
-                    `, [`%${part.description.split(' ')[0]}%`])
-
-                  if (specQuery.rows.length > 0) {
-                    console.log(`  ✓ Found ${specQuery.rows.length} spec-verified fluids in inventory`)
-                    
-                    // Extract viscosity/spec from part description if present
-                    const neededViscosity = part.description.match(/(\d+W-?\d+|DOT\s*\d+|ATF)/i)?.[0]
-                    
-                    // Filter by viscosity match if specified
-                    specMatchedInventory = specQuery.rows.filter((inv: any) => {
-                      if (neededViscosity && inv.viscosity) {
-                        const invViscosity = inv.viscosity.replace(/\s/g, '').toUpperCase()
-                        const neededViscNormalized = neededViscosity.replace(/\s/g, '').toUpperCase()
-                        return invViscosity.includes(neededViscNormalized) || neededViscNormalized.includes(invViscosity)
-                      }
-                      return true // Include if no viscosity specified
-                    })
-
-                    if (specMatchedInventory.length > 0) {
-                      console.log(`  ✓ ${specMatchedInventory.length} items match viscosity/spec requirements`)
-                      
-                      // Extract specific OEM spec from Gemini's oemSpec field
-                      const specificOemSpec = part.oemSpec || null
-                      if (specificOemSpec) {
-                        console.log(`  🎯 OEM SPEC REQUIRED: ${specificOemSpec}`)
-                      }
-                      
-                      // Check for OEM approval matches - SPECIFIC spec first, then prefix fallback
-                      const vehicleMake = vehicle.make?.toLowerCase()
-                      const makeToOemPrefix: Record<string, string[]> = {
-                        'gm': ['GM-DEXOS'],
-                        'chevrolet': ['GM-DEXOS'],
-                        'buick': ['GM-DEXOS'],
-                        'cadillac': ['GM-DEXOS'],
-                        'ford': ['FORD-'],
-                        'lincoln': ['FORD-'],
-                        'honda': ['HONDA-'],
-                        'acura': ['HONDA-'],
-                        'toyota': ['TOYOTA-'],
-                        'lexus': ['TOYOTA-'],
-                        'volkswagen': ['VW-'],
-                        'audi': ['VW-'],
-                        'bmw': ['BMW-'],
-                        'mercedes': ['MB-'],
-                        'volvo': ['VOLVO-']
-                      }
-                      
-                      const oemPrefixes = makeToOemPrefix[vehicleMake || ''] || []
-                      
-                      specMatchedInventory = specMatchedInventory.map((inv: any) => {
-                        let exactOemMatch = false
-                        let prefixOemMatch = false
-                        let matchedApprovals: string[] = []
-                        
-                        const approvals = Array.isArray(inv.oem_approvals) ? inv.oem_approvals : []
-                        
-                        // Priority 1: EXACT OEM spec match (e.g., "VOLVO-VCC-RBS0-2AE")
-                        if (specificOemSpec && approvals.length > 0) {
-                          const specNormalized = specificOemSpec.toUpperCase().replace(/[\s]/g, '')
-                          matchedApprovals = approvals.filter((code: string) => {
-                            const codeNormalized = code.toUpperCase().replace(/[\s]/g, '')
-                            return codeNormalized === specNormalized || 
-                                   codeNormalized.includes(specNormalized) || 
-                                   specNormalized.includes(codeNormalized)
-                          })
-                          exactOemMatch = matchedApprovals.length > 0
-                        }
-                        
-                        // Priority 2: Prefix-based OEM match (e.g., any VOLVO- approval)
-                        if (!exactOemMatch && oemPrefixes.length > 0 && approvals.length > 0) {
-                          matchedApprovals = approvals.filter((code: string) => 
-                            oemPrefixes.some(prefix => code.startsWith(prefix))
-                          )
-                          prefixOemMatch = matchedApprovals.length > 0
-                        }
-                        
-                        return {
-                          ...inv,
-                          hasOemMatch: exactOemMatch || prefixOemMatch,
-                          hasExactOemMatch: exactOemMatch,
-                          matchedOemApprovals: matchedApprovals,
-                          requiredOemSpec: specificOemSpec,
-                          // Scoring: exact match > prefix match > viscosity only
-                          specMatchScore: exactOemMatch ? 100 : (prefixOemMatch ? 90 : 80)
-                        }
-                      })
-                      
-                      // Sort: exact OEM match first, then prefix match, then confidence, then price
-                      specMatchedInventory.sort((a: any, b: any) => {
-                        if (a.hasExactOemMatch !== b.hasExactOemMatch) return b.hasExactOemMatch ? 1 : -1
-                        if (a.hasOemMatch !== b.hasOemMatch) return b.hasOemMatch ? 1 : -1
-                        if (a.confidence_score !== b.confidence_score) return (b.confidence_score || 0) - (a.confidence_score || 0)
-                        return (a.retail_price || 0) - (b.retail_price || 0)
-                      })
-                      
-                      const exactCount = specMatchedInventory.filter((i: any) => i.hasExactOemMatch).length
-                      const prefixCount = specMatchedInventory.filter((i: any) => i.hasOemMatch && !i.hasExactOemMatch).length
-                      if (exactCount > 0) {
-                        console.log(`  ✅ ${exactCount} items EXACTLY match ${specificOemSpec}`)
-                      }
-                      if (prefixCount > 0) {
-                        console.log(`  ✓ ${prefixCount} items have other ${vehicle.make} OEM approvals`)
-                      }
-                      if (exactCount === 0 && prefixCount === 0 && specificOemSpec) {
-                        console.log(`  ⚠️ NO inventory items match ${specificOemSpec} - may need to order`)
-                      }
-                    }
-                  }
-
-                  // STEP 3B: Fallback to legacy AI matching if no spec-matched items found
-                  if (specMatchedInventory.length === 0) {
-                    console.log(`  ⚠️ No spec-verified fluids found, using legacy AI matching`)
+                  // STEP 3B: Match in-stock fluids using AI
+                  {
                     
                     // Get in-stock fluids that might match (broader search than part-number matching)
                     // CRITICAL FIX: Only search for the actual part description, not all fluid types
@@ -637,7 +413,6 @@ Return EMPTY parts array for:
                     `, [searchPattern])
 
                     if (inventoryFluids.rows.length > 0) {
-                      console.log(`  Found ${inventoryFluids.rows.length} potential inventory fluids (legacy)`)
                       
                       // Ask AI to match inventory fluid to PartsTech spec
                       const oemSpecNote = part.oemSpec 
@@ -693,8 +468,8 @@ IMPORTANT:
                             aiInventoryMatch = {
                               partNumber: selectedInv.part_number,
                               description: selectedInv.description,
-                              brand: selectedInv.vendor || 'AutoHouse Inventory',
-                              vendor: 'AutoHouse Inventory',
+                              brand: selectedInv.vendor || 'Shop Inventory',
+                              vendor: 'Shop Inventory',
                               cost: parseFloat(selectedInv.cost || 0),
                               retailPrice: parseFloat(selectedInv.retail_price || 0),
                               inStock: true,
@@ -705,21 +480,15 @@ IMPORTANT:
                               matchReason: matchData.reason,
                               source: 'ai-inventory-match-legacy'
                             }
-                            console.log(`  ✓ AI MATCHED (legacy): Using "${selectedInv.description}" from inventory`)
-                            console.log(`    Reason: ${matchData.reason}`)
                           }
-                        } else {
-                          console.log(`  ✗ AI says no inventory match: ${matchData.reason}`)
                         }
                       } catch (parseErr) {
-                        console.log(`  ⚠️ Failed to parse AI match response:`, matchText.substring(0, 100))
+                        // Failed to parse AI match response
                       }
-                    } else {
-                      console.log(`  No fluids in inventory for legacy matching`)
                     }
                   }
                 } catch (fluidErr: any) {
-                  console.log(`  ⚠️ Fluid matching error: ${fluidErr.message}`)
+                  // Fluid matching error - continue without spec matching
                 }
               }
 
@@ -728,7 +497,6 @@ IMPORTANT:
 
               // Priority 1: Spec-matched inventory fluids (from fluid_specifications table)
               if (specMatchedInventory.length > 0) {
-                console.log(`  ✓ Adding ${specMatchedInventory.length} spec-matched inventory items`)
                 const specOptions = specMatchedInventory.map((inv: any) => {
                   const qtyPerPackage = inv.qty_per_package || 1
                   const neededQty = part.quantity || 1
@@ -739,15 +507,11 @@ IMPORTANT:
                   const packagesNeeded = Math.ceil(neededQty / qtyPerPackage)
                   const actualQtyReceived = packagesNeeded * qtyPerPackage
                   
-                  if (qtyPerPackage > 1) {
-                    console.log(`    Package calc: Need ${neededQty}, sold as ${qtyPerPackage}-pack → Order ${packagesNeeded} package(s) = ${actualQtyReceived} units`)
-                  }
-                  
                   return {
                     partNumber: inv.part_number,
                     description: inv.description,
-                    brand: inv.vendor || 'AutoHouse Inventory',
-                    vendor: 'AutoHouse Inventory',
+                    brand: inv.vendor || 'Shop Inventory',
+                    vendor: 'Shop Inventory',
                     cost: parseFloat(inv.cost || 0),
                     retailPrice: parseFloat(inv.retail_price || 0),
                     inStock: true,
@@ -833,9 +597,6 @@ IMPORTANT:
                 const preferredCount = aftermarketParts.filter((p: any) => 
                   p.vendor?.toLowerCase().includes(preferredName)
                 ).length
-                if (preferredCount > 0) {
-                  console.log(`  ✓ ${preferredCount} parts from preferred vendor (${preferredVendor.preferred_vendor})`)
-                }
               }
 
               // Add up to 1 OEM + 3 aftermarket from PartsTech (total max 4 non-inventory)
@@ -851,8 +612,6 @@ IMPORTANT:
               const source = inventoryMatches.length > 0 
                 ? 'inventory+partstech' 
                 : (partstechParts.length > 0 ? 'partstech' : 'none')
-
-              console.log(`✓ Final options for "${part.description}": ${pricingOptions.length} (source: ${source})`)
 
               return {
                 ...part,
@@ -878,7 +637,6 @@ IMPORTANT:
     )
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(1)
-    console.log(`✓ Parts generation complete in ${duration}s`)
 
     return NextResponse.json({
       servicesWithParts: servicesWithPricing,

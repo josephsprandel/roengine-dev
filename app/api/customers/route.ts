@@ -66,10 +66,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
+    // Derive customer_name from first_name + last_name if not provided directly
+    if (!body.customer_name && (body.first_name || body.last_name)) {
+      body.customer_name = [body.first_name, body.last_name].filter(Boolean).map((s: string) => s.trim()).join(' ')
+    }
+
     // Validate required fields
     if (!body.customer_name || !body.phone_primary) {
       return NextResponse.json(
-        { error: 'customer_name and phone_primary are required' },
+        { error: 'Customer name and phone are required' },
         { status: 400 }
       )
     }

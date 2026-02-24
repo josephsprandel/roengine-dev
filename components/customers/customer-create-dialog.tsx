@@ -53,10 +53,17 @@ export function CustomerCreateDialog({ open, onOpenChange, onSuccess, customer }
   // Initialize form data based on mode (create or edit)
   const getInitialFormData = () => {
     if (customer) {
+      // Derive first/last from customer_name if they're empty (legacy data)
+      let firstName = customer.first_name || ""
+      let lastName = customer.last_name || ""
+      if (!firstName && !lastName && customer.customer_name) {
+        const parts = customer.customer_name.trim().split(/\s+/)
+        firstName = parts[0] || ""
+        lastName = parts.slice(1).join(" ")
+      }
       return {
-        customer_name: customer.customer_name || "",
-        first_name: customer.first_name || "",
-        last_name: customer.last_name || "",
+        first_name: firstName,
+        last_name: lastName,
         phone_primary: formatPhoneNumber(customer.phone_primary || ""),
         phone_secondary: formatPhoneNumber(customer.phone_secondary || ""),
         phone_mobile: formatPhoneNumber(customer.phone_mobile || ""),
@@ -71,7 +78,6 @@ export function CustomerCreateDialog({ open, onOpenChange, onSuccess, customer }
       }
     }
     return {
-      customer_name: "",
       first_name: "",
       last_name: "",
       phone_primary: "",
@@ -149,9 +155,15 @@ export function CustomerCreateDialog({ open, onOpenChange, onSuccess, customer }
       const url = isEditMode ? `/api/customers/${customer.id}` : "/api/customers"
       const method = isEditMode ? "PATCH" : "POST"
 
+      // Derive customer_name from first + last name
+      const customerName = [formData.first_name.trim(), formData.last_name.trim()]
+        .filter(Boolean)
+        .join(" ")
+
       // Unformat phone numbers before sending to API
       const submissionData = {
         ...formData,
+        customer_name: customerName,
         phone_primary: unformatPhoneNumber(formData.phone_primary),
         phone_secondary: unformatPhoneNumber(formData.phone_secondary),
         phone_mobile: unformatPhoneNumber(formData.phone_mobile),
@@ -176,7 +188,6 @@ export function CustomerCreateDialog({ open, onOpenChange, onSuccess, customer }
       // Reset form only if in create mode
       if (!isEditMode) {
         setFormData({
-          customer_name: "",
           first_name: "",
           last_name: "",
           phone_primary: "",
@@ -218,23 +229,14 @@ export function CustomerCreateDialog({ open, onOpenChange, onSuccess, customer }
             <h3 className="font-semibold text-sm text-muted-foreground">Basic Information</h3>
             
             <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label htmlFor="customer_name">Customer Name *</Label>
-                <Input
-                  id="customer_name"
-                  value={formData.customer_name}
-                  onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                  placeholder="Full name or business name"
-                  required
-                />
-              </div>
-
               <div>
-                <Label htmlFor="first_name">First Name</Label>
+                <Label htmlFor="first_name">First Name *</Label>
                 <Input
                   id="first_name"
                   value={formData.first_name}
                   onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                  placeholder="First name"
+                  required
                 />
               </div>
 
@@ -244,6 +246,7 @@ export function CustomerCreateDialog({ open, onOpenChange, onSuccess, customer }
                   id="last_name"
                   value={formData.last_name}
                   onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                  placeholder="Last name"
                 />
               </div>
 

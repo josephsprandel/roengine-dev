@@ -3,7 +3,7 @@
 import { MetricsGrid } from "./metrics-grid"
 import { RepairOrdersTable } from "./repair-orders-table"
 import { AIInsights } from "./ai-insights"
-import { QuickActions } from "./quick-actions"
+import { GlobalActivityFeed } from "./global-activity-feed"
 
 export function Dashboard() {
   return (
@@ -11,10 +11,10 @@ export function Dashboard() {
       {/* Metrics */}
       <MetricsGrid />
 
-      {/* Quick actions and AI insights */}
+      {/* Activity feed and AI insights */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <QuickActions />
+          <GlobalActivityFeed />
         </div>
         <AIInsights />
       </div>

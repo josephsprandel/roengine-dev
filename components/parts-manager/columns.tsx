@@ -2,7 +2,7 @@
 
 import { ColumnDef } from "@tanstack/react-table"
 import { Button } from "@/components/ui/button"
-import { ArrowUpDown } from "lucide-react"
+import { ArrowUpDown, Pencil, Plus } from "lucide-react"
 
 export interface Part {
   id: number
@@ -208,19 +208,15 @@ export const columns: ColumnDef<Part>[] = [
   {
     id: "actions",
     header: () => <div className="text-right">Actions</div>,
-    cell: ({ row }) => {
-      const part = row.original
-      
+    cell: () => {
       return (
-        <div className="flex justify-end gap-2">
-          <Button size="sm" variant="outline" className="h-7 bg-transparent">
-            Add to RO
+        <div className="flex justify-end gap-1">
+          <Button size="icon" variant="ghost" className="h-7 w-7" title="Edit part" onClick={(e) => e.stopPropagation()}>
+            <Pencil size={14} />
           </Button>
-          {part.quantity_available <= part.reorder_point && (
-            <Button size="sm" variant="outline" className="h-7 bg-transparent text-amber-600">
-              Reorder
-            </Button>
-          )}
+          <Button size="icon" variant="ghost" className="h-7 w-7" title="Add to RO" onClick={(e) => e.stopPropagation()}>
+            <Plus size={14} />
+          </Button>
         </div>
       )
     },

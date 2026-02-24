@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { Pool } from 'pg'
+import { logActivity } from '@/lib/activity-log'
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://shopops:shopops_dev@localhost:5432/shopops3',
@@ -52,20 +53,48 @@ export async function GET(
       ORDER BY service_id, display_order, id
     `, [workOrderId])
 
-    // Group items by service_id
-    const itemsByService = new Map<number, any[]>()
+    // Fetch inspection results for this work order (joined with item names and tech user)
+    const inspectionResult = await pool.query(`
+      SELECT
+        r.id, r.service_id, r.inspection_item_id, r.status,
+        r.tech_notes, r.ai_cleaned_notes, r.condition,
+        r.measurement_value, r.measurement_unit,
+        r.inspected_at, r.inspected_by, r.photos,
+        r.finding_recommendation_id,
+        i.name as item_name, i.sort_order,
+        u.full_name as inspected_by_name
+      FROM ro_inspection_results r
+      JOIN canned_job_inspection_items i ON i.id = r.inspection_item_id
+      LEFT JOIN users u ON r.inspected_by = u.id
+      WHERE r.work_order_id = $1
+      ORDER BY r.service_id, i.sort_order
+    `, [workOrderId])
+
+    // Group items by service_id (use String keys to avoid int/string mismatch from pg driver)
+    const itemsByService = new Map<string, any[]>()
     for (const item of itemsResult.rows) {
-      const sid = item.service_id
+      const sid = String(item.service_id)
       if (!itemsByService.has(sid)) {
         itemsByService.set(sid, [])
       }
       itemsByService.get(sid)!.push(item)
     }
 
-    // Attach items to services
+    // Group inspection results by service_id
+    const inspectionsByService = new Map<string, any[]>()
+    for (const row of inspectionResult.rows) {
+      const sid = String(row.service_id)
+      if (!inspectionsByService.has(sid)) {
+        inspectionsByService.set(sid, [])
+      }
+      inspectionsByService.get(sid)!.push(row)
+    }
+
+    // Attach items and inspection results to services
     const services = servicesResult.rows.map((svc) => ({
       ...svc,
-      items: itemsByService.get(svc.id) || [],
+      items: itemsByService.get(String(svc.id)) || [],
+      inspection_items: inspectionsByService.get(String(svc.id)) || [],
     }))
 
     return NextResponse.json({ services })
@@ -124,7 +153,17 @@ export async function POST(
       display_order || 0,
     ])
 
-    return NextResponse.json({ service: result.rows[0] })
+    const newService = result.rows[0]
+
+    await logActivity({
+      workOrderId,
+      actorType: 'staff',
+      action: 'service_added',
+      description: `Service added: ${newService.title}`,
+      metadata: { serviceId: newService.id, title: newService.title }
+    })
+
+    return NextResponse.json({ service: newService })
   } catch (error: any) {
     console.error('Error creating service:', error)
     return NextResponse.json({ error: 'Failed to create service', details: error.message }, { status: 500 })
@@ -209,14 +248,30 @@ export async function DELETE(
       return NextResponse.json({ error: 'service_id is required' }, { status: 400 })
     }
 
+    const parsedServiceId = parseInt(serviceId)
+
+    // Delete inspection results first (FK references services without CASCADE)
+    await pool.query(
+      'DELETE FROM ro_inspection_results WHERE service_id = $1 AND work_order_id = $2',
+      [parsedServiceId, workOrderId]
+    )
+
     const result = await pool.query(
       'DELETE FROM services WHERE id = $1 AND work_order_id = $2 RETURNING id',
-      [parseInt(serviceId), workOrderId]
+      [parsedServiceId, workOrderId]
     )
 
     if (result.rows.length === 0) {
       return NextResponse.json({ error: 'Service not found' }, { status: 404 })
     }
+
+    await logActivity({
+      workOrderId,
+      actorType: 'staff',
+      action: 'service_removed',
+      description: 'Service removed',
+      metadata: { serviceId: parsedServiceId }
+    })
 
     return NextResponse.json({ success: true, deleted_id: parseInt(serviceId) })
   } catch (error: any) {

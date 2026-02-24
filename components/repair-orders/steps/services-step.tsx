@@ -2,14 +2,14 @@
 
 import React from "react"
 
-import { useState, useMemo } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Search, Plus, X, Sparkles, GripVertical } from "lucide-react"
+import { Search, Plus, X, Sparkles, GripVertical, Loader2, ClipboardCheck, Check } from "lucide-react"
 import type { ServiceData, VehicleData, LineItem } from "../ro-creation-wizard"
-import { EditableServiceCard, createLineItem } from "../editable-service-card"
+import type { CannedJob } from "@/lib/canned-jobs"
 
 interface ServicesStepProps {
   selectedServices: ServiceData[]
@@ -17,111 +17,107 @@ interface ServicesStepProps {
   vehicleData: VehicleData | null
 }
 
-const availableServices: Omit<ServiceData, "parts" | "labor" | "sublets" | "hazmat" | "fees">[] = [
-  {
-    id: "svc-001",
-    name: "Oil Change",
-    description: "Full synthetic oil change with filter replacement",
-    estimatedCost: 89,
-    estimatedTime: "45 min",
-    category: "Maintenance",
-  },
-  {
-    id: "svc-002",
-    name: "Brake Inspection",
-    description: "Complete brake system inspection and assessment",
-    estimatedCost: 49,
-    estimatedTime: "30 min",
-    category: "Inspection",
-  },
-  {
-    id: "svc-003",
-    name: "Brake Pad Replacement",
-    description: "Front or rear brake pad replacement with rotor inspection",
-    estimatedCost: 299,
-    estimatedTime: "2 hrs",
-    category: "Repair",
-  },
-  {
-    id: "svc-004",
-    name: "Tire Rotation",
-    description: "Four-tire rotation with pressure check",
-    estimatedCost: 39,
-    estimatedTime: "30 min",
-    category: "Maintenance",
-  },
-  {
-    id: "svc-005",
-    name: "Diagnostic Scan",
-    description: "Complete OBD-II diagnostic scan and code reading",
-    estimatedCost: 99,
-    estimatedTime: "1 hr",
-    category: "Diagnostic",
-  },
-  {
-    id: "svc-006",
-    name: "Battery Test & Replace",
-    description: "Battery load test with replacement if needed",
-    estimatedCost: 189,
-    estimatedTime: "45 min",
-    category: "Repair",
-  },
-  {
-    id: "svc-007",
-    name: "A/C Service",
-    description: "Air conditioning system inspection and recharge",
-    estimatedCost: 149,
-    estimatedTime: "1 hr",
-    category: "Maintenance",
-  },
-  {
-    id: "svc-008",
-    name: "Transmission Fluid Service",
-    description: "Transmission fluid flush and replacement",
-    estimatedCost: 199,
-    estimatedTime: "1.5 hrs",
-    category: "Maintenance",
-  },
-]
+function cannedJobToServiceData(job: CannedJob, defaultLaborRate: number = 160): ServiceData {
+  const laborRate = job.labor_rate_per_hour ? parseFloat(String(job.labor_rate_per_hour)) : defaultLaborRate
+  const laborHours = job.default_labor_hours ? parseFloat(String(job.default_labor_hours)) : 0
+  const laborCost = laborHours * laborRate
+  const partsCost = (job.parts || []).reduce(
+    (sum, p) => sum + (p.estimated_price ? parseFloat(String(p.estimated_price)) : 0) * (p.quantity || 1),
+    0
+  )
+  const totalCost = laborCost + partsCost
 
-const categories = ["All", "Maintenance", "Repair", "Diagnostic", "Inspection"]
+  const laborItems: LineItem[] =
+    laborHours > 0
+      ? [
+          {
+            id: `labor-${job.id}`,
+            description: `Labor - ${job.name}`,
+            quantity: laborHours,
+            unitPrice: laborRate,
+            total: laborCost,
+          },
+        ]
+      : []
 
-function createServiceWithDefaults(
-  service: Omit<ServiceData, "parts" | "labor" | "sublets" | "hazmat" | "fees">
-): ServiceData {
-  const laborCost = Math.round(service.estimatedCost * 0.6)
-  const partsCost = Math.round(service.estimatedCost * 0.35)
-  const fees = Math.round(service.estimatedCost * 0.05)
+  const partItems: LineItem[] = (job.parts || []).map((p, i) => ({
+    id: `part-${job.id}-${i}`,
+    description: p.part_name,
+    quantity: p.quantity || 1,
+    unitPrice: p.estimated_price ? parseFloat(String(p.estimated_price)) : 0,
+    total: (p.estimated_price ? parseFloat(String(p.estimated_price)) : 0) * (p.quantity || 1),
+    part_number: p.part_number || undefined,
+  }))
+
+  const timeStr =
+    laborHours >= 1
+      ? `${laborHours} hr${laborHours !== 1 ? "s" : ""}`
+      : laborHours > 0
+        ? `${Math.round(laborHours * 60)} min`
+        : "TBD"
 
   return {
-    ...service,
-    parts: [{ ...createLineItem("Parts"), unitPrice: partsCost, total: partsCost }],
-    labor: [{ ...createLineItem("Labor"), unitPrice: laborCost, total: laborCost }],
+    id: `canned-${job.id}`,
+    name: job.name,
+    description: job.description || "",
+    estimatedCost: totalCost,
+    estimatedTime: timeStr,
+    category: job.category_name || "General",
+    parts: partItems,
+    labor: laborItems,
     sublets: [],
     hazmat: [],
-    fees: fees > 0 ? [{ ...createLineItem("Shop supplies"), unitPrice: fees, total: fees }] : [],
+    fees: [],
+    cannedJobId: job.id,
   }
 }
 
 export function ServicesStep({ selectedServices, onUpdateServices, vehicleData }: ServicesStepProps) {
+  const [cannedJobs, setCannedJobs] = useState<CannedJob[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState("All")
   const [isAddingCustom, setIsAddingCustom] = useState(false)
   const [customServiceName, setCustomServiceName] = useState("")
   const [customServiceTime, setCustomServiceTime] = useState("")
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [defaultLaborRate, setDefaultLaborRate] = useState(160)
 
-  const filteredServices = useMemo(() => {
-    return availableServices.filter((service) => {
-      const matchesSearch =
-        service.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        service.description.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesCategory = selectedCategory === "All" || service.category === selectedCategory
-      const notAlreadySelected = !selectedServices.some((s) => s.id === service.id)
-      return matchesSearch && matchesCategory && notAlreadySelected
-    })
-  }, [searchTerm, selectedCategory, selectedServices])
+  // Fetch default labor rate from shop profile
+  useEffect(() => {
+    fetch('/api/settings/shop-profile')
+      .then(r => r.json())
+      .then(data => {
+        if (data.profile?.default_labor_rate) {
+          setDefaultLaborRate(parseFloat(data.profile.default_labor_rate) || 160)
+        }
+      })
+      .catch(() => { /* uses default values on failure */ })
+  }, [])
+
+  useEffect(() => {
+    fetch("/api/canned-jobs?wizard=true")
+      .then((r) => r.json())
+      .then((d) => setCannedJobs(d.canned_jobs || []))
+      .catch((err) => console.error("Error fetching canned jobs:", err))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const selectedCannedJobIds = useMemo(
+    () => new Set(selectedServices.filter((s) => s.cannedJobId).map((s) => s.cannedJobId)),
+    [selectedServices]
+  )
+
+  const filteredJobs = useMemo(() => {
+    if (!searchTerm) return cannedJobs
+    const term = searchTerm.toLowerCase()
+    return cannedJobs.filter(
+      (j) =>
+        j.name.toLowerCase().includes(term) ||
+        (j.description || "").toLowerCase().includes(term) ||
+        (j.category_name || "").toLowerCase().includes(term)
+    )
+  }, [cannedJobs, searchTerm])
 
   const totals = useMemo(() => {
     const initial = { parts: 0, labor: 0, sublets: 0, hazmat: 0, fees: 0, total: 0 }
@@ -142,13 +138,12 @@ export function ServicesStep({ selectedServices, onUpdateServices, vehicleData }
     }, initial)
   }, [selectedServices])
 
-  const addService = (service: Omit<ServiceData, "parts" | "labor" | "sublets" | "hazmat" | "fees">) => {
-    const newService = createServiceWithDefaults(service)
-    onUpdateServices([...selectedServices, newService])
-  }
-
-  const updateService = (updated: ServiceData) => {
-    onUpdateServices(selectedServices.map((s) => (s.id === updated.id ? updated : s)))
+  const toggleCannedJob = (job: CannedJob) => {
+    if (selectedCannedJobIds.has(job.id)) {
+      onUpdateServices(selectedServices.filter((s) => s.cannedJobId !== job.id))
+    } else {
+      onUpdateServices([...selectedServices, cannedJobToServiceData(job, defaultLaborRate)])
+    }
   }
 
   const removeService = (id: string) => {
@@ -206,7 +201,7 @@ export function ServicesStep({ selectedServices, onUpdateServices, vehicleData }
         <div>
           <h2 className="text-xl font-semibold text-foreground mb-1">Select Services</h2>
           <p className="text-sm text-muted-foreground">
-            Add services and adjust line items as needed. Drag to reorder.
+            Choose from your canned jobs or add a custom service. Drag to reorder.
           </p>
         </div>
         {vehicleData && (
@@ -217,7 +212,7 @@ export function ServicesStep({ selectedServices, onUpdateServices, vehicleData }
         )}
       </div>
 
-      {/* Selected Services - Draggable List */}
+      {/* Selected Services Summary */}
       {selectedServices.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-foreground">
@@ -231,19 +226,37 @@ export function ServicesStep({ selectedServices, onUpdateServices, vehicleData }
                 onDragStart={(e) => handleDragStart(e, index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDragEnd={handleDragEnd}
-                className={`transition-all ${
+                className={`flex items-center gap-3 p-3 rounded-lg border border-border bg-card transition-all ${
                   dragOverIndex === index ? "border-t-2 border-primary" : ""
                 }`}
               >
-                <EditableServiceCard
-                  service={service}
-                  onUpdate={updateService}
-                  onRemove={() => removeService(service.id)}
-                  isDragging={dragIndex === index}
-                  dragHandleProps={{
-                    onMouseDown: (e) => e.stopPropagation(),
-                  }}
+                <GripVertical
+                  size={16}
+                  className="text-muted-foreground cursor-grab active:cursor-grabbing flex-shrink-0"
                 />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm text-foreground truncate">{service.name}</span>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 flex-shrink-0">
+                      {service.category}
+                    </Badge>
+                  </div>
+                  {service.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{service.description}</p>
+                  )}
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-medium text-foreground">${service.estimatedCost.toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">{service.estimatedTime}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 flex-shrink-0"
+                  onClick={() => removeService(service.id)}
+                >
+                  <X size={14} />
+                </Button>
               </div>
             ))}
           </div>
@@ -283,7 +296,7 @@ export function ServicesStep({ selectedServices, onUpdateServices, vehicleData }
       {/* Add Services Section */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-foreground">Add Services</h3>
+          <h3 className="text-sm font-medium text-foreground">Canned Jobs</h3>
           <Button
             variant={isAddingCustom ? "default" : "outline"}
             size="sm"
@@ -322,71 +335,98 @@ export function ServicesStep({ selectedServices, onUpdateServices, vehicleData }
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Add line items after creating the service
+              Custom services can be detailed after the RO is created
             </p>
           </Card>
         )}
 
-        {/* Search and Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search services..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 bg-card border-border"
-            />
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {categories.map((category) => (
-              <Button
-                key={category}
-                variant={selectedCategory === category ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSelectedCategory(category)}
-                className={selectedCategory === category ? "" : "bg-transparent"}
-              >
-                {category}
-              </Button>
-            ))}
-          </div>
+        {/* Search */}
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search canned jobs..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 bg-card border-border"
+          />
         </div>
 
-        {/* Available Services Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-1">
-          {filteredServices.map((service) => (
-            <Card
-              key={service.id}
-              className="p-3 border-border hover:border-primary/50 cursor-pointer transition-colors group"
-              onClick={() => addService(service)}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-medium text-foreground text-sm truncate">{service.name}</h4>
-                    <Badge variant="outline" className="text-xs flex-shrink-0">
-                      {service.category}
-                    </Badge>
+        {/* Canned Jobs Grid */}
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="animate-spin text-muted-foreground" size={24} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-1">
+            {filteredJobs.map((job) => {
+              const isSelected = selectedCannedJobIds.has(job.id)
+              return (
+                <Card
+                  key={job.id}
+                  className={`p-3 cursor-pointer transition-colors group ${
+                    isSelected
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                  onClick={() => toggleCannedJob(job)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-medium text-foreground text-sm truncate">{job.name}</h4>
+                        <div className="flex gap-1 flex-shrink-0">
+                          {job.category_name && (
+                            <Badge variant="outline" className="text-xs">
+                              {job.category_name}
+                            </Badge>
+                          )}
+                          {job.is_inspection && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-0.5">
+                              <ClipboardCheck size={10} />
+                              Inspection
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      {job.description && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{job.description}</p>
+                      )}
+                      <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                        {job.default_labor_hours && parseFloat(String(job.default_labor_hours)) > 0 && (
+                          <span>
+                            {parseFloat(String(job.default_labor_hours)) >= 1
+                              ? `${job.default_labor_hours} hrs`
+                              : `${Math.round(parseFloat(String(job.default_labor_hours)) * 60)} min`}
+                          </span>
+                        )}
+                        {(job.parts || []).length > 0 && (
+                          <span>{job.parts.length} part{job.parts.length !== 1 ? "s" : ""}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 ml-2">
+                      {isSelected ? (
+                        <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+                          <Check size={14} className="text-primary-foreground" />
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full border-2 border-muted-foreground/30 group-hover:border-primary/50 transition-colors" />
+                      )}
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{service.description}</p>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                    <span>${service.estimatedCost}</span>
-                    <span>{service.estimatedTime}</span>
-                  </div>
-                </div>
-                <Plus
-                  size={18}
-                  className="text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0 ml-2"
-                />
-              </div>
-            </Card>
-          ))}
-        </div>
+                </Card>
+              )
+            })}
+          </div>
+        )}
 
-        {filteredServices.length === 0 && (
+        {!loading && filteredJobs.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
-            <p>No services found matching your criteria</p>
+            <p>
+              {cannedJobs.length === 0
+                ? "No canned jobs configured for the wizard. Add them in Settings > Canned Jobs."
+                : "No canned jobs found matching your search"}
+            </p>
           </div>
         )}
       </div>

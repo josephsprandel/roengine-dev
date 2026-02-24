@@ -3,7 +3,7 @@
 -- Allows advisors to generate estimate links that customers can approve/decline on mobile
 
 -- Estimates table
-CREATE TABLE estimates (
+CREATE TABLE IF NOT EXISTS estimates (
   id SERIAL PRIMARY KEY,
   token VARCHAR(64) UNIQUE NOT NULL,
   work_order_id INTEGER NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
@@ -35,7 +35,7 @@ CREATE TABLE estimates (
 );
 
 -- Individual service approval tracking
-CREATE TABLE estimate_services (
+CREATE TABLE IF NOT EXISTS estimate_services (
   id SERIAL PRIMARY KEY,
   estimate_id INTEGER NOT NULL REFERENCES estimates(id) ON DELETE CASCADE,
   recommendation_id INTEGER REFERENCES vehicle_recommendations(id),

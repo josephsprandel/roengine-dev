@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { query } from '@/lib/db'
+import { query, getClient } from '@/lib/db'
+import { applyCannedJobToWorkOrder } from '@/lib/apply-canned-job'
+import { logActivity } from '@/lib/activity-log'
 
 // GET /api/work-orders - List work orders with optional filters
 export async function GET(request: NextRequest) {
@@ -190,9 +192,43 @@ export async function POST(request: NextRequest) {
     ]
 
     const result = await query(sql, params)
+    const newWorkOrder = result.rows[0]
+
+    // Auto-add canned jobs that are flagged for all new ROs
+    try {
+      const autoAddJobs = await query(
+        `SELECT id FROM canned_jobs WHERE auto_add_to_all_ros = true AND is_active = true ORDER BY sort_order`
+      )
+
+      if (autoAddJobs.rows.length > 0) {
+        const client = await getClient()
+        try {
+          await client.query('BEGIN')
+          for (const job of autoAddJobs.rows) {
+            await applyCannedJobToWorkOrder(client, newWorkOrder.id, job.id)
+          }
+          await client.query('COMMIT')
+        } catch (autoAddError) {
+          await client.query('ROLLBACK')
+          console.error('Error auto-adding canned jobs (RO was still created):', autoAddError)
+        } finally {
+          client.release()
+        }
+      }
+    } catch (autoAddError) {
+      console.error('Error querying auto-add canned jobs (RO was still created):', autoAddError)
+    }
+
+    await logActivity({
+      workOrderId: newWorkOrder.id,
+      actorType: 'system',
+      action: 'ro_created',
+      description: `Repair order ${roNumber} created`,
+      metadata: { roNumber, state: body.state || 'estimate' }
+    })
 
     return NextResponse.json(
-      { work_order: result.rows[0], message: 'Work order created successfully' },
+      { work_order: newWorkOrder, message: 'Work order created successfully' },
       { status: 201 }
     )
   } catch (error: any) {

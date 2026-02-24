@@ -19,6 +19,7 @@ import {
   CheckCircle,
 } from "lucide-react"
 import { formatPhoneNumber } from "@/lib/utils/phone-format"
+import { VehicleSelector, type VehicleSelection } from "@/components/booking/vehicle-selector"
 
 // ── Types ──
 
@@ -80,7 +81,7 @@ function useShopInfo() {
           setShopAddress(addr)
         }
       })
-      .catch(() => {})
+      .catch(() => { /* uses default values on failure */ })
   }, [])
 
   return { shopName, shopLogo, shopPhone, shopAddress }
@@ -109,10 +110,7 @@ export default function BookingPage() {
   const [loadingSlots, setLoadingSlots] = useState(false)
 
   // Step 5: Vehicle
-  const [vehicleYear, setVehicleYear] = useState("")
-  const [vehicleMake, setVehicleMake] = useState("")
-  const [vehicleModel, setVehicleModel] = useState("")
-  const [vehicleVin, setVehicleVin] = useState("")
+  const [vehicle, setVehicle] = useState<VehicleSelection>({ year: "", make: "", model: "" })
 
   // Step 6: Contact
   const [customerName, setCustomerName] = useState("")
@@ -130,7 +128,7 @@ export default function BookingPage() {
     fetch("/api/booking/services")
       .then((r) => r.json())
       .then((data) => setServices(data.services || []))
-      .catch(() => {})
+      .catch(() => { /* uses default values on failure */ })
   }, [])
 
   // ── Fetch availability when date or type changes ──
@@ -160,7 +158,7 @@ export default function BookingPage() {
       case 2: return appointmentType !== null
       case 3: return selectedDate !== null
       case 4: return selectedTime !== null
-      case 5: return vehicleYear.length === 4 && vehicleMake.trim() !== "" && vehicleModel.trim() !== ""
+      case 5: return vehicle.year.length === 4 && vehicle.make.trim() !== "" && vehicle.model.trim() !== ""
       case 6: return customerName.trim() !== "" && customerPhone.trim().length >= 7 && customerEmail.includes("@")
       default: return false
     }
@@ -178,10 +176,10 @@ export default function BookingPage() {
           customer_name: customerName.trim(),
           phone: customerPhone.trim(),
           email: customerEmail.trim(),
-          year: vehicleYear,
-          make: vehicleMake.trim(),
-          model: vehicleModel.trim(),
-          vin: vehicleVin.trim() || null,
+          year: vehicle.year,
+          make: vehicle.make.trim(),
+          model: vehicle.model.trim(),
+          vin: vehicle.vin?.trim() || null,
           selected_services: selectedServiceIds,
           scheduled_start: selectedTime,
           notes: customerNotes.trim() || null,
@@ -485,52 +483,7 @@ export default function BookingPage() {
               <h2 className="text-xl font-bold text-gray-900">Your vehicle</h2>
               <p className="text-sm text-gray-500 mt-1">Tell us about your car</p>
             </div>
-            <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <Label htmlFor="year" className="text-xs text-gray-500">Year *</Label>
-                  <Input
-                    id="year"
-                    placeholder="2021"
-                    value={vehicleYear}
-                    onChange={(e) => setVehicleYear(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                    maxLength={4}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="make" className="text-xs text-gray-500">Make *</Label>
-                  <Input
-                    id="make"
-                    placeholder="Toyota"
-                    value={vehicleMake}
-                    onChange={(e) => setVehicleMake(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="model" className="text-xs text-gray-500">Model *</Label>
-                  <Input
-                    id="model"
-                    placeholder="Camry"
-                    value={vehicleModel}
-                    onChange={(e) => setVehicleModel(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="vin" className="text-xs text-gray-500">VIN (optional)</Label>
-                <Input
-                  id="vin"
-                  placeholder="1HGCM82633A004352"
-                  value={vehicleVin}
-                  onChange={(e) => setVehicleVin(e.target.value.toUpperCase().slice(0, 17))}
-                  maxLength={17}
-                  className="mt-1"
-                />
-              </div>
-            </div>
+            <VehicleSelector value={vehicle} onChange={setVehicle} />
           </div>
         )}
 
@@ -598,7 +551,7 @@ export default function BookingPage() {
                   {selectedTime && format(new Date(selectedTime), "h:mm a")}
                 </p>
                 <p className="text-gray-700">
-                  {vehicleYear} {vehicleMake} {vehicleModel}
+                  {vehicle.year} {vehicle.make} {vehicle.model}
                 </p>
               </div>
             </Card>
@@ -648,7 +601,7 @@ export default function BookingPage() {
                 </div>
                 <div className="border-t border-gray-100 pt-3">
                   <p className="text-xs text-gray-400 uppercase">Vehicle</p>
-                  <p className="text-gray-700">{vehicleYear} {vehicleMake} {vehicleModel}</p>
+                  <p className="text-gray-700">{vehicle.year} {vehicle.make} {vehicle.model}</p>
                 </div>
               </div>
             </Card>

@@ -6,11 +6,11 @@ import { PartsManagerDashboard } from "@/components/parts-manager/parts-manager-
 
 export default function PartsManagerPage() {
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex min-h-screen bg-background">
       <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden min-h-0">
+      <div className="flex flex-1 flex-col min-w-0">
         <Header />
-        <main className="flex flex-col flex-1 overflow-y-auto p-6 min-h-0">
+        <main className="p-6">
           <PartsManagerDashboard />
         </main>
       </div>

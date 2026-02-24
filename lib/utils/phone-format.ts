@@ -4,8 +4,13 @@
  */
 export function formatPhoneNumber(value: string): string {
   // Remove all non-digit characters
-  const digits = value.replace(/\D/g, '')
-  
+  let digits = value.replace(/\D/g, '')
+
+  // Strip leading country code '1' for US numbers (11 digits starting with 1)
+  if (digits.length === 11 && digits.startsWith('1')) {
+    digits = digits.slice(1)
+  }
+
   // Apply formatting based on length
   if (digits.length === 0) return ''
   if (digits.length <= 3) return `(${digits}`

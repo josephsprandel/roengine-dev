@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { decodeVIN } from '@/lib/vin-decoder'
-import { lookupMaintenanceSchedule, type LookupParams } from '@/lib/maintenance-lookup'
+import { lookupMaintenanceSchedule, calculateUrgency, type LookupParams } from '@/lib/maintenance-lookup'
 
 /**
  * Labor Hour Fallback Standards
@@ -62,49 +62,6 @@ const STANDARD_SERVICE_NAMES = [
   'Battery service',
   'Brake inspection',
 ]
-
-/**
- * Calculate urgency level based on current mileage vs interval
- * 
- * @see /docs/vin-to-maintenance-architecture.md#urgency-levels
- */
-function calculateUrgency(currentMileage: number, interval: number) {
-  // Calculate position within the current service cycle,
-  // assuming the last service was conducted on schedule.
-  const lastDueAt = Math.floor(currentMileage / interval) * interval
-  const milesSinceLastDue = currentMileage - lastDueAt
-  const milesUntilNextDue = interval - milesSinceLastDue
-
-  if (milesSinceLastDue > 5000) {
-    return {
-      urgency: 'OVERDUE' as const,
-      priority: 1,
-      mileage_until_due: -milesSinceLastDue,
-      reason: `Overdue by ${milesSinceLastDue.toLocaleString()} miles`,
-    }
-  } else if (milesUntilNextDue <= 2000) {
-    return {
-      urgency: 'DUE_NOW' as const,
-      priority: 2,
-      mileage_until_due: milesUntilNextDue,
-      reason: 'Due now',
-    }
-  } else if (milesUntilNextDue <= 3000) {
-    return {
-      urgency: 'COMING_SOON' as const,
-      priority: 3,
-      mileage_until_due: milesUntilNextDue,
-      reason: `Due in ${milesUntilNextDue.toLocaleString()} miles`,
-    }
-  } else {
-    return {
-      urgency: 'NOT_DUE' as const,
-      priority: 4,
-      mileage_until_due: milesUntilNextDue,
-      reason: `Due in ${milesUntilNextDue.toLocaleString()} miles`,
-    }
-  }
-}
 
 /**
  * Apply labor hour fallbacks if Gemini returned 0
@@ -229,7 +186,12 @@ export async function POST(request: NextRequest) {
               ...variant,
               services: variant.services
                 .map((s) => applyLaborFallback(s))
-                .filter((s: any) => s.urgency !== 'NOT_DUE')
+                .filter((s: any) => {
+                  if (s.is_excluded) return false
+                  if (s.urgency === 'NOT_DUE') return false
+                  if (s.urgency === 'COMING_SOON' && s.mileage_until_due > 5000) return false
+                  return true
+                })
                 .sort((a: any, b: any) => a.priority - b.priority),
             }))
 
@@ -244,7 +206,12 @@ export async function POST(request: NextRequest) {
             // Single powertrain config matched
             const processedServices = dbResult.services!
               .map((s) => applyLaborFallback(s))
-              .filter((s: any) => s.urgency !== 'NOT_DUE')
+              .filter((s: any) => {
+                if (s.is_excluded) return false
+                if (s.urgency === 'NOT_DUE') return false
+                if (s.urgency === 'COMING_SOON' && s.mileage_until_due > 5000) return false
+                return true
+              })
               .sort((a: any, b: any) => a.priority - b.priority)
 
             if (processedServices.length > 0) {
@@ -261,7 +228,6 @@ export async function POST(request: NextRequest) {
           }
         }
         // No DB match — fall through to Gemini
-        console.log('[DB Lookup] No match found, falling back to Gemini')
       }
     } catch (dbError: any) {
       console.error('[DB Lookup] Error, falling back to Gemini:', dbError.message)
@@ -504,32 +470,11 @@ CRITICAL RULES:
 `
 
     // Call Gemini AI
-    console.log('\n' + '='.repeat(80))
-    console.log('=== CALLING GEMINI AI ===')
-    console.log('='.repeat(80))
-    console.log('Timestamp:', new Date().toISOString())
-    console.log('VIN:', hasVIN ? vin : 'N/A')
-    console.log('Y/M/M:', hasYMM ? `${year} ${make} ${model}` : 'N/A')
-    console.log('Mileage:', mileage)
-    console.log('\n--- PROMPT BEING SENT TO GEMINI ---')
-    console.log(prompt)
-    console.log('--- END PROMPT ---\n')
-
     const result = await geminiModel.generateContent(prompt)
     const response = await result.response
     const text = response.text()
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(1)
-
-    console.log('\n' + '='.repeat(80))
-    console.log('=== GEMINI RESPONSE RECEIVED ===')
-    console.log('='.repeat(80))
-    console.log('Timestamp:', new Date().toISOString())
-    console.log('Duration:', duration, 'seconds')
-    console.log('Response length:', text.length, 'characters')
-    console.log('\n--- RAW GEMINI RESPONSE ---')
-    console.log(text)
-    console.log('--- END RESPONSE ---\n')
 
     /**
      * Parse Gemini Response
@@ -589,20 +534,16 @@ CRITICAL RULES:
       const processedVariants = data.variants.map((variant: any) => {
         const processedServices = variant.services
           .map((service: any) => {
-            // Apply labor fallbacks
             const serviceWithLabor = applyLaborFallback(service)
-
-            // Calculate urgency
             const urgencyInfo = calculateUrgency(mileage, service.mileage_interval)
-
-            return {
-              ...serviceWithLabor,
-              ...urgencyInfo,
-            }
+            return { ...serviceWithLabor, ...urgencyInfo }
           })
-          // Filter out services not due yet (urgency NOT_DUE)
-          .filter((s: any) => s.urgency !== 'NOT_DUE')
-          // Sort by priority (OVERDUE first)
+          .filter((s: any) => {
+            if (s.is_excluded) return false
+            if (s.urgency === 'NOT_DUE') return false
+            if (s.urgency === 'COMING_SOON' && s.mileage_until_due > 5000) return false
+            return true
+          })
           .sort((a: any, b: any) => a.priority - b.priority)
 
         return {
@@ -622,20 +563,16 @@ CRITICAL RULES:
       // Single variant - standard response
       const processedServices = data.services
         .map((service: any) => {
-          // Apply labor fallbacks
           const serviceWithLabor = applyLaborFallback(service)
-
-          // Calculate urgency
           const urgencyInfo = calculateUrgency(mileage, service.mileage_interval)
-
-          return {
-            ...serviceWithLabor,
-            ...urgencyInfo,
-          }
+          return { ...serviceWithLabor, ...urgencyInfo }
         })
-        // Filter out services not due yet
-        .filter((s: any) => s.urgency !== 'NOT_DUE')
-        // Sort by priority
+        .filter((s: any) => {
+          if (s.is_excluded) return false
+          if (s.urgency === 'NOT_DUE') return false
+          if (s.urgency === 'COMING_SOON' && s.mileage_until_due > 5000) return false
+          return true
+        })
         .sort((a: any, b: any) => a.priority - b.priority)
 
       return NextResponse.json({

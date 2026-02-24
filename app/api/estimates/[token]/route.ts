@@ -10,13 +10,29 @@ import { query } from '@/lib/db'
 import { classifyBodyStyle } from '@/lib/classify-body-style'
 import { getVehicleImagePath } from '@/lib/vehicle-image-mapper'
 import { generateHotspots, type Service } from '@/lib/generate-hotspots'
+import { logActivity } from '@/lib/activity-log'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const { token } = await params
+    let { token } = await params
+
+    // Support work order ID lookups (numeric param from email links)
+    if (/^\d+$/.test(token)) {
+      const tokenLookup = await query(
+        'SELECT token FROM estimates WHERE work_order_id = $1 ORDER BY id DESC LIMIT 1',
+        [parseInt(token)]
+      )
+      if (tokenLookup.rows.length === 0) {
+        return NextResponse.json(
+          { error: 'This estimate is not yet available', reason: 'not_yet_available' },
+          { status: 404 }
+        )
+      }
+      token = tokenLookup.rows[0].token
+    }
 
     if (!token || token.length < 10) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 400 })
@@ -25,7 +41,7 @@ export async function GET(
     // Fetch estimate with customer, vehicle, and services
     const estimateResult = await query(`
       SELECT
-        e.id, e.token, e.status, e.total_amount, e.approved_amount,
+        e.id, e.token, e.work_order_id, e.status, e.total_amount, e.approved_amount,
         e.expires_at, e.viewed_at, e.responded_at, e.customer_notes,
         e.vehicle_id,
         c.first_name, c.last_name, c.customer_name, c.email, c.phone_primary,
@@ -42,13 +58,21 @@ export async function GET(
 
     const est = estimateResult.rows[0]
 
-    // Fetch shop profile (logo + phone for header)
+    // Fetch shop profile (logo + phone for header + estimate mode)
     const shopResult = await query(`
-      SELECT shop_name, phone, logo_url
+      SELECT shop_name, phone, logo_url, estimate_mode
       FROM shop_profile
       LIMIT 1
     `)
     const shopProfile = shopResult.rows[0] || null
+
+    // Check superseded (recommendations were regenerated, this estimate is stale)
+    if (est.status === 'superseded') {
+      return NextResponse.json(
+        { error: 'This estimate has been updated. Please contact the shop for the latest estimate.' },
+        { status: 410 }
+      )
+    }
 
     // Check expiration
     if (est.expires_at && new Date(est.expires_at) < new Date()) {
@@ -74,6 +98,30 @@ export async function GET(
           WHERE es.estimate_id = $1 AND es.recommendation_id = vr.id
         ) AND vr.estimate_viewed_at IS NULL
       `, [est.id])
+
+      // Update estimate_viewed_at on work order (first view only)
+      if (est.work_order_id) {
+        await query(
+          'UPDATE work_orders SET estimate_viewed_at = NOW() WHERE id = $1 AND estimate_viewed_at IS NULL',
+          [est.work_order_id]
+        )
+      }
+    }
+
+    // Log customer view activity
+    if (est.work_order_id) {
+      await logActivity({
+        workOrderId: est.work_order_id,
+        actorType: 'customer',
+        action: 'customer_viewed_estimate',
+        description: 'Customer viewed estimate',
+        metadata: {
+          ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip'),
+          userAgent: request.headers.get('user-agent'),
+          firstView: !est.viewed_at,
+          estimateId: est.id
+        }
+      })
     }
 
     // Fetch services with urgency from linked recommendations
@@ -126,6 +174,7 @@ export async function GET(
     return NextResponse.json({
       estimate: {
         id: est.id,
+        workOrderId: est.work_order_id,
         status: est.status,
         totalAmount: parseFloat(est.total_amount) || 0,
         approvedAmount: parseFloat(est.approved_amount) || 0,
@@ -158,6 +207,7 @@ export async function GET(
         shopName: shopProfile.shop_name,
         phone: shopProfile.phone,
         logoUrl: shopProfile.logo_url,
+        estimateMode: shopProfile.estimate_mode || 'full_pricing',
       } : null,
     })
   } catch (error: any) {

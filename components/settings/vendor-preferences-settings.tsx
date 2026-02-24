@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Package, Pencil, Trash2, Plus, Loader2, AlertCircle, Car, Globe2, Sparkles } from "lucide-react"
+import { toast } from "sonner"
 
 interface VendorPreference {
   id: number
@@ -176,7 +177,7 @@ export function VendorPreferencesSettings() {
 
       fetchPreferences()
     } catch (err: any) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 

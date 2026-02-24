@@ -31,6 +31,18 @@ export interface Recommendation {
   photo_path: string | null
   created_at: string
   updated_at: string
+  // Linked inspection finding fields
+  finding_id?: number | null
+  finding_tech_notes?: string | null
+  finding_ai_cleaned_notes?: string | null
+  finding_condition?: string | null
+  finding_measurement_value?: number | null
+  finding_measurement_unit?: string | null
+  finding_photos?: string[] | null
+  finding_inspected_at?: string | null
+  finding_inspected_by?: number | null
+  finding_tech_name?: string | null
+  finding_inspection_item_name?: string | null
 }
 
 interface UseRecommendationsManagementParams {

@@ -24,47 +24,28 @@ When database schema changes are needed:
    node scripts/run-migrations.js
    ```
 
-## Deployment Process (CRITICAL - Always Follow These Steps)
+## Development Mode
+- Run with `npm run dev` for hot-reload during development
+- Do NOT build or restart PM2 unless explicitly asked
+- Changes are picked up automatically by the Next.js dev server
 
-### After ANY code changes to the application:
+## Deployment Process (Only When Explicitly Asked)
 
-1. **Commit changes to Git:**
-   ```bash
-   git add .
-   git commit -m "Description of changes"
-   git push origin main
-   ```
+### When deploying to production:
 
-2. **Rebuild the Next.js production bundle:**
+1. **Rebuild the Next.js production bundle:**
    ```bash
    cd /home/jsprandel/roengine
    npm run build
    ```
-   - This compiles TypeScript, bundles React components, and optimizes for production
-   - MUST be done after ANY changes to pages, components, or API routes
 
-3. **Restart the PM2 process:**
+2. **Restart the PM2 process:**
    ```bash
    pm2 restart ai-automotive-repair
    ```
    - Production app name: `ai-automotive-repair` (NOT roengine)
    - Check status: `pm2 list` or `pm2 status ai-automotive-repair`
    - View logs: `pm2 logs ai-automotive-repair`
-
-### Quick Deployment Commands (Copy-Paste):
-```bash
-# Full deployment in one go:
-cd /home/jsprandel/roengine && \
-git add . && \
-git commit -m "Your commit message" && \
-git push origin main && \
-npm run build && \
-pm2 restart ai-automotive-repair
-
-# Check if deployment was successful:
-pm2 status ai-automotive-repair
-pm2 logs ai-automotive-repair --lines 50
-```
 
 ## API Endpoint Reference
 
@@ -138,9 +119,8 @@ Since we test directly in production:
 - `scripts/` - Node.js utility scripts
 
 ## Remember:
-- ✅ Always rebuild after code changes: `npm run build`
-- ✅ Always restart PM2: `pm2 restart ai-automotive-repair`
-- ✅ Always test in production after deployment
+- ✅ Use `npm run dev` for development (hot-reload, no build needed)
+- ✅ Only build + restart PM2 when explicitly asked to deploy
 - ✅ Check browser console for errors
 - ✅ Use curl to test APIs directly
 - ✅ Database changes require migration files

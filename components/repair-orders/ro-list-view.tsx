@@ -175,7 +175,7 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
             <p className="text-sm text-muted-foreground">Manage all active and completed service orders</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-2 bg-transparent">
+            <Button variant="outline" size="sm" className="gap-2 bg-transparent opacity-50 cursor-not-allowed" disabled title="Coming soon">
               <Download size={16} />
               Export
             </Button>

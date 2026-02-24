@@ -11,6 +11,8 @@ interface CustomerInfoCardProps {
   email?: string | null
   address: string
   onEdit: () => void
+  onSMS?: () => void
+  onEmail?: () => void
 }
 
 export function CustomerInfoCard({
@@ -21,6 +23,8 @@ export function CustomerInfoCard({
   email,
   address,
   onEdit,
+  onSMS,
+  onEmail,
 }: CustomerInfoCardProps) {
   return (
     <Card className="p-6 border-border relative">
@@ -76,7 +80,7 @@ export function CustomerInfoCard({
       </div>
 
       <div className="absolute bottom-6 right-6 flex flex-col gap-2 w-24">
-        <Button size="sm" variant="outline" className="gap-1 bg-transparent w-full">
+        <Button size="sm" variant="outline" className="gap-1 bg-transparent w-full" onClick={onSMS}>
           <MessageSquare size={14} />
           SMS
         </Button>
@@ -85,7 +89,7 @@ export function CustomerInfoCard({
           Call
         </Button>
         {email && (
-          <Button size="sm" variant="outline" className="gap-1 bg-transparent w-full">
+          <Button size="sm" variant="outline" className="gap-1 bg-transparent w-full" onClick={onEmail}>
             <Mail size={14} />
             Email
           </Button>

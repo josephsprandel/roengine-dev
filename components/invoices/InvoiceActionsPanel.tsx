@@ -77,7 +77,7 @@ export function InvoiceActionsPanel({
 
       onActionComplete()
     } catch (error: any) {
-      alert(`Error: ${error.message}`)
+      toast.error(error.message)
     } finally {
       setClosing(false)
     }

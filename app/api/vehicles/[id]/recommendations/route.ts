@@ -112,6 +112,7 @@ export async function GET(
     }
 
     // Build query with optional status filter
+    // LEFT JOIN ro_inspection_results to include inspection findings linked to recommendations
     const queryText = `
       SELECT
         vr.id, vr.vehicle_id, vr.service_title, vr.reason, vr.priority, vr.estimated_cost,
@@ -121,9 +122,24 @@ export async function GET(
         vr.estimate_sent_at, vr.estimate_viewed_at, vr.customer_responded_at, vr.customer_response_method,
         vr.category_id, vr.tech_notes, vr.photo_path,
         sc.name as category_name,
-        vr.created_at, vr.updated_at
+        vr.created_at, vr.updated_at,
+        -- Inspection finding fields (from the linked ro_inspection_results row)
+        ir.id as finding_id,
+        ir.tech_notes as finding_tech_notes,
+        ir.ai_cleaned_notes as finding_ai_cleaned_notes,
+        ir.condition as finding_condition,
+        ir.measurement_value as finding_measurement_value,
+        ir.measurement_unit as finding_measurement_unit,
+        ir.photos as finding_photos,
+        ir.inspected_at as finding_inspected_at,
+        ir.inspected_by as finding_inspected_by,
+        tech_user.full_name as finding_tech_name,
+        cji.name as finding_inspection_item_name
       FROM vehicle_recommendations vr
       LEFT JOIN service_categories sc ON vr.category_id = sc.id
+      LEFT JOIN ro_inspection_results ir ON ir.finding_recommendation_id = vr.id
+      LEFT JOIN users tech_user ON ir.inspected_by = tech_user.id
+      LEFT JOIN canned_job_inspection_items cji ON ir.inspection_item_id = cji.id
       WHERE vr.vehicle_id = $1
         AND ($2::text IS NULL OR vr.status = $2)
       ORDER BY

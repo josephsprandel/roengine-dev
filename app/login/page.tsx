@@ -39,7 +39,7 @@ export default function LoginPage() {
           }
         }
       })
-      .catch(() => {})
+      .catch(() => { /* uses default values on failure */ })
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -102,7 +102,7 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@autohouse.com"
+                placeholder="Email address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -139,13 +139,6 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-          
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p>Default credentials:</p>
-            <p className="font-mono text-xs mt-1">
-              admin@autohouse.com / admin123
-            </p>
-          </div>
         </CardContent>
       </Card>
     </div>

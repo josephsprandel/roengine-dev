@@ -66,6 +66,9 @@ export function EditRecommendationDialog({
   const [isCatalogOpen, setIsCatalogOpen] = useState(false)
   const [catalogItemIndex, setCatalogItemIndex] = useState<number | undefined>(undefined)
 
+  // Default labor rate from shop profile
+  const [defaultLaborRate, setDefaultLaborRate] = useState(160)
+
   // Category & repair-specific fields
   const [categories, setCategories] = useState<ServiceCategory[]>([])
   const [categoryId, setCategoryId] = useState<number>(defaultCategoryId || 1)
@@ -75,12 +78,24 @@ export function EditRecommendationDialog({
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Fetch default labor rate from shop profile and categories on mount
+  useEffect(() => {
+    fetch('/api/settings/shop-profile')
+      .then(r => r.json())
+      .then(data => {
+        if (data.profile?.default_labor_rate) {
+          setDefaultLaborRate(parseFloat(data.profile.default_labor_rate) || 160)
+        }
+      })
+      .catch(() => { /* uses default values on failure */ })
+  }, [])
+
   // Fetch categories on mount
   useEffect(() => {
     fetch('/api/service-categories')
       .then(r => r.json())
       .then(d => setCategories(d.categories || []))
-      .catch(() => {})
+      .catch(() => { /* uses default values on failure */ })
   }, [])
 
   const isRepairCategory = categoryId !== 1
@@ -211,7 +226,7 @@ export function EditRecommendationDialog({
   }
 
   const addLaborItem = () => {
-    setLaborItems([...laborItems, { description: '', hours: 1, rate: 160, total: 160 }])
+    setLaborItems([...laborItems, { description: '', hours: 1, rate: defaultLaborRate, total: defaultLaborRate }])
   }
 
   const removeLaborItem = (index: number) => {

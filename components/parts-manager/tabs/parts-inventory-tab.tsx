@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, Download, Upload, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 import Link from "next/link"
 import { DataTable } from "../data-table"
 import { columns, type Part } from "../columns"
@@ -19,6 +20,7 @@ export function PartsInventoryTab() {
   const [pageSize, setPageSize] = useState(50)
   const [selectedPart, setSelectedPart] = useState<Part | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [stockFilter, setStockFilter] = useState<"all" | "in_stock" | "low_stock" | "out_of_stock">("all")
 
   useEffect(() => {
     // Reset to first page when search term changes
@@ -163,14 +165,25 @@ export function PartsInventoryTab() {
       
     } catch (error) {
       console.error('Export failed:', error)
-      alert('Failed to export parts inventory')
+      toast.error('Failed to export parts inventory')
     } finally {
       setExporting(false)
     }
   }
 
+  const inStockCount = parts.filter(p => p.quantity_available > p.reorder_point).length
+  const lowStockCount = parts.filter(p => p.quantity_available > 0 && p.quantity_available <= p.reorder_point).length
+  const outOfStockCount = parts.filter(p => p.quantity_available === 0).length
+
+  const filteredParts = stockFilter === "all" ? parts : parts.filter(p => {
+    if (stockFilter === "in_stock") return p.quantity_available > p.reorder_point
+    if (stockFilter === "low_stock") return p.quantity_available > 0 && p.quantity_available <= p.reorder_point
+    if (stockFilter === "out_of_stock") return p.quantity_available === 0
+    return true
+  })
+
   return (
-    <div className="flex flex-col flex-1 min-h-0 h-full space-y-3">
+    <div className="space-y-3">
       {/* Search and Actions */}
       <div className="flex gap-2">
         <div className="flex-1 relative">
@@ -188,8 +201,8 @@ export function PartsInventoryTab() {
             Import CSV
           </Button>
         </Link>
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           className="gap-2 bg-transparent"
           onClick={handleExport}
           disabled={exporting || totalParts === 0}
@@ -203,13 +216,41 @@ export function PartsInventoryTab() {
         </Button>
       </div>
 
-      {/* Stats Summary */}
+      {/* Filter Chips */}
       {!loading && (
-        <div className="flex gap-4 text-sm text-muted-foreground">
-          <span>Total Parts: <strong className="text-foreground">{totalParts}</strong></span>
-          <span>In Stock: <strong className="text-green-600">{parts.filter(p => p.quantity_available > 0).length}</strong></span>
-          <span>Low Stock: <strong className="text-yellow-600">{parts.filter(p => p.quantity_available > 0 && p.quantity_available <= p.reorder_point).length}</strong></span>
-          <span>Out of Stock: <strong className="text-red-600">{parts.filter(p => p.quantity_available === 0).length}</strong></span>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={stockFilter === "all" ? "default" : "outline"}
+            className="h-7 text-xs"
+            onClick={() => setStockFilter("all")}
+          >
+            All ({totalParts})
+          </Button>
+          <Button
+            size="sm"
+            variant={stockFilter === "in_stock" ? "default" : "outline"}
+            className="h-7 text-xs"
+            onClick={() => setStockFilter("in_stock")}
+          >
+            In Stock ({inStockCount})
+          </Button>
+          <Button
+            size="sm"
+            variant={stockFilter === "low_stock" ? "default" : "outline"}
+            className="h-7 text-xs"
+            onClick={() => setStockFilter("low_stock")}
+          >
+            Low Stock ({lowStockCount})
+          </Button>
+          <Button
+            size="sm"
+            variant={stockFilter === "out_of_stock" ? "default" : "outline"}
+            className="h-7 text-xs"
+            onClick={() => setStockFilter("out_of_stock")}
+          >
+            Out of Stock ({outOfStockCount})
+          </Button>
         </div>
       )}
 
@@ -229,21 +270,19 @@ export function PartsInventoryTab() {
           </Link>
         </div>
       ) : (
-        <div className="flex flex-col flex-1 min-h-0">
-          <DataTable 
-            columns={columns} 
-            data={parts} 
-            pageSize={pageSize}
-            pageIndex={pageIndex}
-            pageCount={Math.ceil(totalParts / pageSize)}
-            onPageChange={setPageIndex}
-            onPageSizeChange={(newSize) => {
-              setPageSize(newSize)
-              setPageIndex(0) // Reset to first page when changing page size
-            }}
-            onRowClick={handleRowClick}
-          />
-        </div>
+        <DataTable
+          columns={columns}
+          data={filteredParts}
+          pageSize={pageSize}
+          pageIndex={pageIndex}
+          pageCount={Math.ceil(totalParts / pageSize)}
+          onPageChange={setPageIndex}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize)
+            setPageIndex(0)
+          }}
+          onRowClick={handleRowClick}
+        />
       )}
 
       {/* Part Details Modal */}

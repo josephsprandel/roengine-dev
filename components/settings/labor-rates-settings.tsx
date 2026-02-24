@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DollarSign, Pencil, Trash2, Plus, Loader2, AlertCircle } from "lucide-react"
+import { toast } from "sonner"
 
 interface LaborRate {
   id: number
@@ -154,7 +155,7 @@ export function LaborRatesSettings() {
 
       fetchRates()
     } catch (err: any) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Save, X, Loader2, Package, DollarSign, MapPin, Tag } from "lucide-react"
+import { toast } from "sonner"
 import type { Part } from "./columns"
 
 interface PartDetailsModalProps {
@@ -39,7 +40,7 @@ export function PartDetailsModal({ part, open, onClose, onSave }: PartDetailsMod
       onClose()
     } catch (error) {
       console.error('Failed to save part:', error)
-      alert('Failed to save part details')
+      toast.error('Failed to save part details')
     } finally {
       setIsSaving(false)
     }

@@ -9,6 +9,7 @@ import { CustomerSelectionStep } from "./steps/customer-selection-step"
 import { VehicleSelectionStep } from "./steps/vehicle-selection-step"
 import { ServicesStep } from "./steps/services-step"
 import { ReviewStep } from "./steps/review-step"
+import { toast } from "sonner"
 
 const steps = [
   { id: 1, name: "Customer", icon: User },
@@ -54,6 +55,22 @@ export interface LineItem {
   location?: string // Optional: Warehouse location
 }
 
+export interface InspectionItem {
+  id: number
+  inspection_item_id: number
+  item_name: string
+  status: "pending" | "green" | "yellow" | "red"
+  tech_notes: string | null
+  ai_cleaned_notes?: string | null
+  condition?: string | null
+  measurement_value?: number | null
+  measurement_unit?: string | null
+  photos?: string[]
+  inspected_by_name?: string | null
+  inspected_at?: string | null
+  finding_recommendation_id?: number | null
+}
+
 export interface ServiceData {
   id: string
   name: string
@@ -68,6 +85,8 @@ export interface ServiceData {
   sublets: LineItem[]
   hazmat: LineItem[]
   fees: LineItem[]
+  inspectionItems?: InspectionItem[]
+  cannedJobId?: number
 }
 
 interface ROCreationWizardProps {
@@ -83,7 +102,20 @@ export function ROCreationWizard({ initialCustomerId, initialScheduledStart, ini
   const [selectedServices, setSelectedServices] = useState<ServiceData[]>([])
   const [notes, setNotes] = useState("")
   const [isCreating, setIsCreating] = useState(false)
+  const [defaultLaborRate, setDefaultLaborRate] = useState(160)
   const router = useRouter()
+
+  // Fetch default labor rate from shop profile
+  useEffect(() => {
+    fetch('/api/settings/shop-profile')
+      .then(r => r.json())
+      .then(data => {
+        if (data.profile?.default_labor_rate) {
+          setDefaultLaborRate(parseFloat(data.profile.default_labor_rate) || 160)
+        }
+      })
+      .catch(() => { /* uses default values on failure */ })
+  }, [])
 
   useEffect(() => {
     if (!initialCustomerId) return
@@ -139,19 +171,16 @@ export function ROCreationWizard({ initialCustomerId, initialScheduledStart, ini
 
   const handleCreateRO = async () => {
     if (!customerData || !vehicleData) {
-      alert("Customer and vehicle data are required")
+      toast.error("Customer and vehicle data are required")
       return
     }
 
     setIsCreating(true)
     
     try {
-      console.log("[RO Wizard] Creating RO...", { customerData, vehicleData, selectedServices })
-
       // Step 1: Create customer if new
       let customerId = customerData.id
       if (customerData.isNew) {
-        console.log("[RO Wizard] Creating new customer...")
         const customerResponse = await fetch('/api/customers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -169,18 +198,12 @@ export function ROCreationWizard({ initialCustomerId, initialScheduledStart, ini
 
         const customerResult = await customerResponse.json()
         customerId = customerResult.customer.id
-        console.log("[RO Wizard] Customer created:", customerId)
       }
 
       // Step 2: Create vehicle if new
       let vehicleId = vehicleData.id
-      
-      console.log('[RO Wizard] vehicleData before check:', vehicleData)
-      console.log('[RO Wizard] Is new vehicle?', vehicleData.isNew)
-      
+
       if (vehicleData.isNew) {
-        console.log("[RO Wizard] Creating new vehicle...")
-        console.log("[RO Wizard] Raw vehicleData:", JSON.stringify(vehicleData, null, 2))
         
         // Convert build_date from MM/YY to YYYY-MM format
         let manufactureDate = null
@@ -190,14 +213,9 @@ export function ROCreationWizard({ initialCustomerId, initialScheduledStart, ini
             const month = match[1].padStart(2, '0')
             const year = '20' + match[2] // Assuming 20xx century
             manufactureDate = `${year}-${month}`
-            console.log(`[RO Wizard] Converted build_date ${vehicleData.build_date} to manufacture_date ${manufactureDate}`)
-          } else {
-            console.warn('[RO Wizard] build_date format did not match MM/YY:', vehicleData.build_date)
           }
-        } else {
-          console.log('[RO Wizard] No build_date in vehicleData')
         }
-        
+
         const vehiclePayload = {
           customer_id: customerId,
           year: parseInt(vehicleData.year),
@@ -213,8 +231,6 @@ export function ROCreationWizard({ initialCustomerId, initialScheduledStart, ini
           notes: vehicleData.tire_size ? `Tire Size: ${vehicleData.tire_size}` : null
         }
         
-        console.log('[RO Wizard] Final vehicle payload:', JSON.stringify(vehiclePayload, null, 2))
-        
         const vehicleResponse = await fetch('/api/vehicles', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -227,11 +243,9 @@ export function ROCreationWizard({ initialCustomerId, initialScheduledStart, ini
 
         const vehicleResult = await vehicleResponse.json()
         vehicleId = vehicleResult.vehicle.id
-        console.log("[RO Wizard] Vehicle created:", vehicleId)
       }
 
       // Step 3: Create work order
-      console.log("[RO Wizard] Creating work order...")
       const woResponse = await fetch('/api/work-orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -255,42 +269,49 @@ export function ROCreationWizard({ initialCustomerId, initialScheduledStart, ini
       }
 
       const woResult = await woResponse.json()
-      console.log("[RO Wizard] Work order created:", woResult.work_order.ro_number)
 
-      // Step 4: Persist selected services to work_order_items
+      // Step 4: Apply selected canned jobs and custom services
+      const workOrderId = woResult.work_order.id
       if (selectedServices.length > 0) {
-        console.log("[RO Wizard] Saving services to work order items...")
-        const workOrderId = woResult.work_order.id
         for (const service of selectedServices) {
-          const laborHours = service.labor.reduce((sum, item) => sum + (item.quantity || 0), 0)
-          const laborRate = service.labor.length > 0 ? service.labor[0].unitPrice || 0 : 0
-          const unitPrice = service.parts.reduce((sum, item) => sum + (item.unitPrice || 0), 0)
-
-          await fetch(`/api/work-orders/${workOrderId}/items`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              item_type: "labor",
-              description: service.name,
-              notes: service.description || null,
-              quantity: 1,
-              unit_price: unitPrice,
-              labor_hours: laborHours,
-              labor_rate: laborRate || 160,
-              is_taxable: true,
-              display_order: 0,
-            }),
-          })
+          if (service.cannedJobId) {
+            // Apply canned job via the dedicated endpoint
+            const applyRes = await fetch(`/api/work-orders/${workOrderId}/apply-canned-job`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ canned_job_id: service.cannedJobId }),
+            })
+            if (!applyRes.ok) {
+              console.error(`[RO Wizard] Failed to apply canned job ${service.name}:`, await applyRes.text())
+            }
+          } else {
+            // Custom service: create a basic service + labor item
+            await fetch(`/api/work-orders/${workOrderId}/items`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                item_type: "labor",
+                description: service.name,
+                notes: service.description || null,
+                quantity: 1,
+                unit_price: 0,
+                labor_hours: 0,
+                labor_rate: defaultLaborRate,
+                is_taxable: true,
+                display_order: 0,
+              }),
+            })
+          }
         }
       }
 
       // Success! Navigate to the new RO
-      alert(`✅ Repair Order ${woResult.work_order.ro_number} created successfully!`)
+      toast.success(`Repair Order ${woResult.work_order.ro_number} created successfully!`)
       router.push(`/repair-orders/${woResult.work_order.id}`)
 
     } catch (error: any) {
       console.error("[RO Wizard] Error:", error)
-      alert(`Failed to create repair order: ${error.message}`)
+      toast.error(`Failed to create repair order: ${error.message}`)
     } finally {
       setIsCreating(false)
     }

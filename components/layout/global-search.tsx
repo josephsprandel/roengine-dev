@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { MagnifyingGlass, Microphone, MicrophoneSlash, CircleNotch } from '@phosphor-icons/react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,7 @@ interface GlobalSearchProps {
 }
 
 export function GlobalSearch({ className }: GlobalSearchProps) {
+  const router = useRouter()
   const [query, setQuery] = useState('')
   const [isListening, setIsListening] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -28,13 +30,11 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
       recognizer.lang = 'en-US'
 
       recognizer.onstart = () => {
-        console.log('[Voice] Started listening')
         setIsListening(true)
       }
 
       recognizer.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript
-        console.log('[Voice] Transcript:', transcript)
         setQuery(transcript)
         
         // If final result, process it
@@ -53,7 +53,6 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
       }
 
       recognizer.onend = () => {
-        console.log('[Voice] Stopped listening')
         setIsListening(false)
       }
 
@@ -80,7 +79,6 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
   }
 
   const handleVoiceCommand = async (command: string) => {
-    console.log('[Voice] Processing command:', command)
     setIsProcessing(true)
 
     const lowerCommand = command.toLowerCase()
@@ -107,8 +105,7 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
 
     // Navigate directly to search results page for search queries
     if (isSearchCommand) {
-      console.log('[Search] Navigating to search page for:', command)
-      window.location.href = `/search?q=${encodeURIComponent(command)}`
+      router.push(`/search?q=${encodeURIComponent(command)}`)
       return
     }
 
@@ -138,8 +135,7 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
       await processAICommand(command)
     } else {
       // Default: treat as search
-      console.log('[Search] Default search for:', command)
-      window.location.href = `/search?q=${encodeURIComponent(command)}`
+      router.push(`/search?q=${encodeURIComponent(command)}`)
     }
 
     setIsProcessing(false)
@@ -165,8 +161,6 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
 
       const data = await response.json()
       
-      console.log('[Voice] AI Response:', data)
-
       // Speak the response
       if (data.message && 'speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(data.message)
@@ -175,29 +169,23 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
         window.speechSynthesis.speak(utterance)
       }
 
-      // Show visual response (TODO: implement notification/modal system)
-      console.log('[Voice] AI Message:', data.message)
-
       // Execute action if needed
       if (data.action === 'navigate' && data.url) {
         setTimeout(() => {
-          window.location.href = data.url
+          router.push(data.url)
         }, 1000) // Small delay for voice response
       }
 
       // For maintenance recommendations, we could trigger a modal
       if (data.action === 'show_maintenance_dialog' && data.data) {
-        console.log('[Voice] Maintenance data:', data.data)
         // TODO: Trigger maintenance dialog/modal
       }
 
       // Handle AI-powered search results - navigate to search results page
       if (data.action === 'show_search_results' && data.action_data) {
-        console.log('[Search] AI Search Results:', data.action_data)
-        
         // Navigate to search results page with the query
         const searchQuery = encodeURIComponent(command)
-        window.location.href = `/search?q=${searchQuery}`
+        router.push(`/search?q=${searchQuery}`)
       }
 
     } catch (error) {
@@ -214,11 +202,7 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
   }
 
   const handleSearch = (searchQuery: string) => {
-    // Your existing search logic
-    console.log('[Search] Searching for:', searchQuery)
     // TODO: Implement global search across ROs, customers, vehicles
-    
-    // For now, just log
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(
         `Searching for ${searchQuery}`

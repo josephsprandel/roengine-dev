@@ -6,27 +6,19 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    console.log('=== API WORK ORDER DETAIL ===')
     const resolvedParams = await context.params
-    console.log('Raw params:', resolvedParams)
-    
+
     const { id } = resolvedParams
-    console.log('ID from params:', id)
-    console.log('ID type:', typeof id)
-    
+
     const workOrderId = parseInt(id, 10)
-    console.log('Parsed ID:', workOrderId)
-    console.log('Is NaN:', isNaN(workOrderId))
 
     if (isNaN(workOrderId)) {
-      console.error('Invalid ID - not a number')
       return NextResponse.json(
         { error: 'Invalid work order ID', received: id },
         { status: 400 }
       )
     }
 
-    console.log('Executing SQL query for ID:', workOrderId)
     const result = await query(
       `SELECT
         wo.id, wo.ro_number, wo.customer_id, wo.vehicle_id,
@@ -56,20 +48,13 @@ export async function GET(
       [workOrderId]
     )
 
-    console.log('Query returned rows:', result.rows.length)
-    
     if (result.rows.length === 0) {
-      console.log('No work order found for ID:', workOrderId)
       return NextResponse.json(
         { error: 'Work order not found' },
         { status: 404 }
       )
     }
 
-    console.log('Work order found:', result.rows[0].ro_number)
-    console.log('Full work order data:', JSON.stringify(result.rows[0], null, 2))
-    console.log('============================')
-    
     return NextResponse.json({
       work_order: result.rows[0]
     })

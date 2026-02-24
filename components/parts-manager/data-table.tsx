@@ -94,13 +94,12 @@ export function DataTable<TData, TValue>({
   })
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Table Container with Scroll */}
-      <div className="flex-1 border rounded-lg overflow-auto min-h-0">
+    <div>
+      <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader className="sticky top-0 bg-card z-10">
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
+              <TableRow key={headerGroup.id} className="bg-muted/30">
                 {headerGroup.headers.map((header) => {
                   return (
                     <TableHead key={header.id}>
@@ -118,12 +117,12 @@ export function DataTable<TData, TValue>({
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
+              table.getRowModel().rows.map((row, index) => (
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
                   onClick={() => onRowClick?.(row.original)}
-                  className={onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}
+                  className={`${index % 2 === 1 ? "bg-muted/20" : ""} ${onRowClick ? "cursor-pointer" : ""} hover:bg-accent/50 transition-colors`}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
@@ -144,7 +143,7 @@ export function DataTable<TData, TValue>({
       </div>
 
       {/* Pagination Controls */}
-      <div className="flex items-center justify-between px-2 py-4 border-t">
+      <div className="flex items-center justify-between px-2 py-4">
         <div className="flex items-center space-x-2">
           <p className="text-sm text-muted-foreground">Rows per page</p>
           <Select

@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { format } from "date-fns"
-import type { ServiceData, LineItem } from "./ro-creation-wizard"
+import type { ServiceData, LineItem, InspectionItem } from "./ro-creation-wizard"
 import { EditableServiceCard, createLineItem } from "./editable-service-card"
 import type { LineItemCategory } from "./editable-service-card"
 import { PartsSelectionModal } from "./parts-selection-modal"
@@ -43,14 +43,19 @@ import { InvoiceCalculations } from "@/components/invoices/InvoiceCalculations"
 import { JobStateBadge } from "./ro-detail/JobStateBadge"
 import { TransferDialog } from "./ro-detail/TransferDialog"
 import { TransferHistory } from "./ro-detail/TransferHistory"
+import { ActivityLog } from "./ro-detail/ActivityLog"
 import type { JobState } from "@/lib/job-states"
 
-import { ArrowRightLeft } from "lucide-react"
+import { ArrowRightLeft, ClipboardList, Send } from "lucide-react"
+import { CannedJobPickerDialog } from "./canned-job-picker-dialog"
+import { SMSDialog } from "./ro-detail/SMSDialog"
+import { EmailDialog } from "./ro-detail/EmailDialog"
+import { SendToCustomerDialog } from "./ro-detail/SendToCustomerDialog"
 
 /**
  * Convert database services with items to ServiceData format
  */
-function convertDbServicesToServiceData(dbServices: any[]): ServiceData[] {
+function convertDbServicesToServiceData(dbServices: any[], defaultLaborRate: number = 160): ServiceData[] {
   return dbServices.map((svc) => {
     const items = svc.items || []
 
@@ -65,7 +70,7 @@ function convertDbServicesToServiceData(dbServices: any[]): ServiceData[] {
         id: `${item.item_type?.[0] || 'i'}${item.id}`,
         description: item.description || '',
         quantity: parseFloat(item.item_type === 'labor' ? item.labor_hours || 0 : item.quantity || 1),
-        unitPrice: parseFloat(item.item_type === 'labor' ? item.labor_rate || 160 : item.unit_price || 0), // TODO: Move default labor_rate 160 to shop settings
+        unitPrice: parseFloat(item.item_type === 'labor' ? item.labor_rate || defaultLaborRate : item.unit_price || 0),
         total: parseFloat(item.line_total || 0),
       }
 
@@ -96,6 +101,23 @@ function convertDbServicesToServiceData(dbServices: any[]): ServiceData[] {
       + hazmat.reduce((s, i) => s + i.total, 0)
       + fees.reduce((s, i) => s + i.total, 0)
 
+    // Map inspection results if present
+    const inspectionItems: InspectionItem[] = (svc.inspection_items || []).map((r: any) => ({
+      id: r.id,
+      inspection_item_id: r.inspection_item_id,
+      item_name: r.item_name,
+      status: r.status || 'pending',
+      tech_notes: r.tech_notes || null,
+      ai_cleaned_notes: r.ai_cleaned_notes || null,
+      condition: r.condition || null,
+      measurement_value: r.measurement_value != null ? parseFloat(r.measurement_value) : null,
+      measurement_unit: r.measurement_unit || null,
+      photos: r.photos || [],
+      inspected_by_name: r.inspected_by_name || null,
+      inspected_at: r.inspected_at || null,
+      finding_recommendation_id: r.finding_recommendation_id || null,
+    }))
+
     return {
       id: `svc-${svc.id}`,
       name: svc.title || 'Unnamed Service',
@@ -110,6 +132,7 @@ function convertDbServicesToServiceData(dbServices: any[]): ServiceData[] {
       sublets,
       hazmat,
       fees,
+      inspectionItems: inspectionItems.length > 0 ? inspectionItems : undefined,
     }
   })
 }
@@ -197,7 +220,16 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   // Schedule date editing
   const [editingArrival, setEditingArrival] = useState(false)
   const [editingCompletion, setEditingCompletion] = useState(false)
-  
+  const [cannedJobPickerOpen, setCannedJobPickerOpen] = useState(false)
+  const [smsDialogOpen, setSmsDialogOpen] = useState(false)
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false)
+  const [sendToCustomerOpen, setSendToCustomerOpen] = useState(false)
+  const [recommendationsReviewed, setRecommendationsReviewed] = useState(true) // default true so button isn't gated when no AI recs
+
+  const handleReviewStatusChange = useCallback((reviewed: boolean) => {
+    setRecommendationsReviewed(reviewed)
+  }, [])
+
   const handleSave = useCallback(() => {
     setIsEditing(false)
   }, [])
@@ -207,8 +239,29 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     setTimeout(() => setToast(null), 3500)
   }, [])
 
+  // Default labor rate from shop profile
+  const [defaultLaborRate, setDefaultLaborRate] = useState(160)
+
+  // Fetch default labor rate from shop profile
+  useEffect(() => {
+    fetch('/api/settings/shop-profile')
+      .then(r => r.json())
+      .then(data => {
+        if (data.profile?.default_labor_rate) {
+          setDefaultLaborRate(parseFloat(data.profile.default_labor_rate) || 160)
+        }
+      })
+      .catch(() => { /* uses default values on failure */ })
+  }, [])
+
   // Ref to store recommendations reload function
   const reloadRecommendationsRef = useRef<(() => Promise<void>) | null>(null)
+
+  // Wrap convertDbServicesToServiceData with defaultLaborRate
+  const convertWithLaborRate = useCallback(
+    (dbServices: any[]) => convertDbServicesToServiceData(dbServices, defaultLaborRate),
+    [defaultLaborRate]
+  )
 
   // Service Management hook - handles services CRUD, drag & drop, expanded state
   const {
@@ -228,7 +281,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     toggleServiceExpanded,
   } = useServiceManagement({
     workOrderId: workOrder?.id,
-    convertDbServicesToServiceData,
+    convertDbServicesToServiceData: convertWithLaborRate,
   })
 
   // ALL useMemo and useCallback MUST ALSO BE AT THE TOP
@@ -253,7 +306,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
 
   // Calculate grand total with tax
   const grandTotalWithTax = useMemo(() => {
-    const taxRate = invoiceSettings?.sales_tax_rate || 0.1225
+    const taxRate = invoiceSettings?.sales_tax_rate || 0
     const partsTaxable = invoiceSettings?.parts_taxable ?? true
     const laborTaxable = invoiceSettings?.labor_taxable ?? true
     const taxableAmount = 
@@ -633,6 +686,16 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
               flash={jobStateFlash}
             />
           )}
+          <Button
+            size="sm"
+            className="gap-2"
+            onClick={() => setSendToCustomerOpen(true)}
+            disabled={!recommendationsReviewed}
+            title={!recommendationsReviewed ? 'Review AI recommendations before sending' : undefined}
+          >
+            <Send size={16} />
+            Send to Customer
+          </Button>
         </div>
         <div className="flex items-center gap-4 flex-shrink-0">
           {/* Arrival date */}
@@ -745,6 +808,8 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           email={workOrder.email}
           address={fullAddress}
           onEdit={() => setCustomerEditOpen(true)}
+          onSMS={() => setSmsDialogOpen(true)}
+          onEmail={() => setEmailDialogOpen(true)}
         />
 
         <VehicleInfoCard
@@ -771,6 +836,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         onReady={(reloadFn) => {
           reloadRecommendationsRef.current = reloadFn
         }}
+        onReviewStatusChange={handleReviewStatusChange}
       />
 
       {/* Main Content - Full Width */}
@@ -845,10 +911,19 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
                 <Sparkles size={16} />
                 AI Recommend Services
               </Button>
-              <Button 
-                size="sm" 
-                variant="outline" 
-                className="gap-2 bg-transparent" 
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2 bg-transparent"
+                onClick={() => setCannedJobPickerOpen(true)}
+              >
+                <ClipboardList size={16} />
+                Add Canned Job
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2 bg-transparent"
                 onClick={addService}
               >
                 <Plus size={16} />
@@ -884,6 +959,15 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           </div>
         </Card>
 
+        {workOrder && (
+          <CannedJobPickerDialog
+            open={cannedJobPickerOpen}
+            onOpenChange={setCannedJobPickerOpen}
+            workOrderId={workOrder.id}
+            onApplied={reloadServices}
+          />
+        )}
+
         <InvoiceCalculations
           partsSubtotal={totals.parts}
           laborSubtotal={totals.labor}
@@ -893,7 +977,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           shopSupplies={0}
           subtotalBeforeTax={totals.total}
           tax={(() => {
-            const taxRate = invoiceSettings?.sales_tax_rate || 0.1225
+            const taxRate = invoiceSettings?.sales_tax_rate || 0
             const partsTaxable = invoiceSettings?.parts_taxable ?? true
             const laborTaxable = invoiceSettings?.labor_taxable ?? true
             const taxableAmount = 
@@ -901,9 +985,9 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
               (laborTaxable ? totals.labor : 0)
             return taxableAmount * taxRate
           })()}
-          taxRate={invoiceSettings?.sales_tax_rate || 0.1225}
+          taxRate={invoiceSettings?.sales_tax_rate || 0}
           grandTotal={(() => {
-            const taxRate = invoiceSettings?.sales_tax_rate || 0.1225
+            const taxRate = invoiceSettings?.sales_tax_rate || 0
             const partsTaxable = invoiceSettings?.parts_taxable ?? true
             const laborTaxable = invoiceSettings?.labor_taxable ?? true
             const taxableAmount = 
@@ -967,6 +1051,8 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           refreshKey={transferRefreshKey}
         />
 
+        <ActivityLog workOrderId={workOrder.id} />
+
         <ActionButtons
           onApprove={handleApprove}
           onComplete={handleComplete}
@@ -978,6 +1064,52 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         />
 
       </div>
+
+      {/* SMS Dialog */}
+      <SMSDialog
+        open={smsDialogOpen}
+        onOpenChange={setSmsDialogOpen}
+        customerId={workOrder.customer_id}
+        customerName={workOrder.customer_name}
+        phone={workOrder.phone_mobile || workOrder.phone_primary}
+        workOrderId={workOrder.id}
+        roNumber={workOrder.ro_number}
+        vehicleYear={workOrder.year}
+        vehicleMake={workOrder.make}
+        vehicleModel={workOrder.model}
+        grandTotal={grandTotalWithTax}
+      />
+
+      {/* Email Dialog */}
+      <EmailDialog
+        open={emailDialogOpen}
+        onOpenChange={setEmailDialogOpen}
+        customerId={workOrder.customer_id}
+        customerName={workOrder.customer_name}
+        email={workOrder.email || ''}
+        workOrderId={workOrder.id}
+        roNumber={workOrder.ro_number}
+        vehicleYear={workOrder.year}
+        vehicleMake={workOrder.make}
+        vehicleModel={workOrder.model}
+        grandTotal={grandTotalWithTax}
+      />
+
+      {/* Send to Customer Dialog */}
+      <SendToCustomerDialog
+        open={sendToCustomerOpen}
+        onOpenChange={setSendToCustomerOpen}
+        workOrderId={workOrder.id}
+        customerId={workOrder.customer_id}
+        customerName={workOrder.customer_name}
+        phone={workOrder.phone_mobile || workOrder.phone_primary}
+        email={workOrder.email}
+        vehicleYear={workOrder.year}
+        vehicleMake={workOrder.make}
+        vehicleModel={workOrder.model}
+        grandTotal={grandTotalWithTax}
+        roNumber={workOrder.ro_number}
+      />
 
       {/* Customer Edit Dialog */}
       <CustomerCreateDialog

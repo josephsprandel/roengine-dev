@@ -1,12 +1,12 @@
 "use client"
 
-import { Clock } from "@phosphor-icons/react"
+import { Clock, Plus } from "@phosphor-icons/react"
 import { Bell, ArrowRightLeft, Check, ExternalLink, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { GlobalSearch } from "@/components/layout/global-search"
 import { useTransferNotifications, type TransferNotification } from "@/contexts/transfer-notifications-context"
 import { useRouter } from "next/navigation"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 
 // Individual row in the bell dropdown
 function DropdownTransferRow({ transfer, onClose }: { transfer: TransferNotification; onClose: () => void }) {
@@ -169,9 +169,61 @@ function TransferBell() {
   )
 }
 
-export function Header() {
+function ShopStatusBadge() {
+  const [status, setStatus] = useState<{ isOpen: boolean; todayLabel: string } | null>(null)
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings/shop-status")
+      if (res.ok) {
+        const data = await res.json()
+        setStatus({ isOpen: data.isOpen, todayLabel: data.todayLabel })
+      }
+    } catch {
+      // Silently fail — badge will show loading state
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchStatus()
+    const interval = setInterval(fetchStatus, 60_000) // refresh every minute
+    return () => clearInterval(interval)
+  }, [fetchStatus])
+
+  if (!status) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border border-border text-sm text-muted-foreground">
+        <Clock size={16} />
+        <span>Shop: …</span>
+      </div>
+    )
+  }
+
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur supports-[backdrop-filter]:bg-slate-50/60 dark:supports-[backdrop-filter]:bg-slate-900/60">
+    <div
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm ${
+        status.isOpen
+          ? "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400"
+          : "bg-card border-border text-muted-foreground"
+      }`}
+      title={status.todayLabel}
+    >
+      <div
+        className={`w-2 h-2 rounded-full ${
+          status.isOpen ? "bg-green-500 animate-pulse" : "bg-muted-foreground/40"
+        }`}
+      />
+      <span>Shop: {status.isOpen ? "Open" : "Closed"}</span>
+      <span className="text-xs opacity-70">{status.todayLabel}</span>
+    </div>
+  )
+}
+
+export function Header() {
+  const router = useRouter()
+
+  return (
+    <header className="sticky top-0 z-20 border-b border-border bg-slate-50 dark:bg-slate-900">
       <div className="flex items-center justify-between px-6 py-4">
         {/* Voice-Enabled Search */}
         <div className="flex-1 max-w-md">
@@ -180,11 +232,19 @@ export function Header() {
 
         {/* Right section */}
         <div className="flex items-center gap-4 ml-4">
+          {/* Create New RO */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+            onClick={() => router.push("/repair-orders/new")}
+          >
+            <Plus size={16} weight="bold" />
+            New RO
+          </Button>
+
           {/* Status indicator */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border border-border text-sm text-muted-foreground">
-            <Clock size={16} />
-            <span>Shop: Open</span>
-          </div>
+          <ShopStatusBadge />
 
           {/* Transfer bell notification */}
           <TransferBell />

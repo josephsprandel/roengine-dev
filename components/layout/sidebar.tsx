@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { List, X, Wrench, SquaresFour, Users, ChatCircle, Gear, Lightning, ChartBar, Package, Trash, SignOut, UserCircle, CaretUp, CalendarBlank } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 import Image from "next/image"
 import { useAuth } from "@/contexts/auth-context"
 import {
@@ -43,7 +44,7 @@ export function Sidebar() {
             }
           }
         })
-        .catch(() => {})
+        .catch(() => { /* uses default values on failure */ })
     }
 
     fetchShopProfile()
@@ -65,7 +66,7 @@ export function Sidebar() {
     { icon: Wrench, label: "Repair Orders", href: "/repair-orders" },
     { icon: Users, label: "Customers", href: "/customers" },
     { icon: Package, label: "Parts Manager", href: "/parts-manager" },
-    { icon: ChatCircle, label: "Communications", href: "#" },
+    { icon: ChatCircle, label: "Communications", href: "/communications" },
     { icon: ChartBar, label: "Analytics", href: "#" },
     { icon: Lightning, label: "AI Assistant", href: "/ai-assistant", beta: true },
     { icon: Trash, label: "Recycle Bin", href: "/recycle-bin" },
@@ -85,7 +86,7 @@ export function Sidebar() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:static inset-y-0 left-0 z-30 w-64 bg-slate-100 dark:bg-slate-900 border-r border-sidebar-border transition-transform duration-300 lg:translate-x-0 flex flex-col",
+          "fixed lg:sticky inset-y-0 left-0 lg:top-0 lg:h-screen z-30 w-64 bg-slate-100 dark:bg-slate-900 border-r border-sidebar-border transition-transform duration-300 lg:translate-x-0 flex flex-col overflow-y-auto shrink-0",
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -117,6 +118,7 @@ export function Sidebar() {
             <a
               key={item.label}
               href={item.href}
+              onClick={() => setIsOpen(false)}
               className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >
               <item.icon size={18} />
@@ -149,7 +151,7 @@ export function Sidebar() {
                 <p className="text-xs text-muted-foreground font-normal">{user?.email}</p>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => alert("Coming soon")}>
+              <DropdownMenuItem onClick={() => toast.info("Profile settings coming soon")}>
                 <UserCircle size={16} />
                 Profile Settings
               </DropdownMenuItem>

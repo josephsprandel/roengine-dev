@@ -78,16 +78,10 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
    */
   const saveRecommendationsToDatabase = async (services: any[]) => {
     if (!workOrder?.vehicle_id || !services || services.length === 0) {
-      console.log('[DEBUG] Skip save: no vehicle_id or no services')
-      console.log('[DEBUG] workOrder.vehicle_id:', workOrder?.vehicle_id)
       return
     }
 
     try {
-      console.log('[DEBUG] Saving recommendations to database...')
-      console.log('[DEBUG] Vehicle ID:', workOrder.vehicle_id)
-      console.log('[DEBUG] Vehicle ID type:', typeof workOrder.vehicle_id)
-      console.log('[DEBUG] Services count:', services.length)
 
       // Ensure vehicle_id is a number
       const vehicleId = typeof workOrder.vehicle_id === 'string'
@@ -115,12 +109,9 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
       }
 
       const saveData = await saveResponse.json()
-      console.log('[DEBUG] Save successful:', saveData)
-      console.log('[DEBUG] Saved recommendation IDs:', saveData.recommendation_ids)
 
       // Trigger recommendations reload in the UI
       if (onRecommendationsSaved) {
-        console.log('[DEBUG] Triggering recommendations reload')
         onRecommendationsSaved()
       }
 
@@ -140,7 +131,6 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
     if (!workOrder || services.length === 0) return services
 
     try {
-      console.log('[DEBUG] Looking up parts pricing for', services.length, 'services...')
       setLoadingStep('Looking up parts & pricing...')
 
       const partsResponse = await fetch('/api/services/generate-parts-list', {
@@ -167,7 +157,6 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
       }
 
       const { servicesWithParts } = await partsResponse.json()
-      console.log('[DEBUG] Parts returned for', servicesWithParts?.length || 0, 'services')
 
       // Merge priced parts back into the services array
       const mergedServices = services.map(service => {
@@ -212,7 +201,6 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
         }
       })
 
-      console.log('[DEBUG] Parts merged into services successfully')
       return mergedServices
 
     } catch (error) {
@@ -222,10 +210,7 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
   }
 
   const fetchRecommendations = useCallback(async () => {
-    console.log('[DEBUG] AI Recommend clicked')
-
     if (!workOrder) {
-      console.log('[DEBUG] No workOrder available')
       return
     }
 
@@ -238,10 +223,8 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
     try {
       // Get current mileage from user
       const mileage = prompt("Enter current mileage:")
-      console.log('[DEBUG] Mileage entered:', mileage)
 
       if (!mileage) {
-        console.log('[DEBUG] No mileage provided, aborting')
         setAiLoading(false)
         return
       }
@@ -253,19 +236,14 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
         mileage: parseInt(mileage),
         vin: workOrder.vin
       }
-      console.log('[DEBUG] Request body:', requestBody)
 
       const url = "/api/maintenance-recommendations"
-      console.log('[DEBUG] Calling API:', url)
 
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       })
-
-      console.log('[DEBUG] Response status:', response.status)
-      console.log('[DEBUG] Response ok:', response.ok)
 
       if (!response.ok) {
         const errorText = await response.text()
@@ -274,7 +252,6 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
       }
 
       const data = await response.json()
-      console.log('[DEBUG] Response data:', data)
 
       /**
        * MULTIPLE VARIANTS HANDLING
@@ -287,9 +264,6 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
        * Why: Don't save irrelevant data (2.0L recommendations for 1.5L car)
        */
       if (data.multiple_variants) {
-        console.log('[DEBUG] Multiple variants detected:', data.variants?.length)
-        console.log('[DEBUG] Variants:', data.variants)
-
         // Store variants and show selector dialog
         setAvailableVariants(data.variants || [])
         setAiSource(data.source)
@@ -311,12 +285,9 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
         await saveRecommendationsToDatabase(servicesWithPricing)
       }
 
-      console.log('[DEBUG] Services set:', data.services?.length || 0, 'services')
-      console.log('[DEBUG] Source:', data.source)
     } catch (error) {
       console.error('[DEBUG] AI recommendation error:', error)
     } finally {
-      console.log('[DEBUG] Setting loading to false')
       setAiLoading(false)
       setLoadingStep('')
     }
@@ -332,8 +303,6 @@ export function useAIRecommendations({ workOrder, onRecommendationsSaved }: UseA
 
   const confirmVariantSelection = useCallback(async () => {
     if (!selectedVariant) return
-
-    console.log('[DEBUG] Variant selected:', selectedVariant)
 
     const services = selectedVariant.services || []
 

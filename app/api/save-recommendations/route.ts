@@ -14,17 +14,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { Pool } from 'pg'
+import { getShopInfo } from '@/lib/email-templates'
 
 // Database connection pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://shopops:shopops_dev@localhost:5432/shopops3',
 })
-
-/**
- * Default Labor Rate
- * Used as fallback if shop labor rate cannot be fetched
- */
-const DEFAULT_LABOR_RATE = 160
 
 /**
  * Map AI urgency levels to existing database priority field
@@ -96,16 +91,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch shop labor rate
-    const laborRateResult = await pool.query(`
-      SELECT rate_per_hour
-      FROM labor_rates
-      WHERE is_default = true
-      LIMIT 1
-    `)
-    const shopLaborRate = laborRateResult.rows.length > 0
-      ? parseFloat(laborRateResult.rows[0].rate_per_hour) || DEFAULT_LABOR_RATE
-      : DEFAULT_LABOR_RATE
+    // Fetch shop labor rate from shop_profile
+    const shopInfo = await getShopInfo()
+    const shopLaborRate = shopInfo.laborRate
 
     // Insert recommendations
     const insertedIds: number[] = []

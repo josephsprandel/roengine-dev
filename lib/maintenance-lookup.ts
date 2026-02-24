@@ -7,6 +7,11 @@
  *   Tier 2: relaxed engine (year + make + model + displacement only)
  *   Tier 3: model-only (year + make + model)
  *
+ * After querying, items are classified into three buckets:
+ *   A: "excluded" — dashboard minders/resets, never shown
+ *   B: "inspection" — shown at $0, friendly language
+ *   C: "service" — real services with pricing and urgency
+ *
  * @see maintenance_schedule/docs/ARCHITECTURE.md
  * @see maintenance_schedule/sql/maintenance_schedule_schema.sql
  */
@@ -69,7 +74,7 @@ interface FluidSpec {
   oem_part_number: string | null
 }
 
-interface FormattedService {
+export interface FormattedService {
   service_name: string
   mileage_interval: number
   service_category: string
@@ -83,6 +88,11 @@ interface FormattedService {
   priority: number
   mileage_until_due: number
   reason: string
+  // New classification fields
+  is_inspection: boolean
+  is_excluded: boolean
+  item_classification: 'service' | 'inspection' | 'excluded'
+  customer_display_urgency: string
 }
 
 interface VariantResult {
@@ -129,6 +139,14 @@ export interface LookupParams {
   fuel_type?: string
   drive_type?: string
   transmission_type?: string
+}
+
+export interface UrgencyResult {
+  urgency: 'OVERDUE' | 'DUE_NOW' | 'COMING_SOON' | 'NOT_DUE'
+  priority: number
+  mileage_until_due: number
+  reason: string
+  customer_display_urgency: string
 }
 
 // ---------------------------------------------------------------------------
@@ -219,6 +237,168 @@ const FLUID_TYPE_TO_ITEM: Record<string, string> = {
   transfer_case: 'Transfer Case Fluid',
   brake_fluid: 'Brake Fluid',
   power_steering: 'Power Steering Fluid',
+}
+
+// ---------------------------------------------------------------------------
+// Item classification (Step 3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Classify a schedule item into one of three buckets:
+ *   A: "excluded" — dashboard minders/resets, never shown
+ *   B: "inspection" — shown at $0, friendly language
+ *   C: "service" — real services with pricing and urgency
+ */
+function classifyItem(
+  itemName: string,
+  actionType: string
+): 'excluded' | 'inspection' | 'service' {
+  const nameLower = itemName.toLowerCase()
+  const actionLower = actionType.toLowerCase()
+
+  // --- BUCKET A: excluded ---
+  if (
+    nameLower.includes('minder') ||
+    nameLower.includes('indicator') ||
+    nameLower.includes('reset') ||
+    nameLower.includes('maintenance reminder') ||
+    nameLower.includes('oil life monitor') ||
+    actionLower === 'reset'
+  ) {
+    return 'excluded'
+  }
+  // Exact match for Maintenance Minder Code A / B (any action)
+  if (
+    nameLower === 'maintenance minder code a' ||
+    nameLower === 'maintenance minder code b'
+  ) {
+    return 'excluded'
+  }
+
+  // --- BUCKET B: inspection ---
+  // Exception: 'Battery service' is a real service even with diagnose_test action
+  const isBatteryService = nameLower === 'battery' || nameLower === 'battery service'
+
+  // Check action_type first
+  const inspectActions = ['inspect', 'check', 'diagnose_test', 'measure']
+  if (inspectActions.includes(actionLower)) {
+    // Battery service exception — treat as real service
+    if (isBatteryService && actionLower === 'diagnose_test') {
+      return 'service'
+    }
+    return 'inspection'
+  }
+
+  // Check item_name keywords (with exclusion list for real services)
+  const serviceKeywords = ['replace', 'change', 'flush', 'drain', 'fill', 'rotation', 'service']
+  const hasServiceKeyword = serviceKeywords.some((kw) => nameLower.includes(kw))
+
+  const inspectKeywords = ['inspect', 'check', 'adjust', 'test']
+  if (!hasServiceKeyword) {
+    for (const kw of inspectKeywords) {
+      if (nameLower.includes(kw)) {
+        return 'inspection'
+      }
+    }
+  }
+
+  // --- BUCKET C: service ---
+  return 'service'
+}
+
+// ---------------------------------------------------------------------------
+// Urgency calculation (Step 4)
+// ---------------------------------------------------------------------------
+
+/**
+ * Calculate urgency level using ABSOLUTE mile thresholds.
+ *
+ * Why absolute thresholds: A percentage-based system means a 30,000-mile
+ * service (spark plugs) has a 3,000-mile "overdue" window which is fine,
+ * but a 5,000-mile service (oil change) has only a 500-mile window which
+ * is too tight. Absolute thresholds treat all services equally.
+ *
+ * Exported for use in the Gemini fallback path in route.ts.
+ */
+export function calculateUrgency(
+  currentMileage: number,
+  intervalMiles: number,
+  isInspection: boolean = false
+): UrgencyResult {
+  const lastDueAt = Math.floor(currentMileage / intervalMiles) * intervalMiles
+  const milesSinceDue = currentMileage - lastDueAt
+  const milesUntilNextDue = intervalMiles - milesSinceDue
+
+  // Inspections always use friendly language
+  if (isInspection) {
+    // Still compute urgency level for internal sorting, but override display
+    let urgency: UrgencyResult['urgency'] = 'NOT_DUE'
+    let priority = 4
+    if (milesSinceDue > 1000 && lastDueAt > 0) {
+      urgency = 'OVERDUE'
+      priority = 1
+    } else if (milesUntilNextDue <= 1000) {
+      urgency = 'DUE_NOW'
+      priority = 2
+    } else if (milesUntilNextDue <= 3000) {
+      urgency = 'COMING_SOON'
+      priority = 3
+    }
+
+    return {
+      urgency,
+      priority,
+      mileage_until_due: milesUntilNextDue,
+      reason: 'Recommended at this mileage',
+      customer_display_urgency: 'Included with your service visit',
+    }
+  }
+
+  // Services — absolute thresholds
+  if (milesSinceDue > 1000 && lastDueAt > 0) {
+    // Overdue
+    const displayReason =
+      milesSinceDue > intervalMiles / 2
+        ? 'Overdue'
+        : `Overdue by ${milesSinceDue.toLocaleString()} miles`
+    return {
+      urgency: 'OVERDUE',
+      priority: 1,
+      mileage_until_due: -milesSinceDue,
+      reason: displayReason,
+      customer_display_urgency: displayReason,
+    }
+  }
+
+  if (milesUntilNextDue <= 1000) {
+    return {
+      urgency: 'DUE_NOW',
+      priority: 2,
+      mileage_until_due: milesUntilNextDue,
+      reason: 'Due now',
+      customer_display_urgency: 'Due now',
+    }
+  }
+
+  if (milesUntilNextDue <= 3000) {
+    const displayReason = `Due in ${milesUntilNextDue.toLocaleString()} miles`
+    return {
+      urgency: 'COMING_SOON',
+      priority: 3,
+      mileage_until_due: milesUntilNextDue,
+      reason: displayReason,
+      customer_display_urgency: displayReason,
+    }
+  }
+
+  const displayReason = `Due in ${milesUntilNextDue.toLocaleString()} miles`
+  return {
+    urgency: 'NOT_DUE',
+    priority: 4,
+    mileage_until_due: milesUntilNextDue,
+    reason: displayReason,
+    customer_display_urgency: displayReason,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -440,30 +620,89 @@ async function buildServicesForConfig(
   // Merge Engine Oil + Engine Oil Filter into single oil change service
   const merged = mergeOilChangeEntries(deduped)
 
-  // Build formatted services
-  const services: FormattedService[] = []
+  // Build formatted services with classification
+  const realServices: FormattedService[] = []
+  const inspectionItems: FormattedService[] = []
+
   for (const entry of merged) {
+    // Step 3: Classify the item
+    const classification = classifyItem(entry.item_name, entry.action_type)
+
+    // Bucket A: excluded — skip entirely
+    if (classification === 'excluded') continue
+
     const interval = getEffectiveInterval(entry, mileage)
     if (interval === null) continue
 
-    const urgencyInfo = calculateUrgency(mileage, interval)
+    const isInspection = classification === 'inspection'
+
+    // Step 4: Calculate urgency with new absolute thresholds
+    const urgencyInfo = calculateUrgency(mileage, interval, isInspection)
     const fluidSpec = fluidsByItem.get(entry.item_name)
 
-    services.push({
-      service_name: getServiceName(entry.item_name, entry.action_type),
+    // Format the service name — if not in SERVICE_NAME_MAP, use lowercase action
+    let serviceName = getServiceName(entry.item_name, entry.action_type)
+    // If getServiceName fell through to the default pattern, ensure action is lowercase
+    const mapKey = `${entry.item_name}:${entry.action_type}`
+    if (!SERVICE_NAME_MAP[mapKey]) {
+      serviceName = `${entry.item_name} ${entry.action_type.toLowerCase()}`
+    }
+
+    const service: FormattedService = {
+      service_name: serviceName,
       mileage_interval: interval,
       service_category: getServiceCategory(entry.item_name, entry.category_name),
       service_description: buildServiceDescription(entry, interval, fluidSpec),
       driving_condition: 'severe',
       parts: buildPartsFromFluidSpec(fluidSpec),
-      estimated_labor_hours: 0, // Route applies LABOR_STANDARDS fallback
+      estimated_labor_hours: isInspection ? 0 : 0, // Route applies LABOR_STANDARDS fallback for services
       labor_source: 'fallback',
       notes: entry.ah_recommendation_notes || entry.oem_description || '',
-      ...urgencyInfo,
-    })
+      urgency: urgencyInfo.urgency,
+      priority: urgencyInfo.priority,
+      mileage_until_due: urgencyInfo.mileage_until_due,
+      reason: urgencyInfo.reason,
+      is_inspection: isInspection,
+      is_excluded: false,
+      item_classification: classification,
+      customer_display_urgency: urgencyInfo.customer_display_urgency,
+    }
+
+    // Step 5: Filtering
+    if (isInspection) {
+      // Bucket B: inspections — always include regardless of urgency
+      inspectionItems.push(service)
+    } else {
+      // Bucket C: services — filter by urgency
+      if (
+        urgencyInfo.urgency === 'OVERDUE' ||
+        urgencyInfo.urgency === 'DUE_NOW'
+      ) {
+        realServices.push(service)
+      } else if (
+        urgencyInfo.urgency === 'COMING_SOON' &&
+        urgencyInfo.mileage_until_due <= 5000
+      ) {
+        realServices.push(service)
+      }
+      // NOT_DUE and COMING_SOON > 5000 miles: excluded from output
+    }
   }
 
-  return services
+  // Sort real services by priority, then alphabetically
+  realServices.sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority - b.priority
+    return a.service_name.localeCompare(b.service_name)
+  })
+
+  // Sort inspection items by priority, then alphabetically
+  inspectionItems.sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority - b.priority
+    return a.service_name.localeCompare(b.service_name)
+  })
+
+  // Final output: real services first, then inspections grouped at the end
+  return [...realServices, ...inspectionItems]
 }
 
 // ---------------------------------------------------------------------------
@@ -494,64 +733,6 @@ function getEffectiveInterval(
   if (entry.interval_miles) return entry.interval_miles
 
   return null
-}
-
-// ---------------------------------------------------------------------------
-// Urgency calculation
-// ---------------------------------------------------------------------------
-
-function calculateUrgency(
-  currentMileage: number,
-  intervalMiles: number
-): {
-  urgency: 'OVERDUE' | 'DUE_NOW' | 'COMING_SOON' | 'NOT_DUE'
-  priority: number
-  mileage_until_due: number
-  reason: string
-} {
-  const lastDueAt = Math.floor(currentMileage / intervalMiles) * intervalMiles
-  const milesSinceDue = currentMileage - lastDueAt
-  const milesUntilNextDue = intervalMiles - milesSinceDue
-
-  const tenPercent = intervalMiles * 0.10
-  const twentyFivePercent = intervalMiles * 0.25
-
-  // OVERDUE: past the interval boundary by >10% of the interval
-  if (milesSinceDue > tenPercent && lastDueAt > 0) {
-    return {
-      urgency: 'OVERDUE',
-      priority: 1,
-      mileage_until_due: -milesSinceDue,
-      reason: `Overdue by ${milesSinceDue.toLocaleString()} miles`,
-    }
-  }
-
-  // DUE_NOW: within 10% of interval remaining
-  if (milesUntilNextDue <= tenPercent) {
-    return {
-      urgency: 'DUE_NOW',
-      priority: 2,
-      mileage_until_due: milesUntilNextDue,
-      reason: 'Due now',
-    }
-  }
-
-  // COMING_SOON: within 25% of interval remaining
-  if (milesUntilNextDue <= twentyFivePercent) {
-    return {
-      urgency: 'COMING_SOON',
-      priority: 3,
-      mileage_until_due: milesUntilNextDue,
-      reason: `Due in ${milesUntilNextDue.toLocaleString()} miles`,
-    }
-  }
-
-  return {
-    urgency: 'NOT_DUE',
-    priority: 4,
-    mileage_until_due: milesUntilNextDue,
-    reason: `Due in ${milesUntilNextDue.toLocaleString()} miles`,
-  }
 }
 
 // ---------------------------------------------------------------------------

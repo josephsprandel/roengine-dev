@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { Pool } from 'pg'
+import { getShopInfo } from '@/lib/email-templates'
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://shopops:shopops_dev@localhost:5432/shopops3',
@@ -109,9 +110,13 @@ export async function POST(
       service_id
     } = body
 
+    // Fetch default labor rate from shop profile
+    const shopInfo = await getShopInfo()
+    const defaultLaborRate = shopInfo.laborRate
+
     // Calculate line total
-    const line_total = item_type === 'labor' 
-      ? (labor_hours || 0) * (labor_rate || 160)
+    const line_total = item_type === 'labor'
+      ? (labor_hours || 0) * (labor_rate || defaultLaborRate)
       : (quantity || 1) * (unit_price || 0)
 
     console.log('Inserting into database...')
@@ -150,7 +155,7 @@ export async function POST(
       unit_price || 0,
       line_total,
       labor_hours || null,
-      labor_rate || 160,
+      labor_rate || defaultLaborRate,
       is_taxable ?? true,
       display_order || 0,
       service_id || null
@@ -211,15 +216,19 @@ export async function PATCH(
     let paramIndex = 1
 
     // Calculate line_total if quantity or unit_price changed
-    if (updates.quantity !== undefined || updates.unit_price !== undefined || 
+    if (updates.quantity !== undefined || updates.unit_price !== undefined ||
         updates.labor_hours !== undefined || updates.labor_rate !== undefined) {
-      
+
+      // Fetch default labor rate from shop profile
+      const shopInfo = await getShopInfo()
+      const defaultLaborRate = shopInfo.laborRate
+
       // Get current item to calculate line_total
       const currentItem = await pool.query(
         'SELECT item_type, quantity, unit_price, labor_hours, labor_rate FROM work_order_items WHERE id = $1',
         [item_id]
       )
-      
+
       if (currentItem.rows.length > 0) {
         const item = currentItem.rows[0]
         const quantity = updates.quantity ?? item.quantity
@@ -228,7 +237,7 @@ export async function PATCH(
         const labor_rate = updates.labor_rate ?? item.labor_rate
 
         updates.line_total = item.item_type === 'labor'
-          ? (labor_hours || 0) * (labor_rate || 160)
+          ? (labor_hours || 0) * (labor_rate || defaultLaborRate)
           : (quantity || 1) * (unit_price || 0)
       }
     }

@@ -48,7 +48,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 // Routes that don't require authentication
 const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/book']
 // Route prefixes that don't require authentication
-const PUBLIC_ROUTE_PREFIXES = ['/estimates/', '/images/vehicles/', '/api/booking/']
+const PUBLIC_ROUTE_PREFIXES = ['/estimates/', '/images/vehicles/', '/api/booking/', '/tech']
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)

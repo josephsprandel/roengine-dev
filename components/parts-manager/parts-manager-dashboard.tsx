@@ -18,7 +18,7 @@ export function PartsManagerDashboard() {
   const [activeTab, setActiveTab] = useState("inventory")
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 space-y-4">
+    <div className="space-y-4">
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -102,7 +102,7 @@ export function PartsManagerDashboard() {
       </div>
 
       {/* Main Tabs */}
-      <Card className="flex flex-col flex-1 min-h-0 border-border">
+      <Card className="border-border">
         <CardHeader className="border-b border-border pb-0">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-5 bg-transparent border-b border-border rounded-none p-0 h-auto">
@@ -145,8 +145,8 @@ export function PartsManagerDashboard() {
           </Tabs>
         </CardHeader>
 
-        <CardContent className="flex flex-col flex-1 min-h-0 pt-4">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 min-h-0">
+        <CardContent className="pt-4">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsContent value="inventory">
               <PartsInventoryTab />
             </TabsContent>

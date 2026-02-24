@@ -22,6 +22,7 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { GripVertical, Plus, Pencil, Trash2, ChevronRight, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 import { getIcon, jobStateBadgeStyle } from "@/lib/job-states"
 import type { JobState } from "@/lib/job-states"
 import { JobStateFormDialog } from "./job-state-form-dialog"
@@ -189,6 +190,7 @@ export function JobStatesSettings() {
       })
     } catch (err) {
       console.error("Error reordering:", err)
+      toast.error('Failed to reorder job states')
       fetchStates() // Revert
     }
   }
