@@ -32,9 +32,9 @@ export async function GET(request: NextRequest) {
         v.year, v.make, v.model, v.vin, v.license_plate,
         u.id as created_by_id,
         wo.estimate_viewed_at,
-        (SELECT COUNT(*) FROM vehicle_recommendations vr WHERE vr.work_order_id = wo.id AND vr.estimate_sent_at IS NOT NULL)::int as estimate_sent_count,
-        (SELECT COUNT(*) FROM vehicle_recommendations vr WHERE vr.work_order_id = wo.id AND vr.status = 'customer_approved')::int as estimate_approved_count,
-        (SELECT COUNT(*) FROM vehicle_recommendations vr WHERE vr.work_order_id = wo.id AND vr.status = 'customer_declined')::int as estimate_declined_count
+        (SELECT COUNT(*) FROM vehicle_recommendations vr WHERE vr.vehicle_id = wo.vehicle_id AND vr.estimate_sent_at IS NOT NULL)::int as estimate_sent_count,
+        (SELECT COUNT(*) FROM vehicle_recommendations vr WHERE vr.vehicle_id = wo.vehicle_id AND vr.status = 'customer_approved')::int as estimate_approved_count,
+        (SELECT COUNT(*) FROM vehicle_recommendations vr WHERE vr.vehicle_id = wo.vehicle_id AND vr.status = 'customer_declined')::int as estimate_declined_count
       FROM work_orders wo
       LEFT JOIN customers c ON wo.customer_id = c.id
       LEFT JOIN vehicles v ON wo.vehicle_id = v.id
