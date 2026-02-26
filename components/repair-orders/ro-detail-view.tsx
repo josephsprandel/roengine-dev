@@ -46,7 +46,7 @@ import { TransferHistory } from "./ro-detail/TransferHistory"
 import { ActivityLog } from "./ro-detail/ActivityLog"
 import type { JobState } from "@/lib/job-states"
 
-import { ArrowRightLeft, ClipboardList, Send } from "lucide-react"
+import { ArrowRightLeft, ClipboardList, Send, Eye, Phone, Globe } from "lucide-react"
 import { CannedJobPickerDialog } from "./canned-job-picker-dialog"
 import { SMSDialog } from "./ro-detail/SMSDialog"
 import { EmailDialog } from "./ro-detail/EmailDialog"
@@ -141,7 +141,7 @@ interface WorkOrder {
   id: number
   ro_number: string
   customer_id: number
-  vehicle_id: number
+  vehicle_id: number | null
   state: string
   customer_name: string
   phone_primary: string
@@ -153,14 +153,14 @@ interface WorkOrder {
   city: string | null
   customer_state: string | null
   zip: string | null
-  year: number
-  make: string
-  model: string
+  year: number | null
+  make: string | null
+  model: string | null
   submodel: string | null
   engine: string | null
   transmission: string | null
   color: string | null
-  vin: string
+  vin: string | null
   license_plate: string | null
   license_plate_state: string | null
   mileage: number | null
@@ -189,6 +189,8 @@ interface WorkOrder {
   job_state_slug: string | null
   assigned_tech_id: number | null
   tech_name: string | null
+  booking_source: string | null
+  appointment_type: string | null
 }
 
 export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => void }) {
@@ -686,6 +688,18 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
               flash={jobStateFlash}
             />
           )}
+          {workOrder.booking_source === "phone" && (
+            <Badge variant="outline" className="gap-1 text-xs border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">
+              <Phone size={12} />
+              Phone Booking
+            </Badge>
+          )}
+          {workOrder.booking_source === "online" && (
+            <Badge variant="outline" className="gap-1 text-xs border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10">
+              <Globe size={12} />
+              Online Booking
+            </Badge>
+          )}
           <Button
             size="sm"
             className="gap-2"
@@ -695,6 +709,16 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           >
             <Send size={16} />
             Send to Customer
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-2"
+            onClick={() => window.open(`/estimates/${workOrder.id}?preview=true`, '_blank')}
+            title="Preview the customer-facing estimate page"
+          >
+            <Eye size={16} />
+            Preview as Customer
           </Button>
         </div>
         <div className="flex items-center gap-4 flex-shrink-0">
@@ -812,32 +836,40 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           onEmail={() => setEmailDialogOpen(true)}
         />
 
-        <VehicleInfoCard
-          year={workOrder.year}
-          make={workOrder.make}
-          model={workOrder.model}
-          vin={workOrder.vin}
-          manufactureDate={workOrder.manufacture_date}
-          engine={workOrder.engine}
-          licensePlate={workOrder.license_plate}
-          color={workOrder.color}
-          mileage={workOrder.mileage}
-          onEdit={() => setVehicleEditOpen(true)}
-        />
+        {workOrder.vehicle_id ? (
+          <VehicleInfoCard
+            year={workOrder.year!}
+            make={workOrder.make!}
+            model={workOrder.model!}
+            vin={workOrder.vin!}
+            manufactureDate={workOrder.manufacture_date}
+            engine={workOrder.engine}
+            licensePlate={workOrder.license_plate}
+            color={workOrder.color}
+            mileage={workOrder.mileage}
+            onEdit={() => setVehicleEditOpen(true)}
+          />
+        ) : (
+          <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+            No vehicle assigned yet
+          </div>
+        )}
       </div>
 
       {/* AI Maintenance Recommendations */}
-      <RecommendationsSection
-        vehicleId={workOrder.vehicle_id}
-        workOrderId={workOrder.id}
-        currentMileage={workOrder.mileage}
-        onRecommendationApproved={reloadServices}
-        onGenerateClick={aiRecommendations.fetchRecommendations}
-        onReady={(reloadFn) => {
-          reloadRecommendationsRef.current = reloadFn
-        }}
-        onReviewStatusChange={handleReviewStatusChange}
-      />
+      {workOrder.vehicle_id && (
+        <RecommendationsSection
+          vehicleId={workOrder.vehicle_id}
+          workOrderId={workOrder.id}
+          currentMileage={workOrder.mileage}
+          onRecommendationApproved={reloadServices}
+          onGenerateClick={aiRecommendations.fetchRecommendations}
+          onReady={(reloadFn) => {
+            reloadRecommendationsRef.current = reloadFn
+          }}
+          onReviewStatusChange={handleReviewStatusChange}
+        />
+      )}
 
       {/* Main Content - Full Width */}
       <div className="space-y-4">
@@ -878,23 +910,27 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           <Card className="p-3 border-border">
             <p className="text-xs text-muted-foreground mb-1">Due Date</p>
             <p className="text-sm font-medium text-foreground">
-              {workOrder.date_promised ? new Date(workOrder.date_promised).toLocaleDateString() : "TBD"}
+              {workOrder.date_promised ? new Date(workOrder.date_promised).toLocaleDateString() : "—"}
             </p>
           </Card>
 
-          <Card className="p-3 border-border">
-            <p className="text-xs text-muted-foreground mb-1">Customer Concern</p>
-            <p className="text-sm font-medium text-foreground italic line-clamp-2">
-              {workOrder.customer_concern || "None specified"}
-            </p>
-          </Card>
+          {workOrder.customer_concern && (
+            <Card className="p-3 border-border">
+              <p className="text-xs text-muted-foreground mb-1">Customer Concern</p>
+              <p className="text-sm font-medium text-foreground italic line-clamp-2">
+                {workOrder.customer_concern}
+              </p>
+            </Card>
+          )}
 
-          <Card className="p-3 border-border">
-            <p className="text-xs text-muted-foreground mb-1">License Plate</p>
-            <p className="text-sm font-medium text-foreground">
-              {workOrder.license_plate || "N/A"}
-            </p>
-          </Card>
+          {workOrder.license_plate && (
+            <Card className="p-3 border-border">
+              <p className="text-xs text-muted-foreground mb-1">License Plate</p>
+              <p className="text-sm font-medium text-foreground">
+                {workOrder.license_plate}
+              </p>
+            </Card>
+          )}
         </div>
 
         {/* Services Section - Takes Full Width */}
@@ -1136,31 +1172,33 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
       />
 
       {/* Vehicle Edit Dialog */}
-      <VehicleEditDialog
-        open={vehicleEditOpen}
-        onOpenChange={setVehicleEditOpen}
-        vehicle={workOrder ? {
-          id: workOrder.vehicle_id.toString(),
-          customer_id: workOrder.customer_id.toString(),
-          vin: workOrder.vin,
-          year: workOrder.year,
-          make: workOrder.make,
-          model: workOrder.model,
-          submodel: workOrder.submodel,
-          engine: workOrder.engine,
-          transmission: workOrder.transmission,
-          color: workOrder.color,
-          license_plate: workOrder.license_plate,
-          license_plate_state: workOrder.license_plate_state,
-          mileage: workOrder.mileage,
-          manufacture_date: workOrder.manufacture_date,
-          notes: null,
-          is_active: true,
-          created_at: workOrder.created_at,
-          updated_at: workOrder.updated_at,
-        } : null}
-        onSuccess={handleVehicleUpdateSuccess}
-      />
+      {workOrder?.vehicle_id && (
+        <VehicleEditDialog
+          open={vehicleEditOpen}
+          onOpenChange={setVehicleEditOpen}
+          vehicle={workOrder ? {
+            id: workOrder.vehicle_id.toString(),
+            customer_id: workOrder.customer_id.toString(),
+            vin: workOrder.vin || '',
+            year: workOrder.year || 0,
+            make: workOrder.make || '',
+            model: workOrder.model || '',
+            submodel: workOrder.submodel,
+            engine: workOrder.engine,
+            transmission: workOrder.transmission,
+            color: workOrder.color,
+            license_plate: workOrder.license_plate,
+            license_plate_state: workOrder.license_plate_state,
+            mileage: workOrder.mileage,
+            manufacture_date: workOrder.manufacture_date,
+            notes: null,
+            is_active: true,
+            created_at: workOrder.created_at,
+            updated_at: workOrder.updated_at,
+          } : null}
+          onSuccess={handleVehicleUpdateSuccess}
+        />
+      )}
 
       {/* Transfer Dialog */}
       <TransferDialog
