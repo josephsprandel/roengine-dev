@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { List, X, Wrench, SquaresFour, Users, ChatCircle, Gear, Lightning, ChartBar, Package, Trash, SignOut, UserCircle, CaretUp, CalendarBlank } from "@phosphor-icons/react"
+import { List, X, Wrench, SquaresFour, Users, ChatCircle, Gear, Lightning, Package, SignOut, UserCircle, CaretUp, CalendarBlank } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import Image from "next/image"
@@ -67,9 +67,8 @@ export function Sidebar() {
     { icon: Users, label: "Customers", href: "/customers" },
     { icon: Package, label: "Parts Manager", href: "/parts-manager" },
     { icon: ChatCircle, label: "Communications", href: "/communications" },
-    { icon: ChartBar, label: "Analytics", href: "#" },
+
     { icon: Lightning, label: "AI Assistant", href: "/ai-assistant", beta: true },
-    { icon: Trash, label: "Recycle Bin", href: "/recycle-bin" },
     { icon: Gear, label: "Settings", href: "/settings" },
   ]
 

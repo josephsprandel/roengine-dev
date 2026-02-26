@@ -38,6 +38,22 @@ export default function AIAssistantPage() {
         <Header />
         <main className="flex-1 overflow-y-auto">
           <div className="p-6 space-y-6">
+            {/* Coming Soon Banner */}
+            <div className="relative rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                  </span>
+                  <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">Coming Soon</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  This page is a preview of planned AI capabilities. It is not connected to live data.
+                </p>
+              </div>
+            </div>
+
             {/* Header */}
             <div>
               <div className="flex items-center gap-3 mb-2">

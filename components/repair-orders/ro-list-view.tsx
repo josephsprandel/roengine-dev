@@ -33,6 +33,10 @@ interface WorkOrder {
   model: string
   vin: string
   license_plate: string | null
+  estimate_viewed_at: string | null
+  estimate_sent_count: number
+  estimate_approved_count: number
+  estimate_declined_count: number
 }
 
 export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void }) {
@@ -166,6 +170,23 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
     return "bg-muted text-muted-foreground"
   }
 
+  const getEstimateStatus = (wo: WorkOrder): { label: string; className: string } | null => {
+    if (wo.state !== "estimate") return null
+    if (wo.estimate_approved_count > 0) {
+      return { label: "Approved", className: "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30" }
+    }
+    if (wo.estimate_declined_count > 0) {
+      return { label: "Declined", className: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30" }
+    }
+    if (wo.estimate_viewed_at) {
+      return { label: "Viewed", className: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30" }
+    }
+    if (wo.estimate_sent_count > 0) {
+      return { label: "Sent", className: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30" }
+    }
+    return { label: "Not Sent", className: "bg-muted text-muted-foreground border-border" }
+  }
+
   return (
     <div className="space-y-6">
         {/* Header with actions */}
@@ -253,7 +274,7 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">{wo.customer_name}</p>
-                      <p className="text-xs text-muted-foreground">{formatPhoneNumber(wo.phone_primary)}</p>
+                      {wo.phone_primary && <p className="text-xs text-muted-foreground">{formatPhoneNumber(wo.phone_primary)}</p>}
                     </div>
                     <div className="flex items-center gap-1">
                       {hasPermission('delete_ro') && (
@@ -296,7 +317,7 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
                         ${parseFloat(wo.total).toFixed(2)}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground font-mono">VIN: {wo.vin}</p>
+                    {wo.vin && <p className="text-xs text-muted-foreground font-mono">VIN: {wo.vin}</p>}
                     {wo.customer_concern && (
                       <p className="text-sm text-muted-foreground italic">"{wo.customer_concern}"</p>
                     )}
@@ -304,9 +325,20 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
 
                   {/* Status and dates */}
                   <div className="flex items-center justify-between pt-2 border-t border-border">
-                    <Badge variant="outline" className={getStatusColor(wo.state)}>
-                      {getStatusLabel(wo.state)}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className={getStatusColor(wo.state)}>
+                        {getStatusLabel(wo.state)}
+                      </Badge>
+                      {(() => {
+                        const est = getEstimateStatus(wo)
+                        if (!est) return null
+                        return (
+                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${est.className}`}>
+                            {est.label}
+                          </Badge>
+                        )
+                      })()}
+                    </div>
                     <div className="text-xs text-muted-foreground text-right">
                       <p>Opened: {new Date(wo.date_opened).toLocaleDateString()}</p>
                       {wo.date_promised && (

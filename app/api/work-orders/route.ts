@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query, getClient } from '@/lib/db'
 import { applyCannedJobToWorkOrder } from '@/lib/apply-canned-job'
 import { logActivity } from '@/lib/activity-log'
+import { getUserFromRequest } from '@/lib/auth/session'
+import { evaluateSchedulingRules } from '@/lib/scheduling/rules-engine'
 
 // GET /api/work-orders - List work orders with optional filters
 export async function GET(request: NextRequest) {
@@ -28,7 +30,11 @@ export async function GET(request: NextRequest) {
         js.icon as job_state_icon, js.slug as job_state_slug,
         c.customer_name, c.phone_primary, c.email,
         v.year, v.make, v.model, v.vin, v.license_plate,
-        u.id as created_by_id
+        u.id as created_by_id,
+        wo.estimate_viewed_at,
+        (SELECT COUNT(*) FROM vehicle_recommendations vr WHERE vr.work_order_id = wo.id AND vr.estimate_sent_at IS NOT NULL)::int as estimate_sent_count,
+        (SELECT COUNT(*) FROM vehicle_recommendations vr WHERE vr.work_order_id = wo.id AND vr.status = 'customer_approved')::int as estimate_approved_count,
+        (SELECT COUNT(*) FROM vehicle_recommendations vr WHERE vr.work_order_id = wo.id AND vr.status = 'customer_declined')::int as estimate_declined_count
       FROM work_orders wo
       LEFT JOIN customers c ON wo.customer_id = c.id
       LEFT JOIN vehicles v ON wo.vehicle_id = v.id
@@ -164,14 +170,92 @@ export async function POST(request: NextRequest) {
     const sequence = (parseInt(countResult.rows[0].count) + 1).toString().padStart(3, '0')
     const roNumber = `RO-${today}-${sequence}`
 
+    // Get authenticated user to set as creator/advisor
+    const user = await getUserFromRequest(request)
+
+    // ── Scheduling Rules Evaluation ──
+    // When a scheduled appointment is being created with tech hour estimates,
+    // evaluate all 15 rules before allowing the booking
+    let schedulingBayHold = false
+    let schedulingWeekKiller = false
+    let ruleOverrides = null
+
+    if (body.scheduled_start && body.estimated_tech_hours != null) {
+      const vehicleResult = await query(
+        'SELECT make, model, year FROM vehicles WHERE id = $1',
+        [body.vehicle_id]
+      )
+      const vehicle = vehicleResult.rows[0]
+
+      const evaluation = await evaluateSchedulingRules({
+        shop_id: 1,
+        proposed_date: new Date(body.scheduled_start),
+        estimated_tech_hours: parseFloat(body.estimated_tech_hours) || 0,
+        is_waiter: body.is_waiter || false,
+        vehicle_make: vehicle?.make || '',
+        vehicle_model: vehicle?.model || '',
+        vehicle_year: vehicle?.year,
+        appointment_type_slug: body.appointment_type_slug || 'dropoff',
+        job_type: body.job_type,
+        customer_visit_count: body.customer_visit_count,
+      })
+
+      // If hard blocks and no override, return evaluation for UI to handle
+      if (!evaluation.allowed && !body.rule_override_reason) {
+        return NextResponse.json({
+          scheduling_evaluation: evaluation,
+          requires_override: true,
+        }, { status: 422 })
+      }
+
+      // If overriding hard blocks, log it
+      if (!evaluation.allowed && body.rule_override_reason) {
+        ruleOverrides = {
+          overridden_at: new Date().toISOString(),
+          overridden_by: user?.id,
+          reason: body.rule_override_reason,
+          hard_blocks: evaluation.hard_blocks,
+        }
+        // Log override to scheduling_rule_log
+        query(
+          `INSERT INTO scheduling_rule_log
+            (shop_id, proposed_date, proposed_tech_hours, vehicle_make, vehicle_model,
+             appointment_type_slug, is_waiter, rules_evaluated, hard_blocks, soft_warnings,
+             tracking, outcome, override_reason, override_by, created_by)
+           VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'overridden', $11, $12, $12)`,
+          [
+            body.scheduled_start,
+            body.estimated_tech_hours,
+            vehicle?.make || '',
+            vehicle?.model || '',
+            body.appointment_type_slug || 'dropoff',
+            body.is_waiter || false,
+            JSON.stringify([...evaluation.hard_blocks, ...evaluation.soft_warnings, ...evaluation.tracking]),
+            JSON.stringify(evaluation.hard_blocks),
+            JSON.stringify(evaluation.soft_warnings),
+            JSON.stringify(evaluation.tracking),
+            body.rule_override_reason,
+            user?.id || null,
+          ]
+        ).catch(err => console.error('Failed to log scheduling override:', err))
+      }
+
+      schedulingBayHold = evaluation.bay_hold_required
+      schedulingWeekKiller = evaluation.week_killer_flag
+    }
+
     const sql = `
       INSERT INTO work_orders (
         ro_number, customer_id, vehicle_id, state,
         date_opened, date_promised, customer_concern, label,
         scheduled_start, scheduled_end, bay_assignment, assigned_tech_id,
-        created_at, updated_at
+        appointment_type_id, estimated_tech_hours, is_waiter,
+        bay_hold, week_killer_flag, rule_overrides,
+        created_by, created_at, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+        $13, $14, $15, $16, $17, $18,
+        $19, NOW(), NOW()
       )
       RETURNING *
     `
@@ -189,6 +273,13 @@ export async function POST(request: NextRequest) {
       body.scheduled_end || null,
       body.bay_assignment || null,
       body.assigned_tech_id || null,
+      body.appointment_type_id || null,
+      body.estimated_tech_hours != null ? parseFloat(body.estimated_tech_hours) : null,
+      body.is_waiter || false,
+      schedulingBayHold,
+      schedulingWeekKiller,
+      ruleOverrides ? JSON.stringify(ruleOverrides) : null,
+      user?.id || null,
     ]
 
     const result = await query(sql, params)
