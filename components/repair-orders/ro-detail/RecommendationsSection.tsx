@@ -107,8 +107,8 @@ export function RecommendationsSection({
     }
   }, [onReady, reloadRecommendations])
 
-  const [maintenanceExpanded, setMaintenanceExpanded] = useState(true)
-  const [repairExpanded, setRepairExpanded] = useState(true)
+  const [maintenanceExpanded, setMaintenanceExpanded] = useState(false)
+  const [repairExpanded, setRepairExpanded] = useState(false)
   const [approvedExpanded, setApprovedExpanded] = useState(false)
   const [approveDialogOpen, setApproveDialogOpen] = useState(false)
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false)
