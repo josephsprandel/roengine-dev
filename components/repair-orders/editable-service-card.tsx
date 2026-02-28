@@ -2,7 +2,7 @@
 
 import React from "react"
 
-import { useState } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -25,11 +25,15 @@ import {
   Search,
   ClipboardCheck,
   Camera,
+  Sparkles,
+  Loader2,
 } from "lucide-react"
 import type { ServiceData, LineItem, InspectionItem } from "./ro-creation-wizard"
 import { PartsCatalogModal } from "./parts-catalog-modal"
 import { PartDetailsModal } from "./part-details-modal"
 import { PhotoLightbox } from "./ro-detail/PhotoLightbox"
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
+import { calculateServiceDiscount } from "@/lib/invoice-calculator"
 
 interface EditableServiceCardProps {
   service: ServiceData
@@ -75,6 +79,8 @@ interface DraggableLineItemProps {
   isDragging: boolean
   onFindPart?: () => void
   onClickPart?: () => void
+  serviceTitle?: string
+  autoRewrite?: boolean
 }
 
 function DraggableLineItem({
@@ -92,8 +98,19 @@ function DraggableLineItem({
   isDragging,
   onFindPart,
   onClickPart,
+  serviceTitle,
+  autoRewrite,
 }: DraggableLineItemProps) {
   const [isDragEnabled, setIsDragEnabled] = useState(false)
+  const [localDesc, setLocalDesc] = useState(item.description)
+  const localDescCommitted = useRef(item.description)
+  // Sync from parent when item changes externally (not from our typing)
+  useEffect(() => {
+    if (item.description !== localDescCommitted.current) {
+      setLocalDesc(item.description)
+      localDescCommitted.current = item.description
+    }
+  }, [item.description])
 
   const handleUpdate = (field: keyof LineItem, value: string | number) => {
     const updated = { ...item, [field]: value }
@@ -101,6 +118,39 @@ function DraggableLineItem({
       updated.total = updated.quantity * updated.unitPrice
     }
     onUpdate(updated)
+  }
+
+  const descInputRef = useRef<HTMLInputElement>(null)
+
+  const handleDescBlur = () => {
+    const trimmed = localDesc.trim()
+    if (localDesc !== item.description) {
+      localDescCommitted.current = localDesc
+      handleUpdate("description", localDesc)
+    }
+    // Auto-rewrite labor descriptions on blur (only if auto-rewrite is on)
+    if (category === "labor" && autoRewrite && trimmed.length >= 3) {
+      ;(async () => {
+        try {
+          const res = await fetch("/api/local-ai/rewrite-labor", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              serviceTitle: serviceTitle || "",
+              description: trimmed,
+            }),
+          })
+          const data = await res.json()
+          if (!data.description || data.description === trimmed) return
+          if (descInputRef.current === document.activeElement) return
+          setLocalDesc(data.description)
+          localDescCommitted.current = data.description
+          handleUpdate("description", data.description)
+        } catch {
+          // silent fail
+        }
+      })()
+    }
   }
 
   return (
@@ -120,7 +170,7 @@ function DraggableLineItem({
         isDragging ? "opacity-50 scale-95" : ""
       }`}
     >
-      <div 
+      <div
         onMouseDown={() => setIsDragEnabled(true)}
         onMouseUp={() => setIsDragEnabled(false)}
         onMouseLeave={() => setIsDragEnabled(false)}
@@ -132,8 +182,10 @@ function DraggableLineItem({
         <Icon size={14} />
       </div>
       <Input
-        value={item.description}
-        onChange={(e) => handleUpdate("description", e.target.value)}
+        ref={descInputRef}
+        value={localDesc}
+        onChange={(e) => setLocalDesc(e.target.value)}
+        onBlur={handleDescBlur}
         onClick={(e) => {
           if (category === "parts" && onClickPart) {
             e.stopPropagation()
@@ -209,9 +261,11 @@ interface LineItemSectionProps {
   onUpdateItems: (items: LineItem[]) => void
   onFindPart?: (index: number) => void
   onClickPart?: (index: number) => void
+  serviceTitle?: string
+  autoRewrite?: boolean
 }
 
-function LineItemSection({ category, label, icon: Icon, color, items, onUpdateItems, onFindPart, onClickPart }: LineItemSectionProps) {
+function LineItemSection({ category, label, icon: Icon, color, items, onUpdateItems, onFindPart, onClickPart, serviceTitle, autoRewrite }: LineItemSectionProps) {
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
@@ -291,6 +345,8 @@ function LineItemSection({ category, label, icon: Icon, color, items, onUpdateIt
               isDragging={dragIndex === index}
               onFindPart={onFindPart ? () => onFindPart(index) : undefined}
               onClickPart={onClickPart ? () => onClickPart(index) : undefined}
+              serviceTitle={serviceTitle}
+              autoRewrite={autoRewrite}
             />
           ))}
         </div>
@@ -572,6 +628,103 @@ function InspectionChecklist({
   )
 }
 
+function ServiceTotalWithDiscount({
+  totalCost,
+  discountAmount,
+  discountType,
+  onDiscountChange,
+  showLabel = false,
+}: {
+  totalCost: number
+  discountAmount: number
+  discountType: 'percent' | 'flat'
+  onDiscountChange: (amount: number, type: 'percent' | 'flat') => void
+  showLabel?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [editAmount, setEditAmount] = useState(String(discountAmount || ''))
+  const [editType, setEditType] = useState<'percent' | 'flat'>(discountType)
+
+  const discountValue = calculateServiceDiscount(totalCost, discountAmount, discountType)
+  const netTotal = totalCost - discountValue
+  const hasDiscount = discountAmount > 0
+
+  const handleSave = () => {
+    const parsed = parseFloat(editAmount) || 0
+    onDiscountChange(parsed, editType)
+    setOpen(false)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={(o) => {
+      setOpen(o)
+      if (o) {
+        setEditAmount(String(discountAmount || ''))
+        setEditType(discountType)
+      }
+    }}>
+      <PopoverTrigger asChild>
+        <button
+          className="text-right cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1 transition-colors"
+          onClick={(e) => e.stopPropagation()}
+          title="Click to add/edit discount"
+        >
+          {showLabel && <span className="text-sm text-muted-foreground mr-2">Service Total:</span>}
+          {hasDiscount ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-muted-foreground line-through text-sm">${totalCost.toFixed(2)}</span>
+              <span className={`font-bold ${showLabel ? 'text-lg' : 'font-semibold'} text-foreground`}>${netTotal.toFixed(2)}</span>
+              <span className="text-xs text-red-600">
+                (-{discountType === 'percent' ? `${discountAmount}%` : `$${discountAmount.toFixed(2)}`})
+              </span>
+            </span>
+          ) : (
+            <span className={`${showLabel ? 'text-lg font-bold' : 'font-semibold'} text-foreground`}>${totalCost.toFixed(2)}</span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-3" align="end" sideOffset={4}>
+        <p className="text-xs font-medium text-muted-foreground mb-2">Service Discount</p>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            value={editAmount}
+            onChange={(e) => setEditAmount(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSave()
+              if (e.key === 'Escape') setOpen(false)
+            }}
+            className="h-8 text-sm font-mono flex-1"
+            placeholder="0"
+            autoFocus
+          />
+          <div className="flex rounded-md border border-border overflow-hidden flex-shrink-0">
+            <button
+              className={`px-2 py-1 text-xs font-medium transition-colors ${
+                editType === 'percent' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+              }`}
+              onClick={() => setEditType('percent')}
+            >
+              %
+            </button>
+            <button
+              className={`px-2 py-1 text-xs font-medium transition-colors ${
+                editType === 'flat' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+              }`}
+              onClick={() => setEditType('flat')}
+            >
+              $
+            </button>
+          </div>
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-1.5">Enter to save, Esc to cancel</p>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export function EditableServiceCard({
   service,
   onUpdate,
@@ -586,6 +739,78 @@ export function EditableServiceCard({
   const [isPartDetailsOpen, setIsPartDetailsOpen] = useState(false)
   const [editingLineItem, setEditingLineItem] = useState<LineItem | null>(null)
   const [editingLineItemIndex, setEditingLineItemIndex] = useState<number | null>(null)
+  const [isRewriting, setIsRewriting] = useState(false)
+  const [autoRewrite, setAutoRewrite] = useState(true)
+  const [localTitle, setLocalTitle] = useState(service.name)
+  const titleInputRef = useRef<HTMLInputElement>(null)
+  const serviceRef = useRef(service)
+  serviceRef.current = service
+  const onUpdateRef = useRef(onUpdate)
+  onUpdateRef.current = onUpdate
+
+  // Sync local title from parent when it changes externally (not from our own typing)
+  const lastCommittedTitle = useRef(service.name)
+  useEffect(() => {
+    if (service.name !== lastCommittedTitle.current) {
+      setLocalTitle(service.name)
+      lastCommittedTitle.current = service.name
+    }
+  }, [service.name])
+
+  const handleTitleBlur = useCallback(async () => {
+    const raw = localTitle?.trim()
+    if (!raw) return
+    // Commit the typed value to parent first
+    if (raw !== serviceRef.current.name) {
+      lastCommittedTitle.current = raw
+      onUpdateRef.current({ ...serviceRef.current, name: raw })
+    }
+    // Then try to normalize (only if auto-rewrite is on)
+    if (!autoRewrite || raw.length < 3) return
+    try {
+      const res = await fetch("/api/local-ai/normalize-title", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: raw }),
+      })
+      const data = await res.json()
+      // Don't update if user refocused the input
+      if (titleInputRef.current === document.activeElement) return
+      if (data.normalized && data.normalized !== raw) {
+        lastCommittedTitle.current = data.normalized
+        setLocalTitle(data.normalized)
+        onUpdateRef.current({ ...serviceRef.current, name: data.normalized })
+      }
+    } catch {
+      // silent fail
+    }
+  }, [localTitle, autoRewrite])
+
+  const handleWriteDescription = useCallback(async () => {
+    setIsRewriting(true)
+    try {
+      const svc = serviceRef.current
+      const laborLines = svc.labor.map((l) => l.description).filter(Boolean).join(", ")
+      const res = await fetch("/api/local-ai/rewrite-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: svc.name,
+          laborLines,
+          techNotes: svc.description || "",
+          status: svc.status || "",
+        }),
+      })
+      const data = await res.json()
+      if (data.description) {
+        onUpdateRef.current({ ...serviceRef.current, description: data.description })
+      }
+    } catch {
+      // silent fail
+    } finally {
+      setIsRewriting(false)
+    }
+  }, [])
 
   const calculateTotal = (svc: ServiceData) => {
     const partsTotal = svc.parts.reduce((sum, item) => sum + item.total, 0)
@@ -750,9 +975,14 @@ export function EditableServiceCard({
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="font-semibold text-foreground">${totalCost.toFixed(2)}</p>
-            </div>
+            <ServiceTotalWithDiscount
+              totalCost={totalCost}
+              discountAmount={service.discountAmount || 0}
+              discountType={(service.discountType as 'percent' | 'flat') || 'percent'}
+              onDiscountChange={(amount, type) => {
+                onUpdate({ ...service, discountAmount: amount, discountType: type })
+              }}
+            />
             {isExpanded ? (
               <ChevronUp size={20} className="text-muted-foreground" />
             ) : (
@@ -770,8 +1000,10 @@ export function EditableServiceCard({
             <div className="space-y-2">
               <Label className="text-sm text-muted-foreground">Service Name</Label>
               <Input
-                value={service.name}
-                onChange={(e) => handleFieldChange("name", e.target.value)}
+                ref={titleInputRef}
+                value={localTitle}
+                onChange={(e) => setLocalTitle(e.target.value)}
+                onBlur={handleTitleBlur}
                 className="bg-card border-border"
               />
             </div>
@@ -804,7 +1036,34 @@ export function EditableServiceCard({
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">Description</Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-sm text-muted-foreground">Customer Description</Label>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={autoRewrite}
+                    onChange={(e) => setAutoRewrite(e.target.checked)}
+                    className="h-3 w-3 rounded border-border accent-primary cursor-pointer"
+                  />
+                  <span className="text-[11px] text-muted-foreground">Auto-rewrite</span>
+                </label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleWriteDescription}
+                  disabled={isRewriting || !service.name}
+                  className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                >
+                  {isRewriting ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={12} />
+                  )}
+                  {isRewriting ? "Writing..." : "Write Description"}
+                </Button>
+              </div>
+            </div>
             <Textarea
               value={service.description}
               onChange={(e) => handleFieldChange("description", e.target.value)}
@@ -837,6 +1096,8 @@ export function EditableServiceCard({
               color="text-green-500"
               items={service.labor}
               onUpdateItems={(items) => handleLineItemsUpdate("labor", items)}
+              serviceTitle={service.name}
+              autoRewrite={autoRewrite}
             />
             {/* Inspection Checklist (between Labor and Sublets) */}
             {service.inspectionItems && service.inspectionItems.length > 0 && (
@@ -888,10 +1149,15 @@ export function EditableServiceCard({
               <Trash2 size={14} className="mr-1.5" />
               Remove Service
             </Button>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Service Total:</span>
-              <span className="text-lg font-bold text-foreground">${totalCost.toFixed(2)}</span>
-            </div>
+            <ServiceTotalWithDiscount
+              totalCost={totalCost}
+              discountAmount={service.discountAmount || 0}
+              discountType={(service.discountType as 'percent' | 'flat') || 'percent'}
+              onDiscountChange={(amount, type) => {
+                onUpdate({ ...service, discountAmount: amount, discountType: type })
+              }}
+              showLabel
+            />
           </div>
         </div>
       )}
