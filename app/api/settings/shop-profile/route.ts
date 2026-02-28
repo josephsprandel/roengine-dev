@@ -189,6 +189,10 @@ export async function PATCH(request: NextRequest) {
     // Reset email template cache so new hours take effect immediately
     resetShopInfoCache()
 
+    // Sync Retell phone prompt with updated shop settings (fire-and-forget)
+    fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/retell/sync-date`)
+      .catch(err => console.error('[Shop Profile] Retell prompt sync failed:', err.message))
+
     return NextResponse.json({
       success: true,
       message: 'Shop profile updated successfully'
