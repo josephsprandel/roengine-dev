@@ -35,11 +35,10 @@ import { useServiceManagement } from "./hooks/useServiceManagement"
 import { CustomerInfoCard } from "./ro-detail/CustomerInfoCard"
 import { VehicleInfoCard } from "./ro-detail/VehicleInfoCard"
 import { PricingSummary } from "./ro-detail/PricingSummary"
+import { calculateServiceDiscount } from "@/lib/invoice-calculator"
 import { ActionButtons } from "./ro-detail/ActionButtons"
 import { RecommendationsSection } from "./ro-detail/RecommendationsSection"
 import { InvoiceActionsPanel } from "@/components/invoices/InvoiceActionsPanel"
-import { PaymentHistory } from "@/components/invoices/PaymentHistory"
-import { InvoiceCalculations } from "@/components/invoices/InvoiceCalculations"
 import { JobStateBadge } from "./ro-detail/JobStateBadge"
 import { TransferDialog } from "./ro-detail/TransferDialog"
 import { TransferHistory } from "./ro-detail/TransferHistory"
@@ -133,6 +132,10 @@ function convertDbServicesToServiceData(dbServices: any[], defaultLaborRate: num
       hazmat,
       fees,
       inspectionItems: inspectionItems.length > 0 ? inspectionItems : undefined,
+      discountAmount: parseFloat(svc.discount_amount || 0),
+      discountType: svc.discount_type || 'percent',
+      descriptionDraft: svc.description_draft || '',
+      descriptionCompleted: svc.description_completed || '',
     }
   })
 }
@@ -288,35 +291,74 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
 
   // ALL useMemo and useCallback MUST ALSO BE AT THE TOP
   const totals = useMemo(() => {
-    const initial = { parts: 0, labor: 0, sublets: 0, hazmat: 0, fees: 0, total: 0 }
+    const initial = { parts: 0, laborGross: 0, laborDiscount: 0, labor: 0, sublets: 0, hazmat: 0, fees: 0, total: 0 }
     return services.reduce((acc, svc) => {
       const partsSum = svc.parts.reduce((sum, item) => sum + item.total, 0)
       const laborSum = svc.labor.reduce((sum, item) => sum + item.total, 0)
       const subletsSum = svc.sublets.reduce((sum, item) => sum + item.total, 0)
       const hazmatSum = svc.hazmat.reduce((sum, item) => sum + item.total, 0)
       const feesSum = svc.fees.reduce((sum, item) => sum + item.total, 0)
+
+      // Per-service discount (applied to labor)
+      let discountValue = 0
+      if (svc.discountAmount && svc.discountAmount > 0) {
+        if (svc.discountType === 'flat') {
+          discountValue = Math.min(svc.discountAmount, laborSum)
+        } else {
+          discountValue = laborSum * (svc.discountAmount / 100)
+        }
+      }
+      const netLabor = laborSum - discountValue
+      const serviceTotal = partsSum + netLabor + subletsSum + hazmatSum + feesSum
+
       return {
         parts: acc.parts + partsSum,
-        labor: acc.labor + laborSum,
+        laborGross: acc.laborGross + laborSum,
+        laborDiscount: acc.laborDiscount + discountValue,
+        labor: acc.labor + netLabor,
         sublets: acc.sublets + subletsSum,
         hazmat: acc.hazmat + hazmatSum,
         fees: acc.fees + feesSum,
-        total: acc.total + partsSum + laborSum + subletsSum + hazmatSum + feesSum,
+        total: acc.total + serviceTotal,
       }
     }, initial)
   }, [services])
 
-  // Calculate grand total with tax
+  // Calculate grand total with tax (accounts for RO-level discounts)
   const grandTotalWithTax = useMemo(() => {
     const taxRate = invoiceSettings?.sales_tax_rate || 0
     const partsTaxable = invoiceSettings?.parts_taxable ?? true
     const laborTaxable = invoiceSettings?.labor_taxable ?? true
-    const taxableAmount = 
-      (partsTaxable ? totals.parts : 0) +
-      (laborTaxable ? totals.labor : 0)
+    const shopSuppliesVal = parseFloat(workOrder?.shop_supplies_amount || 0)
+    const feesVal = parseFloat(workOrder?.fees_amount || 0) || totals.fees
+    const subletsVal = parseFloat(workOrder?.sublets_amount || 0) || totals.sublets
+
+    // Labor: per-service discounts take priority
+    let laborNet = totals.labor
+    if (totals.laborDiscount === 0) {
+      const roLaborDiscAmt = parseFloat(workOrder?.labor_discount_amount || 0)
+      const roLaborDiscType = workOrder?.labor_discount_type || 'flat'
+      if (roLaborDiscAmt > 0) {
+        laborNet = totals.laborGross - calculateServiceDiscount(totals.laborGross, roLaborDiscAmt, roLaborDiscType)
+      }
+    }
+
+    // Parts discount: always RO-level
+    const roPartsDiscAmt = parseFloat(workOrder?.parts_discount_amount || 0)
+    const roPartsDiscType = workOrder?.parts_discount_type || 'flat'
+    let partsNet = totals.parts
+    if (roPartsDiscAmt > 0) {
+      partsNet = totals.parts - calculateServiceDiscount(totals.parts, roPartsDiscAmt, roPartsDiscType)
+    }
+
+    const subtotal = laborNet + partsNet + feesVal + subletsVal + totals.hazmat + shopSuppliesVal
+    const taxableAmount =
+      (partsTaxable ? partsNet : 0) +
+      (laborTaxable ? laborNet : 0) +
+      feesVal + subletsVal + totals.hazmat + shopSuppliesVal
     const tax = taxableAmount * taxRate
-    return totals.total + tax
-  }, [totals, invoiceSettings])
+    return subtotal + tax
+  }, [totals, invoiceSettings, workOrder])
 
   // AI Recommendations hook
   const aiRecommendations = useAIRecommendations({
@@ -914,6 +956,13 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
             </p>
           </Card>
 
+          {workOrder.date_closed && (
+            <Card className="p-3 border-border">
+              <p className="text-xs text-muted-foreground mb-1">Closed</p>
+              <p className="text-sm font-medium text-foreground">{new Date(workOrder.date_closed).toLocaleDateString()}</p>
+            </Card>
+          )}
+
           {workOrder.customer_concern && (
             <Card className="p-3 border-border">
               <p className="text-xs text-muted-foreground mb-1">Customer Concern</p>
@@ -1004,44 +1053,108 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           />
         )}
 
-        <InvoiceCalculations
-          partsSubtotal={totals.parts}
-          laborSubtotal={totals.labor}
-          subletsSubtotal={totals.sublets}
-          hazmatSubtotal={totals.hazmat}
-          feesSubtotal={totals.fees}
-          shopSupplies={0}
-          subtotalBeforeTax={totals.total}
-          tax={(() => {
+        <PricingSummary
+          totals={(() => {
             const taxRate = invoiceSettings?.sales_tax_rate || 0
             const partsTaxable = invoiceSettings?.parts_taxable ?? true
             const laborTaxable = invoiceSettings?.labor_taxable ?? true
-            const taxableAmount = 
-              (partsTaxable ? totals.parts : 0) +
-              (laborTaxable ? totals.labor : 0)
-            return taxableAmount * taxRate
-          })()}
-          taxRate={invoiceSettings?.sales_tax_rate || 0}
-          grandTotal={(() => {
-            const taxRate = invoiceSettings?.sales_tax_rate || 0
-            const partsTaxable = invoiceSettings?.parts_taxable ?? true
-            const laborTaxable = invoiceSettings?.labor_taxable ?? true
-            const taxableAmount = 
-              (partsTaxable ? totals.parts : 0) +
-              (laborTaxable ? totals.labor : 0)
+            const shopSuppliesVal = parseFloat(workOrder?.shop_supplies_amount || 0)
+            const feesVal = parseFloat(workOrder?.fees_amount || 0) || totals.fees
+            const subletsVal = parseFloat(workOrder?.sublets_amount || 0) || totals.sublets
+
+            // Labor discount: per-service discounts take priority over RO-level
+            const hasPerServiceDiscounts = totals.laborDiscount > 0
+            let laborNet = totals.labor
+            let laborDiscountVal = totals.laborDiscount
+            if (!hasPerServiceDiscounts) {
+              const roLaborDiscAmt = parseFloat(workOrder?.labor_discount_amount || 0)
+              const roLaborDiscType = workOrder?.labor_discount_type || 'flat'
+              if (roLaborDiscAmt > 0) {
+                laborDiscountVal = calculateServiceDiscount(totals.laborGross, roLaborDiscAmt, roLaborDiscType)
+                laborNet = totals.laborGross - laborDiscountVal
+              }
+            }
+
+            // Parts discount: always RO-level
+            const roPartsDiscAmt = parseFloat(workOrder?.parts_discount_amount || 0)
+            const roPartsDiscType = workOrder?.parts_discount_type || 'flat'
+            let partsDiscountVal = 0
+            let partsNet = totals.parts
+            if (roPartsDiscAmt > 0) {
+              partsDiscountVal = calculateServiceDiscount(totals.parts, roPartsDiscAmt, roPartsDiscType)
+              partsNet = totals.parts - partsDiscountVal
+            }
+
+            const subtotal = laborNet + partsNet + feesVal + subletsVal + totals.hazmat + shopSuppliesVal
+            const taxableAmount =
+              (partsTaxable ? partsNet : 0) +
+              (laborTaxable ? laborNet : 0) +
+              feesVal + subletsVal + totals.hazmat + shopSuppliesVal
             const tax = taxableAmount * taxRate
-            return totals.total + tax
+            const grandTotal = subtotal + tax
+            const amountPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount), 0)
+            return {
+              parts: totals.parts,
+              labor: laborNet,
+              laborGross: totals.laborGross,
+              laborDiscount: laborDiscountVal,
+              partsDiscount: partsDiscountVal,
+              sublets: subletsVal,
+              hazmat: totals.hazmat,
+              fees: feesVal,
+              shopSupplies: shopSuppliesVal,
+              subtotal,
+              tax,
+              taxRate,
+              grandTotal,
+              amountPaid,
+              balanceDue: grandTotal - amountPaid,
+            }
           })()}
+          shopSuppliesAmount={parseFloat(workOrder?.shop_supplies_amount || 0)}
+          feesAmount={parseFloat(workOrder?.fees_amount || 0)}
+          subletsAmount={parseFloat(workOrder?.sublets_amount || 0)}
+          laborDiscountAmount={parseFloat(workOrder?.labor_discount_amount || 0)}
+          laborDiscountType={workOrder?.labor_discount_type || 'flat'}
+          partsDiscountAmount={parseFloat(workOrder?.parts_discount_amount || 0)}
+          partsDiscountType={workOrder?.parts_discount_type || 'flat'}
+          hasPerServiceDiscounts={totals.laborDiscount > 0}
+          onUpdateField={async (field, value) => {
+            if (!workOrder) return
+            try {
+              await fetch(`/api/work-orders/${workOrder.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [field]: value }),
+              })
+              setWorkOrder({ ...workOrder, [field]: value })
+            } catch (err) {
+              console.error('Failed to update field:', err)
+            }
+          }}
+          payments={payments}
+          canAddPayment={((workOrder as any).invoice_status !== 'voided') && (grandTotalWithTax - payments.reduce((sum, p) => sum + parseFloat(p.amount), 0)) > 0}
+          workOrderId={workOrder.id}
           ccSurchargeEnabled={invoiceSettings?.cc_surcharge_enabled || false}
           ccSurchargeRate={invoiceSettings?.cc_surcharge_rate || 0.035}
-          taxExempt={false}
-          taxOverride={false}
-        />
-
-        <PaymentHistory
-          payments={payments}
-          balanceDue={grandTotalWithTax - payments.reduce((sum, p) => sum + parseFloat(p.amount), 0)}
-          grandTotal={grandTotalWithTax}
+          onPaymentChange={async () => {
+            const woResponse = await fetch(`/api/work-orders/${roId}`)
+            if (woResponse.ok) {
+              const woData = await woResponse.json()
+              setWorkOrder(woData.work_order)
+            }
+            const paymentsResponse = await fetch(`/api/work-orders/${roId}/payments`)
+            if (paymentsResponse.ok) {
+              const paymentsData = await paymentsResponse.json()
+              const parsedPayments = (paymentsData.payments || []).map((p: any) => ({
+                ...p,
+                amount: parseFloat(p.amount),
+                card_surcharge: parseFloat(p.card_surcharge || 0),
+                total_charged: parseFloat(p.total_charged || p.amount),
+              }))
+              setPayments(parsedPayments)
+            }
+          }}
         />
 
         <InvoiceActionsPanel

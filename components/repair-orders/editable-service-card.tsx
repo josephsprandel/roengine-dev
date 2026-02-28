@@ -27,6 +27,8 @@ import {
   Camera,
   Sparkles,
   Loader2,
+  CheckCircle2,
+  Circle,
 } from "lucide-react"
 import type { ServiceData, LineItem, InspectionItem } from "./ro-creation-wizard"
 import { PartsCatalogModal } from "./parts-catalog-modal"
@@ -791,24 +793,108 @@ export function EditableServiceCard({
     try {
       const svc = serviceRef.current
       const laborLines = svc.labor.map((l) => l.description).filter(Boolean).join(", ")
+      const isCompleted = svc.status === "completed"
       const res = await fetch("/api/local-ai/rewrite-description", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: svc.name,
           laborLines,
-          techNotes: svc.description || "",
+          techNotes: (isCompleted ? svc.descriptionDraft : svc.description) || "",
           status: svc.status || "",
         }),
       })
       const data = await res.json()
       if (data.description) {
-        onUpdateRef.current({ ...serviceRef.current, description: data.description })
+        if (isCompleted) {
+          // When completed, sparkle writes to descriptionCompleted
+          onUpdateRef.current({
+            ...serviceRef.current,
+            descriptionCompleted: data.description,
+            description: data.description,
+          })
+        } else {
+          // When in progress/pending, sparkle writes to descriptionDraft + description
+          onUpdateRef.current({
+            ...serviceRef.current,
+            descriptionDraft: data.description,
+            description: data.description,
+          })
+        }
       }
     } catch {
       // silent fail
     } finally {
       setIsRewriting(false)
+    }
+  }, [])
+
+  const handleToggleComplete = useCallback(async () => {
+    const svc = serviceRef.current
+    const isCurrentlyCompleted = svc.status === "completed"
+
+    if (!isCurrentlyCompleted) {
+      // Check inspection gating: all inspection items must be checked (non-pending)
+      const inspections = svc.inspectionItems || []
+      if (inspections.length > 0) {
+        const unchecked = inspections.filter((i) => i.status === "pending")
+        if (unchecked.length > 0) {
+          alert(
+            `Cannot mark complete — ${unchecked.length} inspection item${unchecked.length > 1 ? "s" : ""} not checked. Complete the inspection checklist first.`
+          )
+          return
+        }
+      }
+
+      // Save current description as draft before switching
+      const draft = svc.description || ""
+
+      // Fire AI rewrite for the completed description (fire-and-forget, update when ready)
+      const laborLines = svc.labor.map((l) => l.description).filter(Boolean).join(", ")
+
+      // Optimistically mark as completed with draft preserved
+      onUpdateRef.current({
+        ...serviceRef.current,
+        status: "completed",
+        descriptionDraft: draft,
+        // Show existing completed description if we have one, otherwise keep current
+        description: svc.descriptionCompleted || draft,
+      })
+
+      // If no completed description exists yet, generate one via AI
+      if (!svc.descriptionCompleted) {
+        try {
+          const res = await fetch("/api/local-ai/rewrite-description", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: svc.name,
+              laborLines,
+              techNotes: draft,
+              status: "completed",
+            }),
+          })
+          const data = await res.json()
+          if (data.description) {
+            onUpdateRef.current({
+              ...serviceRef.current,
+              status: "completed",
+              descriptionDraft: draft,
+              descriptionCompleted: data.description,
+              description: data.description,
+            })
+          }
+        } catch {
+          // silent fail — keeps the draft as description
+        }
+      }
+    } else {
+      // Un-completing: revert to draft description
+      onUpdateRef.current({
+        ...serviceRef.current,
+        status: "in_progress",
+        description: svc.descriptionDraft || svc.description || "",
+      })
     }
   }, [])
 
@@ -931,9 +1017,21 @@ export function EditableServiceCard({
           className="flex items-center justify-between flex-1 cursor-pointer"
         >
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <Wrench size={16} className="text-primary" />
-            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleToggleComplete()
+              }}
+              className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-full transition-colors"
+              title={service.status === "completed" ? "Mark as in progress" : "Mark as completed"}
+            >
+              {service.status === "completed" ? (
+                <CheckCircle2 size={22} className="text-green-500" />
+              ) : (
+                <Circle size={22} className="text-muted-foreground hover:text-green-400" />
+              )}
+            </button>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="font-medium text-foreground truncate">{service.name}</h3>
@@ -1037,7 +1135,9 @@ export function EditableServiceCard({
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-sm text-muted-foreground">Customer Description</Label>
+              <Label className="text-sm text-muted-foreground">
+                {service.status === "completed" ? "Customer Description (Completed)" : "Customer Description"}
+              </Label>
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-1.5 cursor-pointer select-none">
                   <input
@@ -1066,10 +1166,24 @@ export function EditableServiceCard({
             </div>
             <Textarea
               value={service.description}
-              onChange={(e) => handleFieldChange("description", e.target.value)}
-              className="bg-card border-border resize-none"
+              onChange={(e) => {
+                // When completed, edits go to descriptionCompleted; otherwise to descriptionDraft
+                if (service.status === "completed") {
+                  onUpdate({ ...service, description: e.target.value, descriptionCompleted: e.target.value })
+                } else {
+                  onUpdate({ ...service, description: e.target.value, descriptionDraft: e.target.value })
+                }
+              }}
+              className={`bg-card border-border resize-none ${
+                service.status === "completed" ? "border-green-500/30" : ""
+              }`}
               rows={2}
             />
+            {service.status === "completed" && service.descriptionDraft && service.descriptionDraft !== service.description && (
+              <p className="text-[11px] text-muted-foreground italic">
+                Draft: {service.descriptionDraft}
+              </p>
+            )}
           </div>
 
           {/* Line Items by Category: Parts, Labor, Inspections, Sublets, Hazmat, Fees */}

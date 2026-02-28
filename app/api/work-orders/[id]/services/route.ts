@@ -35,7 +35,11 @@ export async function GET(
         id, work_order_id, title, description, comment,
         assigned_technician_id, display_order, labor_hours, labor_rate,
         parts_cost, shop_supplies, tax, service_type, status,
-        priority, category, ai_generated, created_at, updated_at
+        priority, category, ai_generated,
+        COALESCE(discount_amount, 0) as discount_amount,
+        COALESCE(discount_type, 'percent') as discount_type,
+        description_draft, description_completed,
+        created_at, updated_at
       FROM services
       WHERE work_order_id = $1
       ORDER BY display_order, id

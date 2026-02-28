@@ -131,15 +131,37 @@ export function useServiceManagement({
       // Extract database service_id from the service id (e.g., "svc-123" -> 123)
       const dbServiceId = parseInt(updated.id.replace("svc-", ""), 10)
 
-      // Update the service record itself (title, description)
+      // Update the service record itself (title, description, status, draft/completed descriptions)
+      const servicePayload: Record<string, any> = {
+        service_id: dbServiceId,
+        title: updated.name,
+        description: updated.description,
+        discount_amount: updated.discountAmount || 0,
+        discount_type: updated.discountType || 'percent',
+      }
+
+      // Map frontend status to DB status
+      if (updated.status) {
+        const statusMap: Record<string, string> = {
+          pending: 'NOT_STARTED',
+          in_progress: 'IN_PROGRESS',
+          completed: 'COMPLETED',
+        }
+        servicePayload.status = statusMap[updated.status] || updated.status
+      }
+
+      // Persist dual description fields if present
+      if (updated.descriptionDraft !== undefined) {
+        servicePayload.description_draft = updated.descriptionDraft || null
+      }
+      if (updated.descriptionCompleted !== undefined) {
+        servicePayload.description_completed = updated.descriptionCompleted || null
+      }
+
       await fetch(`/api/work-orders/${woId}/services`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          service_id: dbServiceId,
-          title: updated.name,
-          description: updated.description,
-        }),
+        body: JSON.stringify(servicePayload),
       })
 
       const categories: LineItemCategory[] = ["parts", "labor", "sublets", "hazmat", "fees"]

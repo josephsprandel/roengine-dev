@@ -87,6 +87,10 @@ export interface ServiceData {
   fees: LineItem[]
   inspectionItems?: InspectionItem[]
   cannedJobId?: number
+  discountAmount?: number
+  discountType?: 'percent' | 'flat'
+  descriptionDraft?: string
+  descriptionCompleted?: string
 }
 
 interface ROCreationWizardProps {
