@@ -11,6 +11,7 @@ import { classifyBodyStyle } from '@/lib/classify-body-style'
 import { getVehicleImagePath } from '@/lib/vehicle-image-mapper'
 import { generateHotspots, type Service } from '@/lib/generate-hotspots'
 import { logActivity } from '@/lib/activity-log'
+import { generateEstimate } from '@/lib/estimates'
 
 export async function GET(
   request: NextRequest,
@@ -21,17 +22,47 @@ export async function GET(
 
     // Support work order ID lookups (numeric param from email links)
     if (/^\d+$/.test(token)) {
+      const workOrderId = parseInt(token)
       const tokenLookup = await query(
         'SELECT token FROM estimates WHERE work_order_id = $1 ORDER BY id DESC LIMIT 1',
-        [parseInt(token)]
+        [workOrderId]
       )
       if (tokenLookup.rows.length === 0) {
-        return NextResponse.json(
-          { error: 'This estimate is not yet available', reason: 'not_yet_available' },
-          { status: 404 }
+        // No estimate yet — auto-generate from eligible recommendations
+        const woResult = await query(
+          'SELECT vehicle_id, customer_id FROM work_orders WHERE id = $1',
+          [workOrderId]
         )
+        if (woResult.rows.length === 0) {
+          return NextResponse.json(
+            { error: 'This estimate is not yet available', reason: 'not_yet_available' },
+            { status: 404 }
+          )
+        }
+        const recsResult = await query(
+          `SELECT id FROM vehicle_recommendations
+           WHERE vehicle_id = $1
+             AND status IN ('awaiting_approval', 'sent_to_customer')`,
+          [woResult.rows[0].vehicle_id]
+        )
+        if (recsResult.rows.length === 0) {
+          return NextResponse.json(
+            { error: 'This estimate is not yet available', reason: 'not_yet_available' },
+            { status: 404 }
+          )
+        }
+        // Auto-generate estimate from recommendations
+        const result = await generateEstimate({
+          workOrderId,
+          recommendationIds: recsResult.rows.map((r: any) => r.id),
+          createdByUserId: 1, // system-generated
+          expiresInHours: 72,
+          estimateType: 'maintenance',
+        })
+        token = result.token
+      } else {
+        token = tokenLookup.rows[0].token
       }
-      token = tokenLookup.rows[0].token
     }
 
     if (!token || token.length < 10) {
@@ -82,47 +113,9 @@ export async function GET(
       )
     }
 
-    // Update viewed_at on first view
-    if (!est.viewed_at) {
-      await query(
-        'UPDATE estimates SET viewed_at = NOW(), updated_at = NOW() WHERE id = $1',
-        [est.id]
-      )
-
-      // Track viewed_at on linked recommendations
-      await query(`
-        UPDATE vehicle_recommendations vr
-        SET estimate_viewed_at = NOW()
-        WHERE EXISTS (
-          SELECT 1 FROM estimate_services es
-          WHERE es.estimate_id = $1 AND es.recommendation_id = vr.id
-        ) AND vr.estimate_viewed_at IS NULL
-      `, [est.id])
-
-      // Update estimate_viewed_at on work order (first view only)
-      if (est.work_order_id) {
-        await query(
-          'UPDATE work_orders SET estimate_viewed_at = NOW() WHERE id = $1 AND estimate_viewed_at IS NULL',
-          [est.work_order_id]
-        )
-      }
-    }
-
-    // Log customer view activity
-    if (est.work_order_id) {
-      await logActivity({
-        workOrderId: est.work_order_id,
-        actorType: 'customer',
-        action: 'customer_viewed_estimate',
-        description: 'Customer viewed estimate',
-        metadata: {
-          ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip'),
-          userAgent: request.headers.get('user-agent'),
-          firstView: !est.viewed_at,
-          estimateId: est.id
-        }
-      })
-    }
+    // NOTE: View tracking (viewed_at, activity log) has been moved to
+    // POST /api/estimates/[token]/viewed — called client-side only for
+    // actual customers, preventing false events when staff visit this URL.
 
     // Fetch services with urgency from linked recommendations
     const servicesResult = await query(`

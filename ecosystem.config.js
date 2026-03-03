@@ -13,6 +13,17 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3000
       }
+    },
+    {
+      name: 'retell-sync-date',
+      script: 'curl',
+      args: '-sf http://localhost:3000/api/retell/sync-date',
+      cwd: '/home/jsprandel/roengine',
+      instances: 1,
+      exec_mode: 'fork',
+      cron_restart: '0 6 * * *',  // 6 AM daily (before shop opens)
+      autorestart: false,
+      watch: false,
     }
   ]
 }
