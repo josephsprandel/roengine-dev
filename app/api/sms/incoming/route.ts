@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { query } from '@/lib/db'
+import { query, getClient } from '@/lib/db'
 import { getShopInfo } from '@/lib/email-templates'
+import { logActivity } from '@/lib/activity-log'
 
 // Handle incoming SMS messages from Twilio
 export async function POST(req: NextRequest) {
@@ -18,23 +19,26 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedFrom = from.replace(/\D/g, '').slice(-10)
-    const keyword = body.toUpperCase()
+    const keyword = body.toUpperCase().trim()
 
-    // Handle STOP keyword — opt out
-    if (keyword === 'STOP' || keyword === 'STOPALL' || keyword === 'UNSUBSCRIBE' || keyword === 'CANCEL' || keyword === 'END' || keyword === 'QUIT') {
+    const isYes = ['YES', 'Y', 'APPROVE'].includes(keyword)
+    const isNo = ['NO', 'N', 'DECLINE'].includes(keyword)
+
+    // Handle STOP keyword — opt out + decline any pending estimate
+    if (['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'].includes(keyword)) {
       await query(
         `UPDATE customers SET sms_opted_out = true, sms_opted_out_at = NOW()
          WHERE phone_primary LIKE '%' || $1 OR phone_mobile LIKE '%' || $1`,
         [normalizedFrom]
       )
-      // Log incoming message
+      await handleApprovalResponse(normalizedFrom, false, shopInfo)
       await logIncomingMessage(from, to, body, messageSid, normalizedFrom)
       // Twilio handles STOP automatically, but we track it too
       return twimlResponse('')
     }
 
     // Handle START keyword — opt back in
-    if (keyword === 'START' || keyword === 'YES' && await isOptOutMessage(normalizedFrom)) {
+    if (keyword === 'START' || (isYes && await isOptOutMessage(normalizedFrom))) {
       await query(
         `UPDATE customers SET sms_opted_out = false, sms_opted_out_at = NULL, sms_consent = true, sms_consent_at = NOW()
          WHERE phone_primary LIKE '%' || $1 OR phone_mobile LIKE '%' || $1`,
@@ -50,17 +54,24 @@ export async function POST(req: NextRequest) {
       return twimlResponse(`${shopInfo.name}: For help, call ${shopInfo.phone}. Reply STOP to opt out of messages.`)
     }
 
-    // Handle YES/NO — approval request responses
-    if (keyword === 'YES' || keyword === 'APPROVE') {
-      await handleApprovalResponse(normalizedFrom, true)
+    // Handle YES — approval
+    if (isYes) {
+      const result = await handleApprovalResponse(normalizedFrom, true, shopInfo)
       await logIncomingMessage(from, to, body, messageSid, normalizedFrom)
-      return twimlResponse(`Thank you! The service has been approved. We'll get started right away. - ${shopInfo.name}`)
+      if (result.updated) {
+        return twimlResponse(`Thank you! We've received your approval and will get started on your vehicle. We'll keep you updated. - ${shopInfo.name}`)
+      }
+      return twimlResponse(`Thank you for your reply! If you have questions, call us at ${shopInfo.phone}. - ${shopInfo.name}`)
     }
 
-    if (keyword === 'NO' || keyword === 'DECLINE') {
-      await handleApprovalResponse(normalizedFrom, false)
+    // Handle NO — decline
+    if (isNo) {
+      const result = await handleApprovalResponse(normalizedFrom, false, shopInfo)
       await logIncomingMessage(from, to, body, messageSid, normalizedFrom)
-      return twimlResponse(`Understood. The service has been declined. Feel free to call us with questions: ${shopInfo.phone} - ${shopInfo.name}`)
+      if (result.updated) {
+        return twimlResponse(`No problem! We'll hold off for now. Feel free to call us if you have questions: ${shopInfo.phone}. - ${shopInfo.name}`)
+      }
+      return twimlResponse(`Thank you for your reply! If you have questions, call us at ${shopInfo.phone}. - ${shopInfo.name}`)
     }
 
     // Any other message — just log it
@@ -126,20 +137,182 @@ async function isOptOutMessage(normalizedFrom: string): Promise<boolean> {
   return result.rows.length > 0 && result.rows[0].sms_opted_out
 }
 
-async function handleApprovalResponse(normalizedFrom: string, approved: boolean) {
-  // Find the most recent approval_request SMS to this phone number
-  const result = await query(
-    `SELECT sm.work_order_id FROM messages sm
-     WHERE sm.to_phone LIKE '%' || $1
-       AND sm.message_type = 'approval_request'
-       AND sm.direction = 'outbound'
-     ORDER BY sm.created_at DESC
-     LIMIT 1`,
-    [normalizedFrom]
-  )
+async function handleApprovalResponse(
+  normalizedFrom: string,
+  approved: boolean,
+  shopInfo: { name: string; phone: string }
+): Promise<{ updated: boolean }> {
+  try {
+    // Find the most recent outbound estimate SMS to this phone number
+    const msgResult = await query(
+      `SELECT m.work_order_id, m.customer_id
+       FROM messages m
+       WHERE m.to_phone LIKE '%' || $1
+         AND m.message_type IN ('estimate_link', 'estimate_ready', 'approval_request')
+         AND m.direction = 'outbound'
+         AND m.work_order_id IS NOT NULL
+       ORDER BY m.created_at DESC
+       LIMIT 1`,
+      [normalizedFrom]
+    )
 
-  if (result.rows.length === 0) return
+    if (msgResult.rows.length === 0) {
+      console.log(`[SMS] No recent estimate SMS found for phone ending in ...${normalizedFrom.slice(-4)}`)
+      return { updated: false }
+    }
 
-  // For now just log. Future: update the recommendation status on the work order
-  console.log(`[SMS] Approval ${approved ? 'YES' : 'NO'} for work_order_id=${result.rows[0].work_order_id}`)
+    const { work_order_id: workOrderId, customer_id: customerId } = msgResult.rows[0]
+
+    // Find the most recent estimate for this work order
+    const estResult = await query(
+      `SELECT id, status, responded_at
+       FROM estimates
+       WHERE work_order_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [workOrderId]
+    )
+
+    if (estResult.rows.length === 0) {
+      console.log(`[SMS] No estimate found for work_order_id=${workOrderId}`)
+      return { updated: false }
+    }
+
+    const estimate = estResult.rows[0]
+
+    // Already responded — do nothing silently
+    if (estimate.responded_at) {
+      console.log(`[SMS] Estimate ${estimate.id} already responded, skipping`)
+      return { updated: false }
+    }
+
+    // Use a transaction for atomicity
+    const client = await getClient()
+    try {
+      await client.query('BEGIN')
+
+      // Get all estimate services with their linked recommendations
+      const svcResult = await client.query(
+        `SELECT id, recommendation_id, estimated_cost
+         FROM estimate_services
+         WHERE estimate_id = $1 AND status = 'pending'`,
+        [estimate.id]
+      )
+
+      if (svcResult.rows.length === 0) {
+        await client.query('ROLLBACK')
+        console.log(`[SMS] No pending services on estimate ${estimate.id}`)
+        return { updated: false }
+      }
+
+      let approvedAmount = 0
+
+      if (approved) {
+        // Approve all estimate services
+        await client.query(
+          `UPDATE estimate_services
+           SET status = 'approved', approved_at = NOW()
+           WHERE estimate_id = $1 AND status = 'pending'`,
+          [estimate.id]
+        )
+
+        // Sum approved amount
+        for (const svc of svcResult.rows) {
+          approvedAmount += parseFloat(svc.estimated_cost) || 0
+        }
+
+        // Update linked vehicle_recommendations to customer_approved
+        const recIds = svcResult.rows
+          .map((s: any) => s.recommendation_id)
+          .filter(Boolean)
+        if (recIds.length > 0) {
+          await client.query(
+            `UPDATE vehicle_recommendations
+             SET status = 'customer_approved',
+                 customer_responded_at = NOW(),
+                 customer_response_method = 'sms',
+                 updated_at = NOW()
+             WHERE id = ANY($1)
+               AND status IN ('sent_to_customer', 'awaiting_approval')`,
+            [recIds]
+          )
+        }
+
+        // Update estimate status
+        await client.query(
+          `UPDATE estimates
+           SET status = 'approved', approved_amount = $1,
+               responded_at = NOW(), customer_notes = 'Approved via SMS reply',
+               updated_at = NOW()
+           WHERE id = $2`,
+          [approvedAmount, estimate.id]
+        )
+      } else {
+        // Decline all estimate services
+        await client.query(
+          `UPDATE estimate_services
+           SET status = 'declined', declined_at = NOW(), decline_reason = 'Declined via SMS'
+           WHERE estimate_id = $1 AND status = 'pending'`,
+          [estimate.id]
+        )
+
+        // Update linked vehicle_recommendations to customer_declined
+        const recIds = svcResult.rows
+          .map((s: any) => s.recommendation_id)
+          .filter(Boolean)
+        if (recIds.length > 0) {
+          await client.query(
+            `UPDATE vehicle_recommendations
+             SET status = 'customer_declined',
+                 customer_responded_at = NOW(),
+                 customer_response_method = 'sms',
+                 decline_reason = 'Declined via SMS',
+                 updated_at = NOW()
+             WHERE id = ANY($1)
+               AND status IN ('sent_to_customer', 'awaiting_approval')`,
+            [recIds]
+          )
+        }
+
+        // Update estimate status
+        await client.query(
+          `UPDATE estimates
+           SET status = 'declined', approved_amount = 0,
+               responded_at = NOW(), customer_notes = 'Declined via SMS reply',
+               updated_at = NOW()
+           WHERE id = $1`,
+          [estimate.id]
+        )
+      }
+
+      await client.query('COMMIT')
+
+      // Fire-and-forget activity log
+      logActivity({
+        workOrderId,
+        actorType: 'customer',
+        action: approved ? 'customer_approved_estimate' : 'customer_declined_estimate',
+        description: approved
+          ? 'Customer approved estimate via SMS reply'
+          : 'Customer declined estimate via SMS reply',
+        metadata: {
+          method: 'sms',
+          estimateId: estimate.id,
+          servicesCount: svcResult.rows.length,
+          customerId,
+        }
+      })
+
+      console.log(`[SMS] ${approved ? 'Approved' : 'Declined'} estimate ${estimate.id} for work_order_id=${workOrderId} (${svcResult.rows.length} services)`)
+      return { updated: true }
+    } catch (txError) {
+      await client.query('ROLLBACK')
+      throw txError
+    } finally {
+      client.release()
+    }
+  } catch (error) {
+    console.error('[SMS] Error handling approval response:', error)
+    return { updated: false }
+  }
 }

@@ -15,10 +15,14 @@ export async function getWorkOrderData(id: string | number): Promise<WorkOrderEm
         c.customer_name, c.phone_primary, c.phone_secondary, c.phone_mobile, c.email,
         c.address_line1, c.address_line2, c.city, c.state as customer_state, c.zip,
         v.year, v.make, v.model, v.submodel, v.engine, v.transmission, v.color,
-        v.vin, v.license_plate, v.license_plate_state, v.mileage
+        v.vin, v.license_plate, v.license_plate_state, v.mileage,
+        advisor.full_name as advisor_name,
+        tech.full_name as tech_name
       FROM work_orders wo
       JOIN customers c ON wo.customer_id = c.id
       JOIN vehicles v ON wo.vehicle_id = v.id
+      LEFT JOIN users advisor ON advisor.id = COALESCE(wo.current_assigned_to, wo.created_by)
+      LEFT JOIN users tech ON wo.assigned_tech_id = tech.id
       WHERE wo.id = $1`,
       [id]
     )
@@ -31,7 +35,9 @@ export async function getWorkOrderData(id: string | number): Promise<WorkOrderEm
 
     const servicesResult = await query(
       `SELECT
-        id, title, description, category
+        id, title, description, category,
+        COALESCE(discount_amount, 0) as discount_amount,
+        COALESCE(discount_type, 'percent') as discount_type
       FROM services
       WHERE work_order_id = $1
       ORDER BY display_order, id`,
@@ -48,7 +54,8 @@ export async function getWorkOrderData(id: string | number): Promise<WorkOrderEm
         unit_price,
         labor_hours,
         labor_rate,
-        line_total
+        line_total,
+        part_number
       FROM work_order_items
       WHERE work_order_id = $1
       ORDER BY

@@ -3,23 +3,22 @@
  * Optimized for customer-ready printing
  */
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
+/* ─── Print page wrapper: override app theme ─── */
+.print-page-wrapper {
   font-family: 'Arial', 'Helvetica', sans-serif;
   font-size: 11pt;
   line-height: 1.4;
-  color: #000;
-  background: white;
-  padding: 0.5in;
+  color: #000 !important;
+  background: white !important;
+}
+
+/* Reset within print wrapper */
+.print-page-wrapper * {
+  color: inherit;
 }
 
 /* VOID Watermark */
-.invoice-voided::before {
+.print-page-wrapper.invoice-voided::before {
   content: "VOID";
   position: fixed;
   top: 50%;
@@ -36,36 +35,39 @@ body {
 .invoice-container {
   max-width: 8.5in;
   margin: 0 auto;
+  padding: 0.5in;
 }
 
-/* Header */
+/* ─── Header ─── */
 .invoice-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding-bottom: 20px;
+  padding-bottom: 15px;
   border-bottom: 3px solid #000;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
 }
 
+/* P2: Reduced logo size */
 .shop-logo {
-  max-height: 120px;
-  max-width: 250px;
+  max-height: 80px;
+  max-width: 200px;
   height: auto;
   width: auto;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   object-fit: contain;
 }
 
+/* P2: Reduced shop name */
 .shop-name {
-  font-size: 24pt;
+  font-size: 14pt;
   font-weight: bold;
-  margin-bottom: 5px;
+  margin-bottom: 3px;
   color: #000;
 }
 
 .shop-details {
-  font-size: 10pt;
+  font-size: 9pt;
   line-height: 1.4;
 }
 
@@ -74,30 +76,31 @@ body {
 }
 
 .invoice-title {
-  font-size: 20pt;
+  font-size: 14pt;
   font-weight: bold;
-  margin-bottom: 5px;
+  margin-bottom: 3px;
   color: #000;
 }
 
 .invoice-number {
-  font-size: 16pt;
+  font-size: 14pt;
   font-weight: bold;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .invoice-meta {
-  font-size: 10pt;
+  font-size: 9pt;
+  line-height: 1.6;
 }
 
 .status-badge {
   display: inline-block;
-  padding: 4px 12px;
+  padding: 3px 10px;
   margin-top: 5px;
   border: 2px solid #000;
-  border-radius: 4px;
+  border-radius: 3px;
   font-weight: bold;
-  font-size: 10pt;
+  font-size: 9pt;
 }
 
 .status-estimate {
@@ -125,30 +128,30 @@ body {
   border-color: #ef4444;
 }
 
-/* Info Section */
+/* ─── Info Section ─── */
 .info-section {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 30px;
-  margin-bottom: 25px;
+  gap: 20px;
+  margin-bottom: 20px;
   page-break-inside: avoid;
 }
 
 .customer-section,
 .vehicle-section {
   border: 1px solid #d1d5db;
-  padding: 15px;
-  border-radius: 4px;
+  padding: 12px;
+  border-radius: 3px;
 }
 
 .customer-section h3,
 .vehicle-section h3 {
-  font-size: 12pt;
+  font-size: 11pt;
   font-weight: bold;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: #374151;
   border-bottom: 1px solid #e5e7eb;
-  padding-bottom: 5px;
+  padding-bottom: 4px;
 }
 
 .info-content {
@@ -156,23 +159,23 @@ body {
 }
 
 .info-row {
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
-/* Customer Concern */
+/* ─── Customer Concern ─── */
 .concern-section {
   background-color: #f9fafb;
   border: 1px solid #d1d5db;
-  border-radius: 4px;
-  padding: 15px;
-  margin-bottom: 25px;
+  border-radius: 3px;
+  padding: 12px;
+  margin-bottom: 20px;
   page-break-inside: avoid;
 }
 
 .concern-section h3 {
   font-size: 11pt;
   font-weight: bold;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: #374151;
 }
 
@@ -182,23 +185,23 @@ body {
   color: #111827;
 }
 
-/* Services Section */
+/* ─── Services Section ─── */
 .services-section {
-  margin-bottom: 25px;
+  margin-bottom: 20px;
 }
 
 .services-section > h3 {
-  font-size: 13pt;
+  font-size: 12pt;
   font-weight: bold;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
   color: #000;
 }
 
-/* Service Card - Prevents page breaks within a service */
+/* P4: Service card — prevent page breaks within */
 .service-card {
-  margin-bottom: 10px;
-  border: 2px solid #d1d5db;
-  border-radius: 4px;
+  margin-bottom: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
   page-break-inside: avoid;
   break-inside: avoid;
   overflow: hidden;
@@ -206,31 +209,32 @@ body {
 
 .service-card-header {
   background-color: #f3f4f6;
-  padding: 8px 10px;
-  border-bottom: 2px solid #d1d5db;
+  padding: 6px 10px;
+  border-bottom: 1px solid #d1d5db;
 }
 
 .service-title {
-  font-size: 11pt;
+  font-size: 10pt;
   font-weight: bold;
-  margin-bottom: 2px;
+  margin-bottom: 0;
   color: #111827;
 }
 
+/* P3: Overdue/urgency subtitle — visible on screen */
 .service-description {
   font-size: 9pt;
   color: #6b7280;
-  margin-top: 3px;
+  margin-top: 2px;
 }
 
 .service-card-body {
-  padding: 8px 10px;
+  padding: 6px 10px;
   background-color: white;
 }
 
-/* Item Groups within Service Card */
+/* ─── Item Groups within Service Card ─── */
 .item-group {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .item-group:last-child {
@@ -241,7 +245,7 @@ body {
   font-size: 9pt;
   font-weight: bold;
   color: #374151;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   padding-bottom: 2px;
   border-bottom: 1px solid #e5e7eb;
 }
@@ -250,7 +254,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 3px 0;
+  padding: 2px 0;
   font-size: 9pt;
   border-bottom: 1px dotted #e5e7eb;
 }
@@ -271,10 +275,13 @@ body {
   color: #111827;
 }
 
+/* P4: Service card footer — avoid break before total */
 .service-card-footer {
   background-color: #f9fafb;
-  padding: 6px 10px;
-  border-top: 2px solid #d1d5db;
+  padding: 5px 10px;
+  border-top: 1px solid #d1d5db;
+  page-break-before: avoid;
+  break-before: avoid;
 }
 
 .service-total {
@@ -287,7 +294,7 @@ body {
 }
 
 .service-total-amount {
-  font-size: 11pt;
+  font-size: 10pt;
   color: #000;
 }
 
@@ -299,11 +306,11 @@ body {
   text-align: right !important;
 }
 
-/* Totals Section */
+/* ─── Totals Section ─── */
 .totals-section {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 25px;
+  margin-bottom: 20px;
   page-break-inside: avoid;
 }
 
@@ -314,7 +321,7 @@ body {
 }
 
 .totals-table td {
-  padding: 6px 12px;
+  padding: 5px 12px;
   border-bottom: 1px solid #e5e7eb;
 }
 
@@ -327,27 +334,51 @@ body {
   font-weight: 500;
 }
 
+.totals-table .discount-row td {
+  color: #dc2626;
+}
+
+.totals-table .discount-percent {
+  font-size: 9pt;
+  color: #9ca3af;
+}
+
+.totals-table .subtotal-divider td {
+  border-bottom: 2px solid #000;
+  padding: 0;
+  height: 4px;
+}
+
 .totals-table .grand-total {
   border-top: 3px solid #000;
-  border-bottom: 3px double #000;
 }
 
 .totals-table .grand-total td {
-  padding: 10px 12px;
-  font-size: 13pt;
+  padding: 8px 12px;
+  font-size: 12pt;
   font-weight: bold;
 }
 
-/* Payments Section */
+.totals-table .grand-total-bottom td {
+  border-bottom: 3px double #000;
+  padding: 0;
+  height: 2px;
+}
+
+.totals-table .amount-due td {
+  font-size: 11pt;
+}
+
+/* ─── Payments Section ─── */
 .payments-section {
-  margin-bottom: 25px;
+  margin-bottom: 20px;
   page-break-inside: avoid;
 }
 
 .payments-section h3 {
-  font-size: 12pt;
+  font-size: 11pt;
   font-weight: bold;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: #000;
 }
 
@@ -362,14 +393,14 @@ body {
 }
 
 .payments-table th {
-  padding: 8px;
+  padding: 6px 8px;
   text-align: left;
   font-weight: bold;
   border: 1px solid #d1d5db;
 }
 
 .payments-table td {
-  padding: 6px 8px;
+  padding: 5px 8px;
   border: 1px solid #e5e7eb;
 }
 
@@ -401,17 +432,17 @@ body {
   font-size: 11pt;
 }
 
-/* Footer */
+/* ─── Footer ─── */
 .invoice-footer {
-  margin-top: 40px;
-  padding-top: 20px;
+  margin-top: 30px;
+  padding-top: 15px;
   border-top: 2px solid #d1d5db;
   font-size: 9pt;
   color: #6b7280;
 }
 
 .footer-section {
-  margin-bottom: 15px;
+  margin-bottom: 10px;
 }
 
 .footer-section strong {
@@ -420,40 +451,130 @@ body {
 }
 
 .footer-section p {
-  margin-top: 5px;
+  margin-top: 4px;
 }
 
 .payment-info {
   font-style: italic;
 }
 
-/* Page break settings */
+/* ─── Page settings ─── */
 @page {
   size: letter;
   margin: 0.5in;
 }
 
-/* Print-specific adjustments */
+/* ═══════════════════════════════════════════════════
+   Print-specific overrides
+   ═══════════════════════════════════════════════════ */
 @media print {
+  /* P1: Kill ALL shadows, border-radius elevation, outlines */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* P1: Flatten card border-radius in print */
+  .service-card,
+  .customer-section,
+  .vehicle-section,
+  .concern-section,
+  .status-badge {
+    border-radius: 0 !important;
+  }
+
+  /* Force white background, override dark mode */
+  html,
   body {
+    background: white !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide app chrome (sidebar, nav, toasts, etc.) */
+  nav,
+  header:not(.invoice-header),
+  aside,
+  [data-sonner-toaster],
+  .toaster {
+    display: none !important;
+  }
+
+  body {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .print-page-wrapper {
     padding: 0;
   }
 
   .invoice-container {
+    padding: 0;
     page-break-after: auto;
   }
 
+  /* Override global print.css h1/h2/h3 sizes */
+  .print-page-wrapper h1.shop-name {
+    font-size: 14pt !important;
+    margin-bottom: 3px !important;
+  }
+
+  .print-page-wrapper h2.invoice-title {
+    font-size: 14pt !important;
+    margin-top: 0 !important;
+    margin-bottom: 3px !important;
+  }
+
+  .print-page-wrapper h3 {
+    font-size: 11pt !important;
+    margin-top: 0 !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* Override global print.css card rule */
+  .print-page-wrapper .service-card {
+    padding: 0 !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 0 !important;
+  }
+
+  .print-page-wrapper .customer-section,
+  .print-page-wrapper .vehicle-section,
+  .print-page-wrapper .concern-section {
+    padding: 12px !important;
+    border-radius: 0 !important;
+  }
+
+  /* P3: Hide overdue/urgency description in print */
+  .service-description {
+    display: none !important;
+  }
+
+  /* P4: Page break controls */
   .info-section,
   .concern-section,
   .service-card,
   .totals-section,
   .payments-section {
-    page-break-inside: avoid;
-    break-inside: avoid;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
-  /* Hide browser UI */
-  @page {
-    margin: 0.5in;
+  .service-card-footer {
+    page-break-before: avoid !important;
+    break-before: avoid !important;
+  }
+
+  /* P4: If a service card won't fit, break before it (not inside) */
+  .service-card {
+    page-break-before: auto;
+    break-before: auto;
+  }
+
+  /* Keep totals and payments together near the end */
+  .totals-section {
+    page-break-before: auto;
   }
 }

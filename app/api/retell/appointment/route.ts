@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { query, getClient } from '@/lib/db'
 import { evaluateSchedulingRules } from '@/lib/scheduling/rules-engine'
 import { findNextAvailableBookingDate, formatDateWithOrdinal } from '@/lib/scheduling/booking-helpers'
-import { sendSMS } from '@/lib/sms'
+import { sendSMS, updateSMSConsent } from '@/lib/sms'
 import { sendEmail } from '@/lib/email'
 import { getShopInfo } from '@/lib/email-templates'
 import { logActivity } from '@/lib/activity-log'
+import { buildGoogleCalendarLink } from '@/lib/calendar/generate-ics'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
       call_reason,
       estimated_tech_hours,
       mileage,
+      sms_consent,
     } = params
 
     // Phone: prefer args.caller_phone, fall back to call.from_number (E.164 from Retell)
@@ -303,7 +305,19 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // ── Confirmation SMS ──
+      // ── Store SMS consent ──
+      const hasConsent = sms_consent === true || sms_consent === 'true'
+      updateSMSConsent(customerId, hasConsent).catch(err =>
+        console.error('[Retell Appointment] Consent update failed:', err)
+      )
+      if (hasConsent) {
+        query(
+          `UPDATE customers SET sms_consent_source = 'phone_agent' WHERE id = $1 AND (sms_consent_source IS NULL OR sms_consent_source != 'phone_agent')`,
+          [customerId]
+        ).catch(() => {})
+      }
+
+      // ── Confirmation SMS + Email with calendar link ──
       const shopInfo = await getShopInfo()
       const confirmedFormatted = formatDateWithOrdinal(scheduledStart)
         + ' at ' + scheduledStart.toLocaleTimeString('en-US', {
@@ -312,30 +326,42 @@ export async function POST(request: NextRequest) {
           hour12: true,
         })
 
-      const smsBody = `Your appointment at ${shopInfo.name} is confirmed for ${confirmedFormatted}. Reply STOP to opt out.`
+      const calendarLink = buildGoogleCalendarLink({
+        summary: `Service Appointment — ${shopInfo.name}`,
+        start: scheduledStart,
+        end: scheduledEnd,
+        description: call_reason || 'Vehicle Service',
+        location: shopInfo.address,
+      })
 
-      sendSMS({
-        to: caller_phone,
-        body: smsBody,
-        workOrderId: workOrder.id,
-        customerId,
-        messageType: 'appointment_confirmation',
-      }).catch(err => console.error('[Retell Appointment] SMS send failed:', err))
+      // Only send SMS if customer consented during the call
+      if (hasConsent) {
+        const smsBody = `${shopInfo.name}: Your appointment is confirmed for ${confirmedFormatted}. Add to calendar: ${calendarLink} Reply STOP to opt out.`
 
-      // ── Confirmation email (if customer has email + consent) ──
+        sendSMS({
+          to: caller_phone,
+          body: smsBody,
+          workOrderId: workOrder.id,
+          customerId,
+          messageType: 'appointment_confirmation',
+        }).catch(err => console.error('[Retell Appointment] SMS send failed:', err))
+      } else {
+        console.log(`[Retell Appointment] SMS skipped — customer declined consent`)
+      }
+
+      // ── Confirmation email (transactional — no consent gate) ──
       const customerDetail = await query(
         `SELECT email, email_consent FROM customers WHERE id = $1`,
         [customerId]
       )
       const customerEmail = customerDetail.rows[0]?.email
-      const emailConsent = customerDetail.rows[0]?.email_consent
 
-      if (customerEmail && emailConsent) {
+      if (customerEmail) {
         sendEmail({
           to: customerEmail,
           subject: `Appointment Confirmed — ${shopInfo.name}`,
-          html: `<p>Your appointment at <strong>${shopInfo.name}</strong> is confirmed for <strong>${confirmedFormatted}</strong>.</p><p>If you need to reschedule, please call us at ${shopInfo.phone}.</p>`,
-          text: `Your appointment at ${shopInfo.name} is confirmed for ${confirmedFormatted}. If you need to reschedule, please call us at ${shopInfo.phone}.`,
+          html: `<p>Your appointment at <strong>${shopInfo.name}</strong> is confirmed for <strong>${confirmedFormatted}</strong>.</p><p>If you need to reschedule, please call us at ${shopInfo.phone}.</p><p><a href="${calendarLink}" style="color:#2563eb;">Add to Google Calendar</a></p>`,
+          text: `Your appointment at ${shopInfo.name} is confirmed for ${confirmedFormatted}. Add to calendar: ${calendarLink} If you need to reschedule, please call us at ${shopInfo.phone}.`,
           workOrderId: workOrder.id,
           customerId,
           messageType: 'appointment_confirmation',

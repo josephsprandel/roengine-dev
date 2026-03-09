@@ -40,11 +40,14 @@ interface TimeSlot {
 interface AvailabilityResponse {
   date: string
   day: string
-  open_time: string
-  close_time: string
-  slot_duration_minutes: number
-  slots: TimeSlot[]
+  open_time?: string
+  close_time?: string
+  slot_duration_minutes?: number
+  slots?: TimeSlot[]
   closed?: boolean
+  blocked?: boolean
+  next_available?: string
+  next_available_formatted?: string
 }
 
 type AppointmentType = "waiter" | "dropoff"
@@ -433,6 +436,30 @@ export default function BookingPage() {
                 <Loader2 className="animate-spin mr-2 text-gray-400" size={20} />
                 <span className="text-gray-400">Loading times...</span>
               </div>
+            ) : availability?.blocked ? (
+              <Card className="p-6 text-center space-y-3">
+                <p className="text-gray-700 font-medium">That date isn&apos;t available.</p>
+                {availability.next_available && (
+                  <>
+                    <p className="text-sm text-gray-500">
+                      The next available appointment is{" "}
+                      <span className="font-medium text-gray-900">{availability.next_available_formatted}</span>.
+                    </p>
+                    <Button
+                      onClick={() => {
+                        const nextDate = new Date(availability.next_available + "T12:00:00")
+                        setSelectedDate(nextDate)
+                      }}
+                      className="bg-gray-900 text-white hover:bg-gray-800"
+                    >
+                      Select {availability.next_available_formatted}
+                    </Button>
+                  </>
+                )}
+                <Button variant="outline" onClick={goBack}>
+                  Pick another date
+                </Button>
+              </Card>
             ) : availability?.closed ? (
               <Card className="p-6 text-center">
                 <p className="text-gray-500">We&apos;re closed on {availability.day}s.</p>
@@ -443,7 +470,7 @@ export default function BookingPage() {
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 {availability?.slots
-                  .filter((s) => s.available)
+                  ?.filter((s) => s.available)
                   .map((slot) => {
                     const time = new Date(slot.time)
                     const isSelected = selectedTime === slot.time
@@ -463,7 +490,7 @@ export default function BookingPage() {
                       </button>
                     )
                   })}
-                {availability?.slots.filter((s) => s.available).length === 0 && (
+                {availability?.slots?.filter((s) => s.available).length === 0 && (
                   <div className="col-span-3 text-center py-8">
                     <p className="text-gray-500">No available times on this date.</p>
                     <Button variant="outline" className="mt-3" onClick={goBack}>
@@ -605,6 +632,28 @@ export default function BookingPage() {
                 </div>
               </div>
             </Card>
+
+            {/* Calendar buttons */}
+            <div className="flex items-center justify-center gap-3">
+              {bookingResult.google_calendar_link && (
+                <a
+                  href={bookingResult.google_calendar_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+                >
+                  Add to Google Calendar
+                </a>
+              )}
+              {bookingResult.ics_url && (
+                <a
+                  href={bookingResult.ics_url}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Apple / Outlook
+                </a>
+              )}
+            </div>
 
             <div className="text-sm text-gray-500 space-y-1">
               {shopPhone && <p>Questions? Call us at <a href={`tel:${shopPhone.replace(/\D/g, '')}`} className="font-medium text-gray-900 underline">{formatPhoneNumber(shopPhone)}</a></p>}

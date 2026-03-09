@@ -14,11 +14,15 @@ import { EstimateError } from '@/components/estimates/EstimateError'
 export const dynamic = 'force-dynamic'
 
 export default async function EstimatePage({
-  params
+  params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>
+  searchParams: Promise<{ preview?: string }>
 }) {
   const { token } = await params
+  const { preview } = await searchParams
+  const isPreview = preview === 'true'
 
   try {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
@@ -49,6 +53,7 @@ export default async function EstimatePage({
         token={token}
         shopProfile={data.shopProfile}
         workOrderId={data.estimate.workOrderId}
+        preview={isPreview}
       />
     )
   } catch {

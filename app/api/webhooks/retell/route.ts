@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
     const payload: RetellWebhookPayload = JSON.parse(bodyText)
     const { event, call } = payload
 
+    console.log('[Retell Webhook] Raw body:', bodyText)
     console.log(`[Retell Webhook] Event: ${event}, Call ID: ${call?.call_id}, From: ${call?.from_number}`)
 
     // 3. Only process call_analyzed (has analysis) or call_ended (fallback)
@@ -67,6 +68,11 @@ export async function POST(req: NextRequest) {
     if (event === 'call_started') {
       console.log('[Retell Webhook] Skipping call_started event')
       return NextResponse.json({ received: true })
+    }
+
+    if (!call) {
+      console.warn('[Retell Webhook] No call object in payload')
+      return NextResponse.json({ received: true, warning: 'No call data in payload' })
     }
 
     // 4. Calculate duration
@@ -78,17 +84,24 @@ export async function POST(req: NextRequest) {
     // 5. Normalize caller phone and look up customer
     //    Retell sends E.164 format (+15551234567) — strip to last 10 digits
     //    to match DB format (same pattern as app/api/sms/incoming/route.ts)
-    const callerPhone = call.from_number
+    const callerPhone = call.from_number ?? ''
     const normalizedPhone = callerPhone.replace(/\D/g, '').slice(-10)
 
+    if (!normalizedPhone) {
+      console.warn('[Retell Webhook] No caller phone found in payload. call.from_number:', call.from_number)
+      return NextResponse.json({ received: true, warning: 'No caller phone — call logged without customer match' })
+    }
+
     const customerResult = await query(
-      `SELECT id FROM customers
+      `SELECT id, customer_name FROM customers
        WHERE phone_primary LIKE '%' || $1 OR phone_mobile LIKE '%' || $1
        LIMIT 1`,
       [normalizedPhone]
     )
     const customerId: number | null =
       customerResult.rows.length > 0 ? customerResult.rows[0].id : null
+    const dbCustomerName: string | null =
+      customerResult.rows.length > 0 ? customerResult.rows[0].customer_name : null
 
     // 6. Find active (non-terminal) work order for this customer
     let workOrderId: number | null = null
@@ -109,9 +122,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 7. Build call metadata for template_data JSONB
+    // 7. Resolve caller name — prefer DB spelling over AI transcription
     const analysis = call.call_analysis
     const custom = analysis?.custom_analysis_data
+    const spokenName = custom?.caller_name
+    const resolvedName = (spokenName && dbCustomerName && nameIsSimilar(spokenName, dbCustomerName))
+      ? dbCustomerName
+      : spokenName
+
+    // 8. Build call metadata for template_data JSONB
     const callMetadata = {
       retell_call_id: call.call_id,
       call_status: call.call_status,
@@ -120,7 +139,7 @@ export async function POST(req: NextRequest) {
       call_summary: analysis?.call_summary || null,
       call_successful: analysis?.call_successful ?? null,
       user_sentiment: analysis?.user_sentiment || null,
-      caller_name: custom?.caller_name || null,
+      caller_name: resolvedName || null,
       vehicle_year: custom?.vehicle_year || null,
       vehicle_make: custom?.vehicle_make || null,
       vehicle_model: custom?.vehicle_model || null,
@@ -128,10 +147,9 @@ export async function POST(req: NextRequest) {
       issue_description: custom?.issue_description || null,
     }
 
-    // 8. Build display fields
-    const callerName = custom?.caller_name
-    const subject = callerName
-      ? `Call from ${callerName}`
+    // 9. Build display fields
+    const subject = resolvedName
+      ? `Call from ${resolvedName}`
       : `Call from ${formatDisplayPhone(callerPhone)}`
 
     const messageBody =
@@ -166,8 +184,8 @@ export async function POST(req: NextRequest) {
       [
         workOrderId,
         customerId,
-        callerPhone,
-        call.to_number,
+        callerPhone || null,
+        call.to_number || null,
         subject,
         messageBody,
         call.recording_url || null,
@@ -189,7 +207,33 @@ export async function POST(req: NextRequest) {
   }
 }
 
-function formatDisplayPhone(phone: string): string {
+function nameIsSimilar(spoken: string, db: string): boolean {
+  const a = spoken.trim().toLowerCase()
+  const b = db.trim().toLowerCase()
+  if (a === b) return true
+  const aFirst = a.split(/\s+/)[0]
+  const bFirst = b.split(/\s+/)[0]
+  if (aFirst !== bFirst && editDistance(aFirst, bFirst) > 1) return false
+  const dist = editDistance(a, b)
+  const maxLen = Math.max(a.length, b.length)
+  return dist <= Math.max(2, Math.floor(maxLen * 0.25))
+}
+
+function editDistance(a: string, b: string): number {
+  const m = a.length, n = b.length
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  )
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+  return dp[m][n]
+}
+
+function formatDisplayPhone(phone: string | undefined | null): string {
+  if (!phone) return 'Unknown'
   const digits = phone.replace(/\D/g, '')
   if (digits.length >= 10) {
     const last10 = digits.slice(-10)

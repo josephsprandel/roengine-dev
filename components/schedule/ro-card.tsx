@@ -27,6 +27,10 @@ export interface ScheduledOrder {
   job_state_name?: string | null
   job_state_color?: string | null
   job_state_icon?: string | null
+  estimated_tech_hours?: number | null
+  is_waiter?: boolean
+  bay_hold?: boolean
+  week_killer_flag?: boolean
 }
 
 // Calendar-specific status colors
@@ -189,10 +193,13 @@ export function ROCard({ order, isDragOverlay, compact, onResize, style: externa
           {order.booking_source === "online" && (
             <span className="flex-shrink-0 w-3.5 h-3.5 rounded-full bg-indigo-500 text-white text-[7px] font-bold flex items-center justify-center" title="Online booking">&#9679;</span>
           )}
-          {(order.appointment_type === "waiter" || order.appointment_type === "online_waiter") && (
+          {order.booking_source === "phone" && (
+            <span className="flex-shrink-0 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white text-[7px] font-bold flex items-center justify-center" title="Phone booking">P</span>
+          )}
+          {(order.appointment_type === "waiter" || order.appointment_type === "online_waiter" || order.appointment_type === "phone_waiter") && (
             <span className="flex-shrink-0 w-3.5 h-3.5 rounded-full bg-sky-500 text-white text-[7px] font-bold flex items-center justify-center" title="Waiter">W</span>
           )}
-          {(order.appointment_type === "drop_off" || order.appointment_type === "online_dropoff") && (
+          {(order.appointment_type === "drop_off" || order.appointment_type === "online_dropoff" || order.appointment_type === "phone_dropoff") && (
             <span className="flex-shrink-0 w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[7px] font-bold flex items-center justify-center" title="Drop-off">D</span>
           )}
           <span className="font-medium truncate">{lastName}</span>
@@ -222,10 +229,13 @@ export function ROCard({ order, isDragOverlay, compact, onResize, style: externa
             {order.booking_source === "online" && (
               <span className="flex-shrink-0 w-4 h-4 rounded-full bg-indigo-500 text-white text-[8px] font-bold flex items-center justify-center" title="Online booking">&#9679;</span>
             )}
-            {(order.appointment_type === "waiter" || order.appointment_type === "online_waiter") && (
+            {order.booking_source === "phone" && (
+              <span className="flex-shrink-0 w-4 h-4 rounded-full bg-emerald-500 text-white text-[8px] font-bold flex items-center justify-center" title="Phone booking">P</span>
+            )}
+            {(order.appointment_type === "waiter" || order.appointment_type === "online_waiter" || order.appointment_type === "phone_waiter") && (
               <span className="flex-shrink-0 w-4 h-4 rounded-full bg-sky-500 text-white text-[8px] font-bold flex items-center justify-center" title="Waiter">W</span>
             )}
-            {(order.appointment_type === "drop_off" || order.appointment_type === "online_dropoff") && (
+            {(order.appointment_type === "drop_off" || order.appointment_type === "online_dropoff" || order.appointment_type === "phone_dropoff") && (
               <span className="flex-shrink-0 w-4 h-4 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center" title="Drop-off">D</span>
             )}
             <span className="font-semibold truncate">{lastName}</span>

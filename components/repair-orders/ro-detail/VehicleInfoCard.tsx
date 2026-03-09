@@ -49,58 +49,60 @@ export function VehicleInfoCard({
       <div className="space-y-2.5">
         {/* Row 1: VIN and Prod. Date */}
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs text-muted-foreground mb-0.5">VIN:</p>
-            <p className="text-sm font-medium text-foreground font-mono leading-tight">{vin}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-0.5">Prod. Date:</p>
-            <p className="text-sm font-medium text-foreground leading-tight">
-              {manufactureDate 
-                ? (() => {
-                    // Parse YYYY-MM format manually to avoid timezone issues
-                    const [year, month] = manufactureDate.split('-')
-                    return `${parseInt(month)}/${year}`
-                  })()
-                : '—'
-              }
-            </p>
-          </div>
+          {vin && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-0.5">VIN:</p>
+              <p className="text-sm font-medium text-foreground font-mono leading-tight">{vin}</p>
+            </div>
+          )}
+          {manufactureDate && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-0.5">Prod. Date:</p>
+              <p className="text-sm font-medium text-foreground leading-tight">
+                {(() => {
+                  const [yr, month] = manufactureDate.split('-')
+                  return `${parseInt(month)}/${yr}`
+                })()}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Row 2: Engine */}
-        <div>
-          <p className="text-xs text-muted-foreground mb-0.5">Engine:</p>
-          <p className="text-sm font-medium text-foreground leading-tight">{engine || '—'}</p>
-        </div>
+        {engine && (
+          <div>
+            <p className="text-xs text-muted-foreground mb-0.5">Engine:</p>
+            <p className="text-sm font-medium text-foreground leading-tight">{engine}</p>
+          </div>
+        )}
 
         {/* Row 3: Plate and Color */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs text-muted-foreground mb-0.5">Plate:</p>
-            <p className="text-sm font-medium text-foreground leading-tight">
-              {licensePlate || '—'}
-            </p>
+        {(licensePlate || color) && (
+          <div className="grid grid-cols-2 gap-4">
+            {licensePlate && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-0.5">Plate:</p>
+                <p className="text-sm font-medium text-foreground leading-tight">{licensePlate}</p>
+              </div>
+            )}
+            {color && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-0.5">Color:</p>
+                <p className="text-sm font-medium text-foreground leading-tight">{color}</p>
+              </div>
+            )}
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-0.5">Color:</p>
-            <p className="text-sm font-medium text-foreground leading-tight">{color || '—'}</p>
-          </div>
-        </div>
+        )}
 
-        {/* Row 4: Odometer In and Out */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Row 4: Odometer In */}
+        {mileage && (
           <div>
             <p className="text-xs text-muted-foreground mb-0.5">Odometer In:</p>
             <p className="text-sm font-medium text-foreground leading-tight">
-              {mileage ? mileage.toLocaleString() : '—'}
+              {mileage.toLocaleString()} mi
             </p>
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-0.5">Out:</p>
-            <p className="text-sm font-medium text-foreground leading-tight">—</p>
-          </div>
-        </div>
+        )}
       </div>
     </Card>
   )

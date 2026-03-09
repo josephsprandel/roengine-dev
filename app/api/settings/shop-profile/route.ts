@@ -110,6 +110,7 @@ export async function PATCH(request: NextRequest) {
             dropoff_end_time = COALESCE($19, dropoff_end_time),
             timezone = COALESCE($20, timezone),
             estimate_mode = COALESCE($21, estimate_mode),
+            desk_phone = COALESCE($22, desk_phone),
             updated_at = NOW()
           WHERE id = $14
         `, [
@@ -134,6 +135,7 @@ export async function PATCH(request: NextRequest) {
           profile.dropoff_end_time || null,
           profile.timezone || null,
           profile.estimate_mode || null,
+          profile.desk_phone || null,
         ])
       } else {
         // Insert new profile
@@ -192,6 +194,10 @@ export async function PATCH(request: NextRequest) {
     // Sync Retell phone prompt with updated shop settings (fire-and-forget)
     fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/retell/sync-date`)
       .catch(err => console.error('[Shop Profile] Retell prompt sync failed:', err.message))
+
+    // Mark phone assistant prompt as dirty (shop info changed)
+    query('UPDATE phone_settings SET prompt_dirty = true, updated_at = NOW() WHERE shop_id = 1')
+      .catch(err => console.error('[Shop Profile] prompt_dirty flag failed:', err.message))
 
     return NextResponse.json({
       success: true,

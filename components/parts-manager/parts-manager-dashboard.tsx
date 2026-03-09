@@ -16,6 +16,7 @@ import Link from "next/link"
 
 export function PartsManagerDashboard() {
   const [activeTab, setActiveTab] = useState("inventory")
+  const [receivingPreloadId, setReceivingPreloadId] = useState<number | null>(null)
 
   return (
     <div className="space-y-4">
@@ -35,7 +36,7 @@ export function PartsManagerDashboard() {
           <Link href="/parts-search">
             <Button size="lg" variant="outline" className="gap-2">
               <Search size={18} />
-              PartsTech Search
+              Parts Search
               <ExternalLink size={14} className="opacity-50" />
             </Button>
           </Link>
@@ -151,10 +152,18 @@ export function PartsManagerDashboard() {
               <PartsInventoryTab />
             </TabsContent>
             <TabsContent value="orders">
-              <PurchaseOrdersTab />
+              <PurchaseOrdersTab
+                onNavigateToReceiving={(poId) => {
+                  setReceivingPreloadId(poId)
+                  setActiveTab("receiving")
+                }}
+              />
             </TabsContent>
             <TabsContent value="receiving">
-              <ReceivingTab />
+              <ReceivingTab
+                preloadPoId={receivingPreloadId}
+                onPreloadHandled={() => setReceivingPreloadId(null)}
+              />
             </TabsContent>
             <TabsContent value="vendors">
               <VendorManagementTab />

@@ -11,6 +11,8 @@ import { Switch } from "@/components/ui/switch"
 import { Building2, Clock, MapPin, Phone, Mail, Globe, Save, Loader2, AlertCircle, Plus, X, Upload, ImageIcon, Trash2, FileText } from "lucide-react"
 import Image from "next/image"
 import { toast } from "sonner"
+import { formatPhoneNumber, unformatPhoneNumber } from "@/lib/utils/phone-format"
+import { OciPresetsManager } from "./oci-presets-manager"
 
 // All 50 US States
 const US_STATES = [
@@ -93,6 +95,8 @@ interface ShopProfile {
   state: string
   zip: string
   phone: string
+  desk_phone: string
+  telnyx_phone: string
   email: string
   website: string
   services_description: string
@@ -120,6 +124,8 @@ const initialProfile: ShopProfile = {
   state: "",
   zip: "",
   phone: "",
+  desk_phone: "",
+  telnyx_phone: "",
   email: "",
   website: "",
   services_description: "",
@@ -501,13 +507,42 @@ export function ShopSettings() {
               <Phone size={18} className="text-muted-foreground mt-2.5" />
               <Input
                 id="phone"
-                value={profile.phone}
-                onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                value={formatPhoneNumber(profile.phone)}
+                onChange={(e) => setProfile({ ...profile, phone: unformatPhoneNumber(e.target.value) })}
                 className="flex-1"
                 placeholder="(555) 555-5555"
               />
             </div>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="desk_phone">Desk Phone (Click-to-Call)</Label>
+            <div className="flex gap-2">
+              <Phone size={18} className="text-muted-foreground mt-2.5" />
+              <Input
+                id="desk_phone"
+                value={formatPhoneNumber(profile.desk_phone)}
+                onChange={(e) => setProfile({ ...profile, desk_phone: unformatPhoneNumber(e.target.value) })}
+                className="flex-1"
+                placeholder="(555) 555-5555"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">Phone that rings when you click Call on an RO</p>
+          </div>
+          {profile.telnyx_phone && (
+            <div className="space-y-2">
+              <Label>RO Engine Phone Number</Label>
+              <div className="flex gap-2">
+                <Phone size={18} className="text-muted-foreground mt-2.5" />
+                <Input
+                  value={formatPhoneNumber(profile.telnyx_phone.replace('+1', ''))}
+                  readOnly
+                  disabled
+                  className="flex-1 bg-muted"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">Telnyx number used for calls and SMS to customers</p>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="email">Email Address</Label>
             <div className="flex gap-2">
@@ -696,6 +731,9 @@ export function ShopSettings() {
           </label>
         </div>
       </Card>
+
+      {/* Oil Change Decal Presets */}
+      <OciPresetsManager />
 
       {/* Services Offered */}
       <Card className="p-6 border-border">

@@ -253,7 +253,7 @@ export function EmailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail size={18} />
@@ -341,7 +341,7 @@ export function EmailDialog({
                   </div>
                   <div>
                     <p className="text-[10px] uppercase text-muted-foreground">Body</p>
-                    <p className="text-sm whitespace-pre-wrap">{templatePreview.text}</p>
+                    <p className="text-sm whitespace-pre-wrap break-all">{templatePreview.text}</p>
                   </div>
                 </div>
                 <div className="flex justify-end mt-2">

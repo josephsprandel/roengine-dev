@@ -31,6 +31,9 @@ import {
   ArrowUpRight,
   ChevronLeft,
   ChevronRight,
+  Trash2,
+  Loader2,
+  Wifi,
 } from "lucide-react"
 import { formatPhoneNumber } from "@/lib/utils/phone-format"
 
@@ -131,6 +134,96 @@ export function CommunicationsDashboard() {
   const [typeFilter, setTypeFilter] = useState("all")
   const [channelFilter, setChannelFilter] = useState<"all" | "sms" | "email" | "call">("all")
   const [selectedCall, setSelectedCall] = useState<Message | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+
+  const isDev = process.env.NODE_ENV === "development"
+
+  // SMS health check state
+  const [smsProvider, setSmsProvider] = useState<string | null>(null)
+  const [shopPhone, setShopPhone] = useState("")
+  const [testPhone, setTestPhone] = useState("")
+  const [testSending, setTestSending] = useState(false)
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string; dryRun?: boolean; timestamp: string } | null>(() => {
+    if (typeof window === "undefined") return null
+    const saved = localStorage.getItem("sms_test_result")
+    return saved ? JSON.parse(saved) : null
+  })
+  const [showTestForm, setShowTestForm] = useState(false)
+
+  // Load SMS provider info
+  useEffect(() => {
+    fetch("/api/sms/test")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data) {
+          setSmsProvider(data.provider === "twilio" ? "Twilio" : "MessageBird")
+          setShopPhone(data.shopPhone || "")
+          if (!testPhone) setTestPhone(data.shopPhone || "")
+        }
+      })
+      .catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleSendTest() {
+    if (!testPhone.trim()) return
+    setTestSending(true)
+    setTestResult(null)
+    try {
+      const res = await fetch("/api/sms/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: testPhone }),
+      })
+      const data = await res.json()
+      const result = {
+        success: data.success,
+        error: data.error,
+        dryRun: data.dryRun,
+        timestamp: new Date().toISOString(),
+      }
+      setTestResult(result)
+      localStorage.setItem("sms_test_result", JSON.stringify(result))
+    } catch (err) {
+      const result = {
+        success: false,
+        error: "Network error",
+        timestamp: new Date().toISOString(),
+      }
+      setTestResult(result)
+      localStorage.setItem("sms_test_result", JSON.stringify(result))
+    } finally {
+      setTestSending(false)
+    }
+  }
+
+  const handleDelete = async (msg: Message, e: React.MouseEvent) => {
+    e.stopPropagation() // Don't open call modal when clicking delete
+
+    // Production: confirm first. Dev: delete immediately.
+    if (!isDev) {
+      const label = msg.channel === "call"
+        ? (msg.subject || "this call record")
+        : msg.channel === "email"
+          ? (msg.subject || "this email")
+          : "this message"
+      if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return
+    }
+
+    setDeletingId(msg.id)
+    try {
+      const res = await fetch(`/api/messages/${msg.id}`, { method: "DELETE" })
+      if (res.ok) {
+        setMessages((prev) => prev.filter((m) => m.id !== msg.id))
+        setTotal((prev) => prev - 1)
+      } else {
+        const data = await res.json()
+        console.error("Failed to delete message:", data.error)
+      }
+    } catch (err) {
+      console.error("Failed to delete message:", err)
+    }
+    setDeletingId(null)
+  }
 
   const fetchMessages = useCallback(async () => {
     setLoading(true)
@@ -176,10 +269,90 @@ export function CommunicationsDashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Communications</h1>
-        <p className="text-sm text-muted-foreground">SMS, Email & Call history</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Communications</h1>
+          <p className="text-sm text-muted-foreground">SMS, Email & Call history</p>
+        </div>
+        {smsProvider && (
+          <Badge variant="outline" className="gap-1.5 text-xs">
+            <Wifi size={12} className="text-green-500" />
+            SMS: {smsProvider}
+          </Badge>
+        )}
       </div>
+
+      {/* SMS Health Check */}
+      <Card className="p-4 border-border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <MessageSquare size={16} className="text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground">SMS Status</span>
+            </div>
+            {smsProvider && (
+              <Badge variant="secondary" className="text-xs">{smsProvider}</Badge>
+            )}
+            {testResult && (
+              <span className="text-xs text-muted-foreground">
+                Last tested: {new Date(testResult.timestamp).toLocaleString([], {
+                  month: "long", day: "numeric", year: "numeric",
+                  hour: "numeric", minute: "2-digit",
+                })}
+                {" — "}
+                {testResult.success ? (
+                  <span className="text-green-600 dark:text-green-400">
+                    {testResult.dryRun ? "OK (dry run)" : "OK"}
+                  </span>
+                ) : (
+                  <span className="text-destructive">Failed</span>
+                )}
+              </span>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="bg-transparent gap-1.5"
+            onClick={() => setShowTestForm(!showTestForm)}
+          >
+            <Send size={14} />
+            Send Test SMS
+          </Button>
+        </div>
+
+        {showTestForm && (
+          <div className="mt-3 pt-3 border-t border-border">
+            <div className="flex items-end gap-3">
+              <div className="flex-1 max-w-xs space-y-1">
+                <label className="text-xs text-muted-foreground">Phone number</label>
+                <Input
+                  value={testPhone}
+                  onChange={(e) => setTestPhone(e.target.value)}
+                  placeholder="(479) 301-2880"
+                  className="bg-card border-border"
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={handleSendTest}
+                disabled={testSending || !testPhone.trim()}
+              >
+                {testSending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Send size={14} className="mr-1.5" />}
+                {testSending ? "Sending..." : "Send"}
+              </Button>
+            </div>
+            {testResult && (
+              <div className={`mt-2 flex items-center gap-1.5 text-sm ${testResult.success ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
+                {testResult.success ? <CheckCircle size={14} /> : <XCircle size={14} />}
+                {testResult.success
+                  ? testResult.dryRun ? "Delivered (dry run — SMS_DRY_RUN=true)" : "Delivered"
+                  : `Failed: ${testResult.error}`}
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
 
       {/* Filters */}
       <Card className="p-4 border-border">
@@ -270,18 +443,19 @@ export function CommunicationsDashboard() {
                 <th className="text-left p-3 font-medium text-muted-foreground">Type</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">Status</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">RO</th>
+                <th className="p-3 w-10"></th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="p-8 text-center text-muted-foreground">
                     Loading...
                   </td>
                 </tr>
               ) : messages.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="p-8 text-center text-muted-foreground">
                     <MessageSquare size={24} className="mx-auto mb-2 opacity-50" />
                     No messages found
                   </td>
@@ -376,6 +550,16 @@ export function CommunicationsDashboard() {
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </td>
+                      <td className="p-3">
+                        <button
+                          onClick={(e) => handleDelete(msg, e)}
+                          disabled={deletingId === msg.id}
+                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+                          title="Delete message"
+                        >
+                          <Trash2 size={14} className={deletingId === msg.id ? "animate-pulse" : ""} />
+                        </button>
+                      </td>
                     </tr>
                   )
                 })
@@ -416,13 +600,13 @@ export function CommunicationsDashboard() {
 
       {/* Call Detail Dialog */}
       <Dialog open={!!selectedCall} onOpenChange={() => setSelectedCall(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{selectedCall?.subject || "Call Details"}</DialogTitle>
           </DialogHeader>
 
           {selectedCall && (
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto flex-1 min-h-0">
               {/* Call metadata grid */}
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>

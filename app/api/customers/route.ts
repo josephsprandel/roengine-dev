@@ -79,6 +79,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Resolve consent fields with timestamps
+    const smsConsent = body.sms_consent !== undefined ? body.sms_consent : false
+    const emailConsent = body.email_consent !== undefined ? body.email_consent : false
+
     const sql = `
       INSERT INTO customers (
         customer_name, first_name, last_name,
@@ -86,10 +90,12 @@ export async function POST(request: NextRequest) {
         address_line1, address_line2, city, state, zip,
         customer_type, customer_source, marketing_opt_in,
         is_tax_exempt, tax_exempt_id, notes,
+        sms_consent, sms_consent_at,
+        email_consent, email_consent_at,
         created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-        $13, $14, $15, $16, $17, $18, NOW(), NOW()
+        $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW(), NOW()
       )
       RETURNING *
     `
@@ -113,6 +119,10 @@ export async function POST(request: NextRequest) {
       body.is_tax_exempt || false,
       body.tax_exempt_id || null,
       body.notes || null,
+      smsConsent,
+      smsConsent ? new Date().toISOString() : null,
+      emailConsent,
+      emailConsent ? new Date().toISOString() : null,
     ]
 
     const result = await query(sql, params)

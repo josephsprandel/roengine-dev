@@ -4,6 +4,7 @@ import { applyCannedJobToWorkOrder } from '@/lib/apply-canned-job'
 import { logActivity } from '@/lib/activity-log'
 import { getUserFromRequest } from '@/lib/auth/session'
 import { evaluateSchedulingRules } from '@/lib/scheduling/rules-engine'
+import { generateRoNumber } from '@/lib/ro-number'
 
 // GET /api/work-orders - List work orders with optional filters
 export async function GET(request: NextRequest) {
@@ -13,6 +14,7 @@ export async function GET(request: NextRequest) {
     const vehicleId = searchParams.get('vehicle_id')
     const state = searchParams.get('state')
     const search = searchParams.get('search') || ''
+    const sort = searchParams.get('sort') || 'date_opened_desc'
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = (page - 1) * limit
@@ -78,7 +80,20 @@ export async function GET(request: NextRequest) {
       params.push(`%${search}%`)
     }
 
-    sql += ` ORDER BY wo.date_opened DESC, wo.id DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`
+    // Sort options (whitelist to prevent SQL injection)
+    const sortMap: Record<string, string> = {
+      date_opened_desc: 'wo.date_opened DESC, wo.id DESC',
+      date_opened_asc: 'wo.date_opened ASC, wo.id ASC',
+      date_closed_desc: 'wo.date_closed DESC NULLS LAST, wo.id DESC',
+      date_closed_asc: 'wo.date_closed ASC NULLS LAST, wo.id ASC',
+      total_desc: 'wo.total DESC NULLS LAST, wo.id DESC',
+      total_asc: 'wo.total ASC NULLS LAST, wo.id ASC',
+      ro_number_desc: 'wo.ro_number DESC, wo.id DESC',
+      ro_number_asc: 'wo.ro_number ASC, wo.id ASC',
+    }
+    const orderBy = sortMap[sort] || sortMap.date_opened_desc
+
+    sql += ` ORDER BY ${orderBy} LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`
     params.push(limit, offset)
 
     const result = await query(sql, params)
@@ -161,14 +176,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Vehicle not found' }, { status: 404 })
     }
 
-    // Generate RO number (format: RO-YYYYMMDD-XXX)
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-    const countResult = await query(
-      "SELECT COUNT(*) as count FROM work_orders WHERE ro_number LIKE $1",
-      [`RO-${today}-%`]
-    )
-    const sequence = (parseInt(countResult.rows[0].count) + 1).toString().padStart(3, '0')
-    const roNumber = `RO-${today}-${sequence}`
+    // Generate RO number from shop_profile config
+    const roNumber = await generateRoNumber()
 
     // Get authenticated user to set as creator/advisor
     const user = await getUserFromRequest(request)

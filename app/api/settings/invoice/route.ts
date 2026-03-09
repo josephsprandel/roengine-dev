@@ -11,7 +11,9 @@ import { query } from '@/lib/db'
 export async function GET() {
   try {
     const result = await query(`
-      SELECT 
+      SELECT
+        ro_numbering_mode,
+        next_ro_number,
         invoice_number_prefix,
         include_date,
         date_format,
@@ -50,6 +52,8 @@ export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
     const {
+      ro_numbering_mode,
+      next_ro_number,
       invoice_number_prefix,
       include_date,
       date_format,
@@ -82,6 +86,8 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    addUpdate('ro_numbering_mode', ro_numbering_mode)
+    addUpdate('next_ro_number', next_ro_number)
     addUpdate('invoice_number_prefix', invoice_number_prefix)
     addUpdate('include_date', include_date)
     addUpdate('date_format', date_format)

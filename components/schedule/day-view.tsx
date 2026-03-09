@@ -158,7 +158,8 @@ export function DayView({ orders, blocks, currentDate, activeId, onResize, onBlo
               const start = new Date(order.scheduled_start)
               const end = new Date(order.scheduled_end)
               const top = timeToOffset(start)
-              const height = durationToHeight(start, end)
+              const rawHeight = durationToHeight(start, end)
+              const height = Math.max(rawHeight, 24)
               const overlap = overlapMap.get(order.id) || { column: 0, totalColumns: 1 }
               const widthPercent = 100 / overlap.totalColumns
               const leftPercent = overlap.column * widthPercent

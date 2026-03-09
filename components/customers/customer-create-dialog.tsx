@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Loader2 } from "lucide-react"
 import { useLoadScript, Autocomplete } from "@react-google-maps/api"
 import { formatPhoneNumber, unformatPhoneNumber } from "@/lib/utils/phone-format"
@@ -29,6 +30,8 @@ interface Customer {
   zip: string | null
   customer_type: string
   notes: string | null
+  sms_consent?: boolean | null
+  email_consent?: boolean | null
 }
 
 interface CustomerCreateDialogProps {
@@ -75,6 +78,8 @@ export function CustomerCreateDialog({ open, onOpenChange, onSuccess, customer }
         zip: customer.zip || "",
         customer_type: customer.customer_type || "individual",
         notes: customer.notes || "",
+        sms_consent: customer.sms_consent ?? true,
+        email_consent: customer.email_consent ?? true,
       }
     }
     return {
@@ -91,6 +96,8 @@ export function CustomerCreateDialog({ open, onOpenChange, onSuccess, customer }
       zip: "",
       customer_type: "individual",
       notes: "",
+      sms_consent: true,
+      email_consent: true,
     }
   }
 
@@ -201,6 +208,8 @@ export function CustomerCreateDialog({ open, onOpenChange, onSuccess, customer }
           zip: "",
           customer_type: "individual",
           notes: "",
+          sms_consent: true,
+          email_consent: true,
         })
       }
     } catch (err: any) {
@@ -315,6 +324,35 @@ export function CustomerCreateDialog({ open, onOpenChange, onSuccess, customer }
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   placeholder="customer@example.com"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Communication Preferences */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-sm text-muted-foreground">Communication Preferences</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <Label htmlFor="sms_consent" className="font-medium">SMS Opt-in</Label>
+                  <p className="text-xs text-muted-foreground">Allow sending text messages</p>
+                </div>
+                <Switch
+                  id="sms_consent"
+                  checked={formData.sms_consent}
+                  onCheckedChange={(checked) => setFormData({ ...formData, sms_consent: checked })}
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <Label htmlFor="email_consent" className="font-medium">Email Opt-in</Label>
+                  <p className="text-xs text-muted-foreground">Allow sending emails</p>
+                </div>
+                <Switch
+                  id="email_consent"
+                  checked={formData.email_consent}
+                  onCheckedChange={(checked) => setFormData({ ...formData, email_consent: checked })}
                 />
               </div>
             </div>

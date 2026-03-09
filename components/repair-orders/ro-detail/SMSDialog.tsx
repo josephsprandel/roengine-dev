@@ -241,7 +241,7 @@ export function SMSDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageSquare size={18} />
@@ -331,7 +331,7 @@ export function SMSDialog({
                 <Label className="text-xs uppercase text-muted-foreground tracking-wide mb-2 block">
                   Message Preview
                 </Label>
-                <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm whitespace-pre-wrap">
+                <div className="p-3 rounded-lg border border-border bg-muted/30 text-sm whitespace-pre-wrap break-all">
                   {preview}
                 </div>
                 <div className="flex justify-between items-center mt-2">

@@ -3,7 +3,15 @@ import Retell from 'retell-sdk'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { getShopInfo } from '@/lib/email-templates'
-import { BOOK_APPOINTMENT_TOOL, END_CALL_TOOL, buildAgentSwapTool } from '@/retell/tool-schemas'
+import {
+  BOOK_APPOINTMENT_TOOL,
+  FIND_CUSTOMER_APPOINTMENTS_TOOL,
+  MODIFY_APPOINTMENT_TOOL,
+  CANCEL_APPOINTMENT_TOOL,
+  CHECK_AVAILABILITY_TOOL,
+  END_CALL_TOOL,
+  buildAgentSwapTool,
+} from '@/retell/tool-schemas'
 import { query } from '@/lib/db'
 
 async function getTodayString(): Promise<string> {
@@ -141,7 +149,14 @@ export async function GET() {
         client.llm.update(schedulerLlmId, {
           general_prompt: schedulerPrompt,
           model_temperature: 0.3,
-          general_tools: [BOOK_APPOINTMENT_TOOL as any, END_CALL_TOOL as any],
+          general_tools: [
+            BOOK_APPOINTMENT_TOOL,
+            FIND_CUSTOMER_APPOINTMENTS_TOOL,
+            MODIFY_APPOINTMENT_TOOL,
+            CANCEL_APPOINTMENT_TOOL,
+            CHECK_AVAILABILITY_TOOL,
+            END_CALL_TOOL,
+          ] as any[],
           begin_message: null,
           tool_call_strict_mode: false,
         })
@@ -168,7 +183,7 @@ export async function GET() {
         ? {
             llm_id: schedulerLlmId,
             prompt_length: schedulerPrompt!.length,
-            tools: ['book_appointment'],
+            tools: ['book_appointment', 'find_customer_appointments', 'modify_appointment', 'cancel_appointment', 'check_availability'],
             temperature: 0.3,
           }
         : { skipped: true, reason: 'RETELL_LLM_ID_SCHEDULER not set' },

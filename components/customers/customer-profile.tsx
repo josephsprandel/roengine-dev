@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Edit2, Mail, Phone, MessageSquare, MapPin, Calendar, Loader2, ChevronRight, FileText } from "lucide-react"
+import { ArrowLeft, Edit2, Mail, Phone, MessageSquare, MapPin, Calendar, Loader2, ChevronRight, FileText, Bell } from "lucide-react"
 import { VehicleManagement } from "./vehicle-management"
 import { CustomerCreateDialog } from "./customer-create-dialog"
 import { formatPhoneNumber } from "@/lib/utils/phone-format"
@@ -28,6 +28,8 @@ interface Customer {
   notes: string | null
   is_active: boolean
   created_at: string
+  sms_consent: boolean | null
+  email_consent: boolean | null
 }
 
 export function CustomerProfile({ customerId, onClose }: { customerId: string; onClose?: () => void }) {
@@ -160,19 +162,25 @@ export function CustomerProfile({ customerId, onClose }: { customerId: string; o
               </Button>
             </div>
             <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <Phone size={18} className="text-accent flex-shrink-0" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Primary Phone</p>
-                  <p className="font-medium text-foreground">{formatPhoneNumber(customer.phone_primary)}</p>
-                  {customer.phone_secondary && (
-                    <p className="text-sm text-muted-foreground">Secondary: {formatPhoneNumber(customer.phone_secondary)}</p>
-                  )}
-                  {customer.phone_mobile && (
-                    <p className="text-sm text-muted-foreground">Mobile: {formatPhoneNumber(customer.phone_mobile)}</p>
-                  )}
+              {(customer.phone_primary || customer.phone_secondary || customer.phone_mobile) && (
+                <div className="flex items-center gap-3">
+                  <Phone size={18} className="text-accent flex-shrink-0" />
+                  <div>
+                    {customer.phone_primary && (
+                      <>
+                        <p className="text-sm text-muted-foreground">Primary Phone</p>
+                        <p className="font-medium text-foreground">{formatPhoneNumber(customer.phone_primary)}</p>
+                      </>
+                    )}
+                    {customer.phone_secondary && (
+                      <p className="text-sm text-muted-foreground">Secondary: {formatPhoneNumber(customer.phone_secondary)}</p>
+                    )}
+                    {customer.phone_mobile && (
+                      <p className="text-sm text-muted-foreground">Mobile: {formatPhoneNumber(customer.phone_mobile)}</p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
               {customer.email && (
                 <div className="flex items-center gap-3">
                   <Mail size={18} className="text-accent flex-shrink-0" />
@@ -191,6 +199,17 @@ export function CustomerProfile({ customerId, onClose }: { customerId: string; o
                   </div>
                 </div>
               )}
+            </div>
+            <div className="flex items-center gap-3 mt-3">
+              <Bell size={18} className="text-accent flex-shrink-0" />
+              <div className="flex items-center gap-3">
+                <Badge variant="outline" className={customer.sms_consent ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30" : "bg-muted text-muted-foreground"}>
+                  SMS {customer.sms_consent ? "Opted In" : "Opted Out"}
+                </Badge>
+                <Badge variant="outline" className={customer.email_consent ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30" : "bg-muted text-muted-foreground"}>
+                  Email {customer.email_consent ? "Opted In" : "Opted Out"}
+                </Badge>
+              </div>
             </div>
             <div className="flex gap-2 mt-4 pt-4 border-t border-border">
               <Button size="sm" variant="outline" className="gap-2 flex-1 bg-transparent">

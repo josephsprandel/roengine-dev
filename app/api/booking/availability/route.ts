@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { evaluateSchedulingRules } from '@/lib/scheduling/rules-engine'
+import { findNextAvailableBookingDate } from '@/lib/scheduling/booking-helpers'
 
 const BAY_COUNT = 6
 
@@ -8,6 +10,8 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const dateStr = searchParams.get('date')
     const appointmentType = searchParams.get('type') || 'waiter'
+    const vehicleMake = searchParams.get('vehicle_make') || ''
+    const vehicleModel = searchParams.get('vehicle_model') || ''
 
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return NextResponse.json(
@@ -80,6 +84,46 @@ export async function GET(request: NextRequest) {
 
     if (hoursResult.rows.length === 0 || !hoursResult.rows[0].is_open) {
       return NextResponse.json({ slots: [], closed: true })
+    }
+
+    // ── Rules engine: Friday drop-off silent block ──
+    const isDropoff = appointmentType === 'dropoff'
+    if (dayName === 'Friday' && isDropoff) {
+      const next = await findNextAvailableBookingDate(true)
+      return NextResponse.json({
+        blocked: true,
+        date: dateStr,
+        day: dayName,
+        next_available: next.date,
+        next_available_formatted: next.formatted,
+      })
+    }
+
+    // ── Rules engine: evaluate all scheduling rules ──
+    const evaluation = await evaluateSchedulingRules({
+      shop_id: 1,
+      proposed_date: requestedDate,
+      estimated_tech_hours: 0,
+      is_waiter: !isDropoff,
+      vehicle_make: vehicleMake,
+      vehicle_model: vehicleModel,
+    })
+
+    if (!evaluation.allowed) {
+      const next = await findNextAvailableBookingDate(isDropoff)
+      return NextResponse.json({
+        blocked: true,
+        date: dateStr,
+        day: dayName,
+        next_available: next.date,
+        next_available_formatted: next.formatted,
+      })
+    }
+
+    // Log soft warnings internally (never exposed to customer)
+    if (evaluation.soft_warnings.length > 0) {
+      console.log(`[Booking Availability] Soft warnings for ${dateStr}:`,
+        evaluation.soft_warnings.map(w => `${w.rule_id}: ${w.message}`))
     }
 
     const { open_time, close_time } = hoursResult.rows[0]

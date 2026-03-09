@@ -192,7 +192,11 @@ export async function POST(request: NextRequest) {
                   if (s.urgency === 'COMING_SOON' && s.mileage_until_due > 5000) return false
                   return true
                 })
-                .sort((a: any, b: any) => a.priority - b.priority),
+                .sort((a: any, b: any) => {
+                  // Group: services (is_inspection=false) first, inspections last
+                  if (a.is_inspection !== b.is_inspection) return a.is_inspection ? 1 : -1
+                  return a.priority - b.priority
+                }),
             }))
 
             return NextResponse.json({
@@ -212,7 +216,11 @@ export async function POST(request: NextRequest) {
                 if (s.urgency === 'COMING_SOON' && s.mileage_until_due > 5000) return false
                 return true
               })
-              .sort((a: any, b: any) => a.priority - b.priority)
+              .sort((a: any, b: any) => {
+                // Group: services (is_inspection=false) first, inspections last
+                if (a.is_inspection !== b.is_inspection) return a.is_inspection ? 1 : -1
+                return a.priority - b.priority
+              })
 
             if (processedServices.length > 0) {
               return NextResponse.json({

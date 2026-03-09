@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query, getClient } from '@/lib/db'
 import { logActivity } from '@/lib/activity-log'
+import { buildGoogleCalendarLink } from '@/lib/calendar/generate-ics'
 
 export async function POST(request: NextRequest) {
   const client = await getClient()
@@ -170,6 +171,21 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Build calendar link for customer confirmation page
+    const shopResult = await query('SELECT shop_name, address_line1, city, state, zip FROM shop_profile LIMIT 1')
+    const shopRow = shopResult.rows[0] || {}
+    const shopAddr = [shopRow.address_line1, shopRow.city, shopRow.state, shopRow.zip].filter(Boolean).join(', ')
+
+    const googleCalendarLink = buildGoogleCalendarLink({
+      summary: `Service Appointment — ${shopRow.shop_name || 'Auto Shop'}`,
+      start: new Date(workOrder.scheduled_start),
+      end: new Date(workOrder.scheduled_end),
+      description: serviceLabel || 'Vehicle Service',
+      location: shopAddr,
+    })
+
+    const icsUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://arologik.com'}/api/appointments/${workOrder.id}/ics`
+
     return NextResponse.json({
       success: true,
       booking: {
@@ -178,6 +194,8 @@ export async function POST(request: NextRequest) {
         scheduled_end: workOrder.scheduled_end,
         services: serviceLabel,
         appointment_type: storedAppointmentType,
+        google_calendar_link: googleCalendarLink,
+        ics_url: icsUrl,
       },
     }, { status: 201 })
 

@@ -311,7 +311,7 @@ export function SendToCustomerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Send Estimate to Customer</DialogTitle>
         </DialogHeader>
@@ -346,15 +346,17 @@ export function SendToCustomerDialog({
 
             {/* Estimate link with copy button */}
             {estimateUrl && (
-              <div className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-muted/30 min-w-0">
+              <div className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-muted/30 overflow-hidden">
                 <Link2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className="text-xs text-muted-foreground truncate flex-1 min-w-0 font-mono">
-                  {estimateUrl}
+                <span className="text-xs text-muted-foreground truncate font-mono">
+                  {estimateUrl.length > 45
+                    ? estimateUrl.slice(0, 20) + "…" + estimateUrl.slice(-20)
+                    : estimateUrl}
                 </span>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-2 gap-1 text-xs flex-shrink-0"
+                  className="h-7 px-2 gap-1 text-xs flex-shrink-0 ml-auto"
                   onClick={handleCopyLink}
                 >
                   {copied ? (
@@ -447,6 +449,7 @@ export function SendToCustomerDialog({
                   onChange={(e) => setSmsBody(e.target.value)}
                   rows={4}
                   className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-card text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                  style={{ wordBreak: 'break-all' }}
                 />
                 <p className="text-xs text-muted-foreground mt-1">
                   {smsBody.length} characters

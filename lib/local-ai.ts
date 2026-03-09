@@ -29,6 +29,32 @@ export async function localAIRewrite(prompt: string): Promise<string | null> {
   }
 }
 
+export async function localAIGenerate(prompt: string): Promise<string | null> {
+  try {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        stream: false,
+        options: {
+          num_predict: 4096,
+        },
+        think: false,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    })
+    if (!response.ok) return null
+    const data = await response.json()
+    const content = data.message?.content?.trim() ?? null
+    if (!content) return null
+    return content.replace(/<think>[\s\S]*?<\/think>/g, '').trim() || null
+  } catch {
+    return null
+  }
+}
+
 export async function checkOllamaStatus(): Promise<{ available: boolean; model: string }> {
   try {
     const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {

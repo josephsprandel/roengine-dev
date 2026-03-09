@@ -18,6 +18,11 @@ export interface SendEmailParams {
   messageType: string
   templateId?: string
   templateData?: Record<string, unknown>
+  attachments?: Array<{
+    filename: string
+    content: string | Buffer
+    contentType?: string
+  }>
 }
 
 export interface SendEmailResult {
@@ -174,6 +179,7 @@ export async function sendEmail({
   messageType,
   templateId,
   templateData,
+  attachments,
 }: SendEmailParams): Promise<SendEmailResult> {
   if (!validateEmailAddress(to)) {
     return { success: false, error: 'Invalid email address' }
@@ -218,6 +224,7 @@ export async function sendEmail({
       subject,
       html,
       text,
+      ...(attachments?.length ? { attachments } : {}),
     })
 
     // Append to IMAP Sent folder (fire-and-forget, don't block the response)

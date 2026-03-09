@@ -6,10 +6,17 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Receipt, Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Hash, Receipt, Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
 
 interface InvoiceSettings {
+  ro_numbering_mode: 'sequential' | 'date_encoded'
+  next_ro_number: number
+  invoice_number_prefix: string
+  include_date: boolean
+  date_format: string
+  sequential_padding: number
   sales_tax_rate: string
   parts_taxable: boolean
   labor_taxable: boolean
@@ -17,6 +24,12 @@ interface InvoiceSettings {
 
 export function InvoicingSettings() {
   const [settings, setSettings] = useState<InvoiceSettings>({
+    ro_numbering_mode: 'sequential',
+    next_ro_number: 33823,
+    invoice_number_prefix: '',
+    include_date: true,
+    date_format: 'YYYYMMDD',
+    sequential_padding: 3,
     sales_tax_rate: "0.1225",
     parts_taxable: true,
     labor_taxable: true,
@@ -46,6 +59,12 @@ export function InvoicingSettings() {
       const taxRatePercentage = (taxRateDecimal * 100).toString()
 
       setSettings({
+        ro_numbering_mode: data.settings.ro_numbering_mode || 'sequential',
+        next_ro_number: data.settings.next_ro_number ?? 1,
+        invoice_number_prefix: data.settings.invoice_number_prefix ?? '',
+        include_date: data.settings.include_date ?? true,
+        date_format: data.settings.date_format || 'YYYYMMDD',
+        sequential_padding: data.settings.sequential_padding ?? 3,
         sales_tax_rate: taxRatePercentage,
         parts_taxable: data.settings.parts_taxable ?? true,
         labor_taxable: data.settings.labor_taxable ?? true,
@@ -94,6 +113,12 @@ export function InvoicingSettings() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ro_numbering_mode: settings.ro_numbering_mode,
+          next_ro_number: settings.next_ro_number,
+          invoice_number_prefix: settings.invoice_number_prefix,
+          include_date: settings.include_date,
+          date_format: settings.date_format,
+          sequential_padding: settings.sequential_padding,
           sales_tax_rate: taxRateDecimal,
           parts_taxable: settings.parts_taxable,
           labor_taxable: settings.labor_taxable,
@@ -140,8 +165,160 @@ export function InvoicingSettings() {
     )
   }
 
+  function getPreviewRoNumber() {
+    const prefix = settings.invoice_number_prefix || ''
+    const padding = settings.sequential_padding || 3
+    if (settings.ro_numbering_mode === 'sequential') {
+      const num = (settings.next_ro_number || 1).toString().padStart(padding, '0')
+      return `${prefix}${num}`
+    }
+    const now = new Date()
+    const yyyy = now.getFullYear().toString()
+    const yy = yyyy.slice(2)
+    const mm = String(now.getMonth() + 1).padStart(2, '0')
+    const dd = String(now.getDate()).padStart(2, '0')
+    let dateStr: string
+    switch (settings.date_format) {
+      case 'YYMMDD': dateStr = `${yy}${mm}${dd}`; break
+      case 'YYMM':   dateStr = `${yy}${mm}`; break
+      case 'YYYYMM': dateStr = `${yyyy}${mm}`; break
+      default:        dateStr = `${yyyy}${mm}${dd}`; break
+    }
+    return `${prefix}${dateStr}-${'1'.padStart(padding, '0')}`
+  }
+
   return (
     <div className="space-y-6">
+      {/* RO Numbering */}
+      <Card className="p-6 border-border">
+        <div className="flex items-center gap-3 mb-6">
+          <Hash size={20} className="text-accent" />
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">RO Numbering</h3>
+            <p className="text-sm text-muted-foreground">
+              Configure how repair order numbers are generated
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* Mode */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Numbering Mode</Label>
+            <Select
+              value={settings.ro_numbering_mode}
+              onValueChange={(value: 'sequential' | 'date_encoded') => {
+                setSettings({ ...settings, ro_numbering_mode: value })
+                setHasChanges(true)
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sequential">Sequential (33823, 33824, ...)</SelectItem>
+                <SelectItem value="date_encoded">Date-encoded (RO-20260307-001)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Prefix */}
+          <div className="space-y-2">
+            <Label htmlFor="invoice_number_prefix" className="text-sm font-medium">
+              Prefix
+            </Label>
+            <Input
+              id="invoice_number_prefix"
+              value={settings.invoice_number_prefix}
+              onChange={(e) => {
+                setSettings({ ...settings, invoice_number_prefix: e.target.value })
+                setHasChanges(true)
+              }}
+              placeholder="e.g. RO- (leave empty for no prefix)"
+              className="max-w-[200px]"
+            />
+          </div>
+
+          {/* Next Number (sequential only) */}
+          {settings.ro_numbering_mode === 'sequential' && (
+            <div className="space-y-2">
+              <Label htmlFor="next_ro_number" className="text-sm font-medium">
+                Next RO Number
+              </Label>
+              <Input
+                id="next_ro_number"
+                type="number"
+                min={1}
+                value={settings.next_ro_number}
+                onChange={(e) => {
+                  setSettings({ ...settings, next_ro_number: parseInt(e.target.value) || 1 })
+                  setHasChanges(true)
+                }}
+                className="max-w-[200px]"
+              />
+              <p className="text-xs text-muted-foreground">
+                The next work order will use this number
+              </p>
+            </div>
+          )}
+
+          {/* Date Format (date-encoded only) */}
+          {settings.ro_numbering_mode === 'date_encoded' && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Date Format</Label>
+              <Select
+                value={settings.date_format}
+                onValueChange={(value) => {
+                  setSettings({ ...settings, date_format: value })
+                  setHasChanges(true)
+                }}
+              >
+                <SelectTrigger className="max-w-[200px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="YYMMDD">YYMMDD — {new Date().getFullYear().toString().slice(2)}{String(new Date().getMonth()+1).padStart(2,'0')}{String(new Date().getDate()).padStart(2,'0')} (daily)</SelectItem>
+                  <SelectItem value="YYMM">YYMM — {new Date().getFullYear().toString().slice(2)}{String(new Date().getMonth()+1).padStart(2,'0')} (monthly)</SelectItem>
+                  <SelectItem value="YYYYMMDD">YYYYMMDD — {new Date().toISOString().slice(0,10).replace(/-/g,'')} (daily)</SelectItem>
+                  <SelectItem value="YYYYMM">YYYYMM — {new Date().getFullYear()}{String(new Date().getMonth()+1).padStart(2,'0')} (monthly)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Padding */}
+          <div className="space-y-2">
+            <Label htmlFor="sequential_padding" className="text-sm font-medium">
+              Minimum Digits
+            </Label>
+            <Input
+              id="sequential_padding"
+              type="number"
+              min={1}
+              max={10}
+              value={settings.sequential_padding}
+              onChange={(e) => {
+                setSettings({ ...settings, sequential_padding: e.target.value as any })
+                setHasChanges(true)
+              }}
+              onBlur={(e) => {
+                const v = Math.min(6, Math.max(1, parseInt(e.target.value) || 3))
+                setSettings({ ...settings, sequential_padding: v })
+                setHasChanges(true)
+              }}
+              className="max-w-[100px]"
+            />
+          </div>
+
+          {/* Preview */}
+          <div className="rounded-md bg-muted/50 p-3 mt-2">
+            <p className="text-xs text-muted-foreground mb-1">Preview — next RO number:</p>
+            <p className="text-sm font-mono font-semibold text-foreground">{getPreviewRoNumber()}</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Tax Configuration */}
       <Card className="p-6 border-border">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">

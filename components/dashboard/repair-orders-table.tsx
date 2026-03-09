@@ -14,7 +14,6 @@ interface RepairOrder {
   status: string
   statusLabel: string
   estimated: string
-  timeLeft: string
 }
 
 export function RepairOrdersTable() {
@@ -25,10 +24,11 @@ export function RepairOrdersTable() {
   useEffect(() => {
     const fetchRepairOrders = async () => {
       try {
-        const response = await fetch('/api/work-orders?limit=10&status=open,in_progress,estimate,waiting_approval')
+        const response = await fetch('/api/work-orders?limit=10')
         if (response.ok) {
           const data = await response.json()
-          const orders = (data.work_orders || []).map((wo: any) => {
+          const excludedStates = ['cancelled', 'closed', 'invoiced', 'completed']
+          const orders = (data.work_orders || []).filter((wo: any) => !excludedStates.includes(wo.state)).map((wo: any) => {
             const statusMap: Record<string, { status: string; label: string }> = {
               estimate: { status: 'awaiting_approval', label: 'Awaiting Approval' },
               open: { status: 'in_progress', label: 'In Progress' },
@@ -48,7 +48,6 @@ export function RepairOrdersTable() {
               status: mapped.status,
               statusLabel: mapped.label,
               estimated: `$${parseFloat(wo.total || 0).toFixed(2)}`,
-              timeLeft: wo.state === 'completed' ? 'Completed' : 'TBD',
             }
           })
           setRepairOrders(orders)
@@ -103,21 +102,22 @@ export function RepairOrdersTable() {
               <th className="text-left px-6 py-3 font-semibold text-muted-foreground">Service</th>
               <th className="text-left px-6 py-3 font-semibold text-muted-foreground">Status</th>
               <th className="text-right px-6 py-3 font-semibold text-muted-foreground">Est. Cost</th>
-              <th className="text-right px-6 py-3 font-semibold text-muted-foreground">Time Left</th>
+
+
               <th className="text-center px-6 py-3 font-semibold text-muted-foreground">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={8} className="px-6 py-8 text-center">
+                <td colSpan={7} className="px-6 py-8 text-center">
                   <CircleNotch className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   <p className="text-sm text-muted-foreground mt-2">Loading repair orders...</p>
                 </td>
               </tr>
             ) : repairOrders.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
                   No active repair orders
                 </td>
               </tr>
@@ -142,7 +142,8 @@ export function RepairOrdersTable() {
                   </Badge>
                 </td>
                 <td className="px-6 py-4 text-right font-medium text-foreground">{ro.estimated}</td>
-                <td className="px-6 py-4 text-right text-muted-foreground text-xs">{ro.timeLeft}</td>
+
+
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-center gap-2">
                     <Button

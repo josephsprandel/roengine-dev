@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import {
   DndContext,
   DragEndEvent,
@@ -37,7 +37,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog"
-import { ChevronLeft, ChevronRight, Loader2, Ban } from "lucide-react"
+import { ChevronLeft, ChevronRight, Loader2, Ban, CalendarPlus } from "lucide-react"
 import { toast } from "sonner"
 import { BayView } from "./bay-view"
 import { DayView } from "./day-view"
@@ -46,6 +46,9 @@ import { MonthView } from "./month-view"
 import { ROCard, type ScheduledOrder } from "./ro-card"
 import { parseSlotId, buildTimestamp } from "./time-grid"
 import { BlockDialog, type BlockDialogDefaults } from "./block-dialog"
+import { SchedulingGateDialog } from "./scheduling-gate-dialog"
+import type { SchedulingEvaluation } from "@/lib/scheduling/types"
+import { useEdgeNavigation } from "./use-edge-navigation"
 
 export interface ScheduleBlock {
   id: number
@@ -72,6 +75,14 @@ export function ScheduleCalendar() {
   const [blocks, setBlocks] = useState<ScheduleBlock[]>([])
   const [loading, setLoading] = useState(true)
   const [activeId, setActiveId] = useState<number | null>(null)
+  const [draggedOrder, setDraggedOrder] = useState<ScheduledOrder | null>(null)
+  const isDraggingRef = useRef(false)
+  const calendarContainerRef = useRef<HTMLDivElement>(null)
+
+  // Keep ref in sync with activeId (ref avoids adding to fetchSchedule deps)
+  useEffect(() => {
+    isDraggingRef.current = activeId !== null
+  }, [activeId])
 
   // Block dialog state
   const [blockDialogOpen, setBlockDialogOpen] = useState(false)
@@ -79,6 +90,11 @@ export function ScheduleCalendar() {
 
   // Block detail state
   const [selectedBlock, setSelectedBlock] = useState<ScheduleBlock | null>(null)
+
+  // Scheduling gate dialog state
+  const [gateDialogOpen, setGateDialogOpen] = useState(false)
+  const [gateEvaluation, setGateEvaluation] = useState<SchedulingEvaluation | null>(null)
+  const [pendingDragUpdate, setPendingDragUpdate] = useState<{ orderId: number; updates: Record<string, any>; order: ScheduledOrder } | null>(null)
 
   // Require 8px of movement before activating drag (so clicks still work)
   const sensors = useSensors(
@@ -88,7 +104,8 @@ export function ScheduleCalendar() {
   )
 
   const fetchSchedule = useCallback(async () => {
-    setLoading(true)
+    // During drag, skip the loading spinner so droppable zones stay visible
+    if (!isDraggingRef.current) setLoading(true)
     try {
       let start: Date
       let end: Date
@@ -131,7 +148,7 @@ export function ScheduleCalendar() {
       console.error("Failed to fetch schedule:", err)
       setOrders([])
     } finally {
-      setLoading(false)
+      if (!isDraggingRef.current) setLoading(false)
     }
   }, [currentDate, view])
 
@@ -206,8 +223,35 @@ export function ScheduleCalendar() {
     setSelectedBlock(block)
   }, [])
 
+  // Send calendar invite for an appointment
+  const sendInvite = useCallback(async (orderId: number) => {
+    try {
+      const res = await fetch(`/api/appointments/${orderId}/notify`, {
+        method: "POST",
+        headers: authHeaders(),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const parts: string[] = []
+        if (data.sms_sent) parts.push("SMS")
+        if (data.email_sent) parts.push("email")
+        if (parts.length > 0) {
+          toast.success(`Invite sent via ${parts.join(" and ")}`)
+        } else {
+          toast.warning("No invite sent", {
+            description: data.errors?.join(". ") || "Customer has no contact info",
+          })
+        }
+      } else {
+        toast.error("Failed to send invite")
+      }
+    } catch {
+      toast.error("Failed to send invite")
+    }
+  }, [])
+
   // Persist scheduling changes via PATCH
-  const patchOrder = useCallback(async (orderId: number, updates: Record<string, any>) => {
+  const patchOrder = useCallback(async (orderId: number, updates: Record<string, any>, showInvite = false) => {
     try {
       const res = await fetch(`/api/work-orders/${orderId}`, {
         method: "PATCH",
@@ -215,7 +259,17 @@ export function ScheduleCalendar() {
         body: JSON.stringify(updates),
       })
       if (res.ok) {
-        toast.success('Schedule updated')
+        if (showInvite) {
+          toast.success('Schedule updated — Send calendar invite?', {
+            action: {
+              label: 'Send Invite',
+              onClick: () => sendInvite(orderId),
+            },
+            duration: 8000,
+          })
+        } else {
+          toast.success('Schedule updated')
+        }
       } else {
         console.error("Failed to update order:", await res.text())
         toast.error('Failed to update schedule')
@@ -227,25 +281,32 @@ export function ScheduleCalendar() {
       toast.error('Failed to update schedule')
       fetchSchedule()
     }
-  }, [fetchSchedule])
+  }, [fetchSchedule, sendInvite])
 
   // Drag handlers
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveId(event.active.id as number)
-  }, [])
+    const id = event.active.id as number
+    const order = orders.find((o) => o.id === id) || null
+    setActiveId(id)
+    setDraggedOrder(order)
+  }, [orders])
 
   const handleDragCancel = useCallback(() => {
     setActiveId(null)
+    setDraggedOrder(null)
   }, [])
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
       setActiveId(null)
+      const savedDraggedOrder = draggedOrder
+      setDraggedOrder(null)
       const { active, over } = event
       if (!over) return
 
       const orderId = active.id as number
-      const order = orders.find((o) => o.id === orderId)
+      // Prefer draggedOrder (survives cross-week navigation) over orders lookup
+      const order = savedDraggedOrder ?? orders.find((o) => o.id === orderId)
       if (!order) return
 
       const { type, parts } = parseSlotId(over.id as string)
@@ -290,15 +351,83 @@ export function ScheduleCalendar() {
 
       if (Object.keys(updates).length === 0) return
 
-      // Optimistic update
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, ...updates } : o))
-      )
+      // Evaluate scheduling rules if the order has estimated_tech_hours
+      if (order.estimated_tech_hours && updates.scheduled_start) {
+        try {
+          const evalRes = await fetch("/api/scheduling/evaluate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify({
+              proposed_date: updates.scheduled_start.slice(0, 10),
+              estimated_tech_hours: order.estimated_tech_hours,
+              is_waiter: order.is_waiter || false,
+              vehicle_make: order.make || "",
+              vehicle_model: order.model || "",
+              work_order_id: orderId,
+            }),
+          })
+          if (evalRes.ok) {
+            const evaluation: SchedulingEvaluation = await evalRes.json()
+            if (!evaluation.allowed || evaluation.soft_warnings.length > 0) {
+              // Show gate dialog — pause the drag until SA responds
+              setGateEvaluation(evaluation)
+              setPendingDragUpdate({ orderId, updates, order })
+              setGateDialogOpen(true)
+              return
+            }
+          }
+        } catch {
+          // If evaluation fails, proceed anyway (don't block scheduling)
+        }
+      }
 
-      await patchOrder(orderId, updates)
+      // Optimistic update — if order exists in current view data, update it;
+      // otherwise inject it (cross-week/month drop via edge navigation)
+      setOrders((prev) => {
+        const exists = prev.some((o) => o.id === orderId)
+        if (exists) {
+          return prev.map((o) => (o.id === orderId ? { ...o, ...updates } : o))
+        }
+        // Inject the dragged order with updated timestamps so it appears immediately
+        return [...prev, { ...order, ...updates }]
+      })
+
+      await patchOrder(orderId, updates, !!updates.scheduled_start)
     },
-    [orders, currentDate, patchOrder]
+    [orders, draggedOrder, currentDate, patchOrder]
   )
+
+  // Gate dialog handlers
+  const handleGateOverride = useCallback(async (reason: string) => {
+    if (!pendingDragUpdate) return
+    const { orderId, updates, order } = pendingDragUpdate
+    setGateDialogOpen(false)
+    setGateEvaluation(null)
+
+    // Optimistic update — inject if cross-week drop
+    setOrders((prev) => {
+      const exists = prev.some((o) => o.id === orderId)
+      if (exists) {
+        return prev.map((o) => (o.id === orderId ? { ...o, ...updates } : o))
+      }
+      return [...prev, { ...order, ...updates }]
+    })
+    await patchOrder(orderId, {
+      ...updates,
+      rule_overrides: JSON.stringify({
+        overridden_at: new Date().toISOString(),
+        reason,
+        source: "drag_reschedule",
+      }),
+    }, !!updates.scheduled_start)
+    setPendingDragUpdate(null)
+  }, [pendingDragUpdate, patchOrder])
+
+  const handleGateCancel = useCallback(() => {
+    setGateDialogOpen(false)
+    setGateEvaluation(null)
+    setPendingDragUpdate(null)
+  }, [])
 
   // Resize handler
   const handleResize = useCallback(
@@ -313,6 +442,12 @@ export function ScheduleCalendar() {
     },
     [patchOrder]
   )
+
+  // Navigate to a specific day in day view (from week/month arrow icon)
+  const handleDaySelect = useCallback((date: Date) => {
+    setCurrentDate(date)
+    setView("day")
+  }, [])
 
   // Navigation
   const goToday = useCallback(() => setCurrentDate(new Date()), [])
@@ -338,7 +473,16 @@ export function ScheduleCalendar() {
         : format(currentDate, "EEEE, MMMM d, yyyy")
 
   const isCurrentDay = isSameDay(currentDate, new Date())
-  const activeOrder = activeId ? orders.find((o) => o.id === activeId) : null
+  // Prefer draggedOrder (survives navigation) over orders lookup
+  const activeOrder = draggedOrder ?? (activeId ? orders.find((o) => o.id === activeId) : null)
+
+  // Edge navigation — drag to left/right edge to navigate weeks/months
+  const edgeState = useEdgeNavigation({
+    containerRef: calendarContainerRef,
+    isDragging: activeId !== null && (view === "week" || view === "month"),
+    onNavigatePrev: goPrev,
+    onNavigateNext: goNext,
+  })
 
   // Full-day all-bay blocks for banner display
   const fullDayBannerBlocks = blocks.filter(
@@ -442,7 +586,7 @@ export function ScheduleCalendar() {
             <span className="text-muted-foreground">Loading schedule...</span>
           </div>
         ) : (
-          <>
+          <div ref={calendarContainerRef} className="relative">
             {view === "bay" && (
               <BayView
                 orders={orders}
@@ -473,6 +617,7 @@ export function ScheduleCalendar() {
                 activeId={activeId}
                 onBlockClick={handleBlockClick}
                 onBlockTime={handleBlockTime}
+                onDaySelect={handleDaySelect}
               />
             )}
             {view === "month" && (
@@ -483,9 +628,26 @@ export function ScheduleCalendar() {
                 activeId={activeId}
                 onBlockClick={handleBlockClick}
                 onBlockTime={handleBlockTime}
+                onDaySelect={handleDaySelect}
               />
             )}
-          </>
+
+            {/* Edge navigation indicators — visible during drag in week/month views */}
+            {activeId && (view === "week" || view === "month") && (
+              <>
+                <EdgeZoneIndicator
+                  side="left"
+                  active={edgeState.activeEdge === "left"}
+                  progress={edgeState.progress}
+                />
+                <EdgeZoneIndicator
+                  side="right"
+                  active={edgeState.activeEdge === "right"}
+                  progress={edgeState.progress}
+                />
+              </>
+            )}
+          </div>
         )}
 
         {/* Ghost card that follows cursor during drag */}
@@ -503,6 +665,15 @@ export function ScheduleCalendar() {
           </p>
         </div>
       )}
+
+      {/* Scheduling gate dialog (rules enforcement) */}
+      <SchedulingGateDialog
+        open={gateDialogOpen}
+        onOpenChange={setGateDialogOpen}
+        evaluation={gateEvaluation}
+        onOverride={handleGateOverride}
+        onCancel={handleGateCancel}
+      />
 
       {/* Block creation dialog */}
       <BlockDialog
@@ -557,6 +728,52 @@ export function ScheduleCalendar() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+/** Visual indicator shown at left/right edge during drag in week/month views */
+function EdgeZoneIndicator({
+  side,
+  active,
+  progress,
+}: {
+  side: "left" | "right"
+  active: boolean
+  progress: number
+}) {
+  return (
+    <div
+      className={`
+        absolute top-0 bottom-0 w-[60px] z-30
+        pointer-events-none transition-opacity duration-200
+        ${side === "left" ? "left-0 rounded-l-lg" : "right-0 rounded-r-lg"}
+        ${active ? "opacity-100" : "opacity-0"}
+      `}
+    >
+      {/* Gradient overlay */}
+      <div
+        className={`absolute inset-0 ${
+          side === "left"
+            ? "bg-gradient-to-r from-primary/20 to-transparent"
+            : "bg-gradient-to-l from-primary/20 to-transparent"
+        }`}
+      />
+      {/* Progress bar along the outer edge */}
+      <div
+        className={`absolute top-0 w-1 bg-primary/60 rounded-full transition-[height] duration-75 ${
+          side === "left" ? "left-0" : "right-0"
+        }`}
+        style={{ height: `${progress * 100}%` }}
+      />
+      {/* Chevron icon */}
+      <div className="absolute top-1/2 -translate-y-1/2 w-full flex justify-center">
+        {side === "left" ? (
+          <ChevronLeft size={24} className="text-primary animate-pulse" />
+        ) : (
+          <ChevronRight size={24} className="text-primary animate-pulse" />
+        )}
+      </div>
     </div>
   )
 }

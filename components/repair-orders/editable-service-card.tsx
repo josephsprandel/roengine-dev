@@ -41,6 +41,7 @@ interface EditableServiceCardProps {
   service: ServiceData
   onUpdate: (updated: ServiceData) => void
   onRemove: () => void
+  onServiceCompleted?: (service: ServiceData) => void
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>
   isDragging?: boolean
   roTechnician?: string
@@ -64,6 +65,56 @@ function createLineItem(description = ""): LineItem {
     unitPrice: 0,
     total: 0,
   }
+}
+
+function PartFieldPopover({ value, label, prefix, onSave }: {
+  value: number
+  label: string
+  prefix?: string
+  onSave: (v: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [editValue, setEditValue] = useState("")
+
+  return (
+    <Popover open={open} onOpenChange={(o) => {
+      setOpen(o)
+      if (o) setEditValue(String(value || ''))
+    }}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="h-8 px-2 rounded-md border border-border bg-background text-sm font-mono cursor-pointer hover:bg-muted/50 transition-colors min-w-[3rem] text-center"
+        >
+          {prefix}{(value || 0).toFixed(2)}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-40 p-3" align="center" sideOffset={4}>
+        <p className="text-xs font-medium text-muted-foreground mb-2">{label}</p>
+        <div className="flex items-center gap-1">
+          {prefix && <span className="text-muted-foreground text-xs">{prefix}</span>}
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                onSave(parseFloat(editValue) || 0)
+                setOpen(false)
+              }
+              if (e.key === 'Escape') setOpen(false)
+            }}
+            className="h-7 text-sm font-mono flex-1"
+            autoFocus
+          />
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-1.5">Enter to save, Esc to cancel</p>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 interface DraggableLineItemProps {
@@ -183,23 +234,28 @@ function DraggableLineItem({
       <div className={`${categoryColor} flex-shrink-0`}>
         <Icon size={14} />
       </div>
-      <Input
-        ref={descInputRef}
-        value={localDesc}
-        onChange={(e) => setLocalDesc(e.target.value)}
-        onBlur={handleDescBlur}
-        onClick={(e) => {
-          if (category === "parts" && onClickPart) {
+      {category === "parts" && onClickPart ? (
+        <button
+          type="button"
+          onClick={(e) => {
             e.stopPropagation()
             onClickPart()
-          }
-        }}
-        placeholder={`${categoryLabel} description`}
-        className={`flex-1 h-8 text-sm bg-background border-border ${
-          category === "parts" && onClickPart ? "cursor-pointer hover:bg-muted/50" : ""
-        }`}
-        readOnly={category === "parts" && !!onClickPart}
-      />
+          }}
+          className="flex-1 h-8 text-sm text-left truncate px-3 rounded-md border border-border bg-background cursor-pointer hover:bg-muted/50"
+          title={[item.vendor, item.description, item.part_number].filter(Boolean).join(' ')}
+        >
+          {[item.vendor, item.description, item.part_number].filter(Boolean).join(' ') || `${categoryLabel} description`}
+        </button>
+      ) : (
+        <Input
+          ref={descInputRef}
+          value={localDesc}
+          onChange={(e) => setLocalDesc(e.target.value)}
+          onBlur={handleDescBlur}
+          placeholder={`${categoryLabel} description`}
+          className="flex-1 h-8 text-sm bg-background border-border"
+        />
+      )}
       {category === "parts" && onFindPart && (
         <Button
           size="sm"
@@ -215,28 +271,45 @@ function DraggableLineItem({
         </Button>
       )}
       <div className="flex items-center gap-1">
-        <Input
-          type="number"
-          min="0"
-          step="0.01"
-          value={item.quantity || ""}
-          onChange={(e) => handleUpdate("quantity", parseFloat(e.target.value) || 0)}
-          placeholder="Qty"
-          className="w-16 h-8 text-sm text-center bg-background border-border"
-        />
-        <span className="text-muted-foreground text-xs">x</span>
-        <div className="relative">
-          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+        {category === "parts" ? (
+          <PartFieldPopover
+            value={item.quantity}
+            label="Qty"
+            onSave={(v) => handleUpdate("quantity", v)}
+          />
+        ) : (
           <Input
             type="number"
             min="0"
             step="0.01"
-            value={item.unitPrice || ""}
-            onChange={(e) => handleUpdate("unitPrice", parseFloat(e.target.value) || 0)}
-            placeholder="0.00"
-            className="w-24 h-8 text-sm pl-5 bg-background border-border"
+            value={item.quantity || ""}
+            onChange={(e) => handleUpdate("quantity", parseFloat(e.target.value) || 0)}
+            placeholder="Qty"
+            className="w-16 h-8 text-sm text-center bg-background border-border"
           />
-        </div>
+        )}
+        <span className="text-muted-foreground text-xs">x</span>
+        {category === "parts" ? (
+          <PartFieldPopover
+            value={item.unitPrice}
+            label="Price"
+            prefix="$"
+            onSave={(v) => handleUpdate("unitPrice", v)}
+          />
+        ) : (
+          <div className="relative">
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={item.unitPrice || ""}
+              onChange={(e) => handleUpdate("unitPrice", parseFloat(e.target.value) || 0)}
+              placeholder="0.00"
+              className="w-24 h-8 text-sm pl-5 bg-background border-border"
+            />
+          </div>
+        )}
         <span className="text-muted-foreground text-xs">=</span>
         <div className="w-20 text-right font-medium text-sm text-foreground">
           ${item.total.toFixed(2)}
@@ -731,6 +804,7 @@ export function EditableServiceCard({
   service,
   onUpdate,
   onRemove,
+  onServiceCompleted,
   dragHandleProps,
   isDragging,
   roTechnician,
@@ -749,6 +823,8 @@ export function EditableServiceCard({
   serviceRef.current = service
   const onUpdateRef = useRef(onUpdate)
   onUpdateRef.current = onUpdate
+  const onServiceCompletedRef = useRef(onServiceCompleted)
+  onServiceCompletedRef.current = onServiceCompleted
 
   // Sync local title from parent when it changes externally (not from our own typing)
   const lastCommittedTitle = useRef(service.name)
@@ -860,6 +936,9 @@ export function EditableServiceCard({
         // Show existing completed description if we have one, otherwise keep current
         description: svc.descriptionCompleted || draft,
       })
+
+      // Notify parent that a service was completed (for oil change detection, etc.)
+      onServiceCompletedRef.current?.(svc)
 
       // If no completed description exists yet, generate one via AI
       if (!svc.descriptionCompleted) {

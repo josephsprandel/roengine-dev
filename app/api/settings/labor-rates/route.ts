@@ -15,7 +15,7 @@ export async function GET() {
         lr.updated_at,
         COALESCE((SELECT COUNT(*) FROM customers WHERE labor_rate_category = lr.category), 0)::int as customer_count
       FROM labor_rates lr
-      ORDER BY lr.is_default DESC, lr.category ASC
+      ORDER BY lr.sort_order ASC, lr.is_default DESC, lr.category ASC
     `)
 
     return NextResponse.json({ rates: result.rows })
@@ -68,14 +68,19 @@ export async function POST(request: NextRequest) {
       await query(`UPDATE labor_rates SET is_default = false`)
     }
 
+    // Get next sort_order
+    const maxSort = await query(
+      `SELECT COALESCE(MAX(sort_order), 0) + 1 as next_sort FROM labor_rates`
+    )
+
     // Insert the new labor rate
     const result = await query(
       `
-      INSERT INTO labor_rates (category, rate_per_hour, description, is_default)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO labor_rates (category, rate_per_hour, description, is_default, sort_order)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *
       `,
-      [formattedCategory, rate, description || null, is_default || false]
+      [formattedCategory, rate, description || null, is_default || false, maxSort.rows[0].next_sort]
     )
 
     return NextResponse.json(

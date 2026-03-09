@@ -45,9 +45,10 @@ import { TransferHistory } from "./ro-detail/TransferHistory"
 import { ActivityLog } from "./ro-detail/ActivityLog"
 import type { JobState } from "@/lib/job-states"
 
-import { ArrowRightLeft, ClipboardList, Send, Eye, Phone, Globe } from "lucide-react"
+import { ArrowRightLeft, ClipboardList, Send, Eye, Phone, Globe, Droplet, CalendarPlus } from "lucide-react"
 import { CannedJobPickerDialog } from "./canned-job-picker-dialog"
 import { SMSDialog } from "./ro-detail/SMSDialog"
+import { OilChangeDecalModal } from "./ro-detail/OilChangeDecalModal"
 import { EmailDialog } from "./ro-detail/EmailDialog"
 import { SendToCustomerDialog } from "./ro-detail/SendToCustomerDialog"
 
@@ -71,6 +72,10 @@ function convertDbServicesToServiceData(dbServices: any[], defaultLaborRate: num
         quantity: parseFloat(item.item_type === 'labor' ? item.labor_hours || 0 : item.quantity || 1),
         unitPrice: parseFloat(item.item_type === 'labor' ? item.labor_rate || defaultLaborRate : item.unit_price || 0),
         total: parseFloat(item.line_total || 0),
+        part_number: item.part_number || undefined,
+        vendor: item.part_brand || undefined,
+        cost: item.cost_price ? parseFloat(item.cost_price) : undefined,
+        part_id: item.part_id || undefined,
       }
 
       switch (item.item_type) {
@@ -231,8 +236,36 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
   const [sendToCustomerOpen, setSendToCustomerOpen] = useState(false)
   const [recommendationsReviewed, setRecommendationsReviewed] = useState(true) // default true so button isn't gated when no AI recs
 
+  // Oil change decal
+  const [oilDecalOpen, setOilDecalOpen] = useState(false)
+  const oilDecalPromptedRef = useRef(false)
+
+  // Calendar invite
+  const [inviteSending, setInviteSending] = useState(false)
+
   const handleReviewStatusChange = useCallback((reviewed: boolean) => {
     setRecommendationsReviewed(reviewed)
+  }, [])
+
+  // Oil change detection — fires when any service is marked complete
+  const handleServiceCompleted = useCallback((completedService: ServiceData) => {
+    if (oilDecalPromptedRef.current) return // once per RO per session
+
+    const OIL_TITLE_PATTERNS = [/oil.*change/i, /oil.*service/i, /oil.*filter/i]
+    const OIL_PART_PATTERNS = [/engine\s*oil/i, /motor\s*oil/i, /oil\s*filter/i]
+
+    // Check service title
+    const titleMatch = OIL_TITLE_PATTERNS.some((re) => re.test(completedService.name))
+
+    // Check parts descriptions on this service
+    const partMatch = completedService.parts.some((p) =>
+      OIL_PART_PATTERNS.some((re) => re.test(p.description))
+    )
+
+    if (titleMatch || partMatch) {
+      oilDecalPromptedRef.current = true
+      setOilDecalOpen(true)
+    }
   }, [])
 
   const handleSave = useCallback(() => {
@@ -473,6 +506,35 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
     },
     [workOrder, showToast]
   )
+
+  const handleSendInvite = useCallback(async () => {
+    if (!workOrder) return
+    setInviteSending(true)
+    try {
+      const token = localStorage.getItem("auth_token")
+      const res = await fetch(`/api/appointments/${workOrder.id}/notify`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const parts: string[] = []
+        if (data.sms_sent) parts.push("SMS")
+        if (data.email_sent) parts.push("email")
+        if (parts.length > 0) {
+          showToast(`Calendar invite sent via ${parts.join(" and ")}`, "success")
+        } else {
+          showToast(data.errors?.[0] || "No invite sent — no contact info", "error")
+        }
+      } else {
+        showToast("Failed to send invite", "error")
+      }
+    } catch {
+      showToast("Failed to send invite", "error")
+    } finally {
+      setInviteSending(false)
+    }
+  }, [workOrder, showToast])
 
   const handleCustomerEditSuccess = useCallback(async () => {
     // Re-fetch work order to get updated customer data
@@ -762,6 +824,29 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
             <Eye size={16} />
             Preview as Customer
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-2"
+            onClick={() => setOilDecalOpen(true)}
+            title="Print oil change windshield decal"
+          >
+            <Droplet size={16} />
+            Print OC Decal
+          </Button>
+          {workOrder.scheduled_start && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={handleSendInvite}
+              disabled={inviteSending}
+              title="Send calendar invite to customer via SMS and email"
+            >
+              <CalendarPlus size={16} />
+              {inviteSending ? "Sending..." : "Send Invite"}
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-4 flex-shrink-0">
           {/* Arrival date */}
@@ -873,6 +958,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
           phoneMobile={workOrder.phone_mobile}
           email={workOrder.email}
           address={fullAddress}
+          workOrderId={workOrder.id}
           onEdit={() => setCustomerEditOpen(true)}
           onSMS={() => setSmsDialogOpen(true)}
           onEmail={() => setEmailDialogOpen(true)}
@@ -1035,6 +1121,7 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
                   service={service}
                   onUpdate={updateService}
                   onRemove={() => removeService(service.id)}
+                  onServiceCompleted={handleServiceCompleted}
                   isDragging={dragIndex === index}
                   roTechnician="Unassigned"
                   dragHandleProps={createDragHandleProps(index)}
@@ -1258,6 +1345,14 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         vehicleModel={workOrder.model}
         grandTotal={grandTotalWithTax}
         roNumber={workOrder.ro_number}
+      />
+
+      {/* Oil Change Decal Modal */}
+      <OilChangeDecalModal
+        open={oilDecalOpen}
+        onOpenChange={setOilDecalOpen}
+        currentMileage={workOrder.mileage}
+        roId={workOrder.id}
       />
 
       {/* Customer Edit Dialog */}

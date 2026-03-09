@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Plus, Download, ChevronRight, Search, Loader2, Trash2 } from "lucide-react"
+import { Plus, Download, ChevronRight, Search, Loader2, Trash2, ArrowUpDown } from "lucide-react"
 import { formatPhoneNumber } from "@/lib/utils/phone-format"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -20,6 +20,7 @@ interface WorkOrder {
   state: string
   date_opened: string
   date_promised: string | null
+  date_closed: string | null
   customer_concern: string | null
   labor_total: string
   parts_total: string
@@ -44,6 +45,7 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
   const { hasPermission } = useAuth()
   const [selectedFilter, setSelectedFilter] = useState<string>("all")
   const [searchTerm, setSearchTerm] = useState("")
+  const [sortBy, setSortBy] = useState<string>("date_opened_desc")
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -59,13 +61,14 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
       const offset = (currentPage - 1) * itemsPerPage
       const params = new URLSearchParams({
         limit: itemsPerPage.toString(),
-        offset: offset.toString()
+        offset: offset.toString(),
+        sort: sortBy,
       })
-      
+
       if (selectedFilter !== "all") {
         params.set("state", selectedFilter)
       }
-      
+
       if (searchTerm) {
         params.set("search", searchTerm)
       }
@@ -83,18 +86,18 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
     } finally {
       setLoading(false)
     }
-  }, [searchTerm, selectedFilter, currentPage])
+  }, [searchTerm, selectedFilter, currentPage, sortBy])
 
   useEffect(() => {
     fetchWorkOrders()
   }, [fetchWorkOrders])
 
-  // Reset to page 1 when search or filter changes
+  // Reset to page 1 when search, filter, or sort changes
   useEffect(() => {
     if (currentPage !== 1) {
       setCurrentPage(1)
     }
-  }, [searchTerm, selectedFilter])
+  }, [searchTerm, selectedFilter, sortBy])
 
 
   // Count work orders by state
@@ -207,16 +210,35 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
           </div>
         </div>
 
-        {/* Search and filters */}
+        {/* Search, sort, and filters */}
         <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={18} />
-            <Input
-              placeholder="Search by customer, vehicle, or RO number..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-card border-border"
-            />
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={18} />
+              <Input
+                placeholder="Search by customer, vehicle, or RO number..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 bg-card border-border"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <ArrowUpDown size={14} className="text-muted-foreground" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
+              >
+                <option value="date_opened_desc">Opened (Newest)</option>
+                <option value="date_opened_asc">Opened (Oldest)</option>
+                <option value="date_closed_desc">Closed (Newest)</option>
+                <option value="date_closed_asc">Closed (Oldest)</option>
+                <option value="total_desc">Total (Highest)</option>
+                <option value="total_asc">Total (Lowest)</option>
+                <option value="ro_number_desc">RO # (Newest)</option>
+                <option value="ro_number_asc">RO # (Oldest)</option>
+              </select>
+            </div>
           </div>
 
           {/* Filter tabs */}
@@ -341,9 +363,11 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
                     </div>
                     <div className="text-xs text-muted-foreground text-right">
                       <p>Opened: {new Date(wo.date_opened).toLocaleDateString()}</p>
-                      {wo.date_promised && (
+                      {wo.date_closed ? (
+                        <p>Closed: {new Date(wo.date_closed).toLocaleDateString()}</p>
+                      ) : wo.date_promised ? (
                         <p>Due: {new Date(wo.date_promised).toLocaleDateString()}</p>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -354,14 +378,10 @@ export function ROListView({ onSelectRO }: { onSelectRO?: (roId: string) => void
           <Card className="p-12 border-border text-center">
             <p className="text-muted-foreground mb-4">No repair orders found</p>
             {searchTerm && (
-              <Button onClick={() => setSearchTerm("")} variant="outline" className="mr-2">
+              <Button onClick={() => setSearchTerm("")} variant="outline">
                 Clear search
               </Button>
             )}
-            <Button onClick={() => router.push('/repair-orders/new')} variant="outline">
-              <Plus size={16} className="mr-2" />
-              Create First RO
-            </Button>
           </Card>
         )}
 

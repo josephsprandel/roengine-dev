@@ -28,8 +28,8 @@ const AMBER_ACTIONS = new Set([
 function getEventColor(event: GlobalActivityEvent): EventColor {
   if (GREEN_ACTIONS.has(event.action)) return "green"
   if (AMBER_ACTIONS.has(event.action)) return "amber"
-  // Online bookings by customer
-  if (event.action === "ro_created" && event.actor_type === "customer") return "green"
+  // Online/phone bookings by customer or AI
+  if (event.action === "ro_created") return "green"
   return "blue"
 }
 
@@ -78,6 +78,9 @@ function formatEvent(event: GlobalActivityEvent): string {
       const source = event.metadata?.source
       if (source === "online_booking") {
         return `${customer} booked online — ${ro} created`
+      }
+      if (source === "retell_phone") {
+        return `${ro} created for ${customer} by AI Phone Assistant`
       }
       return `${ro} created for ${customer}`
     }

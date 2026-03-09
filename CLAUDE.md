@@ -1,6 +1,6 @@
 # RO Engine — CLAUDE.md
 # AutoHouse Automotive | Owner: Fren (Joe Sprandel)
-# Last updated: 2026-02-27
+# Last updated: 2026-03-05
 ## Project Overview
 RO Engine is an AI-native shop management SaaS platform replacing ShopWare.
 Stack: Next.js (App Router), PostgreSQL (shopops3), Node.js, PM2, Caddy reverse proxy.
@@ -74,6 +74,7 @@ DB: shopops3 on localhost, user: shopops
 - Verify before done — never mark complete without proof it works
 - When a fix feels hacky, pause and implement the elegant solution
 - All business values (labor rate, tax rate, phone, hours, address) must come from shop_profile — never hardcode
+- Phone numbers are stored as numeric-only strings in DB (e.g. "4793012880") — always render through formatPhoneNumber() from @/lib/utils/phone-format before displaying in any UI or print output, never display raw numeric strings
 ## Current State (as of 2026-02-24)
 ### Completed
 - SMS integration (Twilio, templates, webhooks, consent)
@@ -111,6 +112,26 @@ DB: shopops3 on localhost, user: shopops
   - POST preview mode for future Phone Script editor
   - Retell LLM switched to Claude Sonnet 4.5 (claude-4.5-sonnet)
 - Retell mileage capture: appointment endpoint accepts optional mileage, updates vehicle record
+- Purchase Orders system (migration 058):
+  - Tables: purchase_orders + purchase_order_items
+  - API: /api/purchase-orders (list, create, detail, update, delete, receive)
+  - PO number format: PO-YYYYMM-NNN (sequential per month)
+  - Receive endpoint updates parts_inventory qty + writes inventory_transactions type='receipt'
+  - UI: Purchase Orders tab (full CRUD, vendor/part autocomplete) + Receiving tab (split panel, qty input)
+  - Dashboard wires receivingPreloadId state between PO and Receiving tabs
+- SMS health check on Communications page:
+  - /api/sms/test: GET returns provider info + shop phone, POST sends test SMS
+  - SMS Status card with inline test form, provider badge in page header
+  - Last test result persisted to localStorage
+- Oil Change Decal Print (migration 059):
+  - Trigger: editable-service-card fires onServiceCompleted callback on service completion
+  - Detection in ro-detail-view: regex matches oil-related titles + part descriptions
+  - Once-per-RO-per-session guard via ref (oilDecalPromptedRef)
+  - OilChangeDecalModal: editable fields (current/next mileage, next date), pre-filled from RO + shop defaults
+  - Print page: /decals/oil-change/print — 2"x2" label with shop logo, name, phone, next service date/mileage
+  - Fallback "Print OC Decal" button in RO detail action bar (always visible)
+  - Settings: oil_interval_miles + oil_interval_months on shop_profile, editable in Shop Settings
+  - API: /api/decals/oil-change (GET shop defaults, POST log print)
 ### Immediate Priorities
 1. Print invoice polish
 2. Parts Manager interface improvements
@@ -120,7 +141,7 @@ DB: shopops3 on localhost, user: shopops
 6. Add mileage param to book_appointment tool schema in Retell dashboard
 7. Set up daily cron for GET /api/retell/sync-date (keeps date current)
 ### Known Issues
-- Parts Manager tabs (Purchase Orders, Receiving, Cores) are UI mockups with no backend
+- Parts Manager Cores tab is still a UI mockup with no backend
 - Dashboard AI Insights widget is hardcoded fake data
 - Billing settings is a mockup
 - Team & Permissions settings is static
@@ -260,4 +281,4 @@ here's what's most relevant:
 - Haiku 4.5: claude-haiku-4-5-20251001 (fast/cheap, good for high-volume)
 - Retell AI currently using claude-4.5-sonnet — target claude-sonnet-4-6 when available in Retell
 - Ollama qwen3:14b: local inference on RTX 3060 for service writer tasks (~300ms per call)
-*Last updated: February 27, 2026*
+*Last updated: March 5, 2026*

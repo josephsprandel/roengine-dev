@@ -2,12 +2,16 @@
 
 import { MetricsGrid } from "./metrics-grid"
 import { RepairOrdersTable } from "./repair-orders-table"
-import { AIInsights } from "./ai-insights"
 import { GlobalActivityFeed } from "./global-activity-feed"
+import { WeekHealthWidget } from "./week-health-widget"
+import { TodaysAppointments } from "./todays-appointments"
 
 export function Dashboard() {
   return (
     <div className="p-6 space-y-6">
+      {/* Today's Appointments — first thing Bailey sees */}
+      <TodaysAppointments />
+
       {/* Metrics */}
       <MetricsGrid />
 
@@ -16,7 +20,7 @@ export function Dashboard() {
         <div className="lg:col-span-2">
           <GlobalActivityFeed />
         </div>
-        <AIInsights />
+        <WeekHealthWidget />
       </div>
 
       {/* Main content */}

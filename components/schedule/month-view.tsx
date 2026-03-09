@@ -1,6 +1,7 @@
 "use client"
 
 import { useDroppable } from "@dnd-kit/core"
+import { useRouter } from "next/navigation"
 import {
   format,
   startOfMonth,
@@ -12,6 +13,7 @@ import {
   isSameDay,
   isToday,
 } from "date-fns"
+import { ArrowRight, Ban } from "lucide-react"
 import { ROCard, type ScheduledOrder } from "./ro-card"
 import type { ScheduleBlock } from "./schedule-calendar"
 import type { BlockDialogDefaults } from "./block-dialog"
@@ -23,6 +25,7 @@ interface MonthViewProps {
   activeId: number | null
   onBlockClick: (block: ScheduleBlock) => void
   onBlockTime: (defaults: BlockDialogDefaults) => void
+  onDaySelect: (date: Date) => void
 }
 
 const MAX_VISIBLE = 3
@@ -35,6 +38,7 @@ function DayCell({
   activeId,
   onBlockClick,
   onBlockTime,
+  onDaySelect,
 }: {
   date: Date
   currentMonth: Date
@@ -43,7 +47,9 @@ function DayCell({
   activeId: number | null
   onBlockClick: (block: ScheduleBlock) => void
   onBlockTime: (defaults: BlockDialogDefaults) => void
+  onDaySelect: (date: Date) => void
 }) {
+  const router = useRouter()
   const dateStr = format(date, "yyyy-MM-dd")
   const { setNodeRef, isOver } = useDroppable({ id: `week:${dateStr}` })
   const dayOrders = orders.filter((o) => isSameDay(new Date(o.scheduled_start), date))
@@ -76,9 +82,18 @@ function DayCell({
         >
           {format(date, "d")}
         </span>
-        {dayOrders.length > 0 && (
-          <span className="text-[10px] text-muted-foreground">{dayOrders.length}</span>
-        )}
+        <div className="flex items-center gap-0.5">
+          {dayOrders.length > 0 && (
+            <span className="text-[10px] text-muted-foreground">{dayOrders.length}</span>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); onDaySelect(date) }}
+            className="p-0 rounded hover:bg-muted/60 text-muted-foreground/30 hover:text-muted-foreground transition-colors leading-none"
+            title={`View ${format(date, "MMM d")} in day view`}
+          >
+            <ArrowRight size={10} />
+          </button>
+        </div>
       </div>
 
       {/* Block banners */}
@@ -87,20 +102,36 @@ function DayCell({
           {dayBlocks.map((block) => (
             <div
               key={`block-${block.id}`}
-              className="bg-muted/60 border border-dashed border-muted-foreground/30 rounded px-1 py-px text-[9px] text-muted-foreground cursor-pointer truncate hover:opacity-80"
+              className="border border-dashed border-amber-500/40 rounded cursor-pointer hover:opacity-80 overflow-hidden"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(245,158,11,0.08) 3px, rgba(245,158,11,0.08) 6px)",
+                backgroundColor: "rgba(245,158,11,0.06)",
+              }}
               onClick={() => onBlockClick(block)}
             >
-              {block.start_time
-                ? `${block.start_time.substring(0, 5)}-${block.end_time!.substring(0, 5)}`
-                : "Blocked"}
-              {block.bay_assignment ? ` B${block.bay_assignment}` : ""}
+              <div className="flex items-center gap-0.5 px-1 py-px">
+                <Ban size={8} className="text-amber-500/70 flex-shrink-0" />
+                <span className="text-[9px] text-amber-700 dark:text-amber-400 font-medium truncate leading-tight">
+                  {block.start_time
+                    ? `${block.start_time.substring(0, 5)}–${block.end_time!.substring(0, 5)}`
+                    : "Blocked"}
+                  {block.bay_assignment ? ` B${block.bay_assignment}` : ""}
+                </span>
+              </div>
             </div>
           ))}
         </div>
       )}
 
       {/* RO cards */}
-      <div className="flex-1 px-1 mt-0.5 space-y-0.5 overflow-hidden">
+      <div
+        className="flex-1 px-1 mt-0.5 space-y-0.5 overflow-hidden"
+        onDoubleClick={() => {
+          const scheduledStart = `${dateStr}T09:00:00`
+          router.push(`/repair-orders/new?scheduledStart=${encodeURIComponent(scheduledStart)}`)
+        }}
+      >
         {dayOrders.slice(0, MAX_VISIBLE).map((order) => (
           <ROCard
             key={order.id}
@@ -121,7 +152,7 @@ function DayCell({
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-export function MonthView({ orders, blocks, currentDate, activeId, onBlockClick, onBlockTime }: MonthViewProps) {
+export function MonthView({ orders, blocks, currentDate, activeId, onBlockClick, onBlockTime, onDaySelect }: MonthViewProps) {
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
   const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 })
@@ -154,6 +185,7 @@ export function MonthView({ orders, blocks, currentDate, activeId, onBlockClick,
             activeId={activeId}
             onBlockClick={onBlockClick}
             onBlockTime={onBlockTime}
+            onDaySelect={onDaySelect}
           />
         ))}
       </div>

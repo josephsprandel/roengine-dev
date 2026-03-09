@@ -1,9 +1,10 @@
 /**
  * Payments API
- * 
+ *
  * Handles payment records for invoices
  * GET /api/work-orders/[id]/payments - List all payments
  * POST /api/work-orders/[id]/payments - Add a payment
+ * DELETE /api/work-orders/[id]/payments - Reverse (delete) a payment
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -25,15 +26,17 @@ export async function GET(
 
     // Fetch all payments for this work order
     const result = await query(
-      `SELECT 
+      `SELECT
         p.id, p.work_order_id, p.amount, p.payment_method,
         p.card_surcharge, p.card_surcharge_rate,
         p.paid_at, p.recorded_by, p.notes, p.created_at,
+        COALESCE(p.is_reversal, false) as is_reversal,
+        p.reversal_of, p.reversed_at,
         COALESCE(u.full_name, 'Unknown User') as recorded_by_name
        FROM payments p
        LEFT JOIN users u ON p.recorded_by = u.id
        WHERE p.work_order_id = $1
-       ORDER BY p.paid_at DESC`,
+       ORDER BY p.paid_at ASC, p.id ASC`,
       [workOrderId]
     )
 
@@ -89,8 +92,8 @@ export async function POST(
       return NextResponse.json({ error: 'Payment amount must be greater than zero' }, { status: 400 })
     }
 
-    if (!payment_method || !['cash', 'card', 'check', 'ach'].includes(payment_method)) {
-      return NextResponse.json({ error: 'Invalid payment method' }, { status: 400 })
+    if (!payment_method || typeof payment_method !== 'string' || !payment_method.trim()) {
+      return NextResponse.json({ error: 'Payment method is required' }, { status: 400 })
     }
 
     if (!user_id) {
@@ -155,7 +158,9 @@ export async function POST(
     let card_surcharge = 0
     let card_surcharge_rate_used = null
 
-    if (payment_method === 'card' && ccSurchargeEnabled) {
+    // Credit card surcharge applies to any "Credit Card - *" method or legacy "card" value
+    const isCreditCard = payment_method.startsWith('Credit Card') || payment_method === 'card'
+    if (isCreditCard && ccSurchargeEnabled) {
       card_surcharge = parseFloat(amount) * ccSurchargeRate
       card_surcharge_rate_used = ccSurchargeRate
     }
@@ -218,6 +223,116 @@ export async function POST(
   } catch (error: any) {
     await client.query('ROLLBACK')
     console.error('Error recording payment:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  } finally {
+    client.release()
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const client = await getClient()
+
+  try {
+    const { id } = await params
+    const workOrderId = parseInt(id)
+
+    if (isNaN(workOrderId)) {
+      return NextResponse.json({ error: 'Invalid work order ID' }, { status: 400 })
+    }
+
+    const body = await request.json()
+    const { payment_id, user_id } = body
+
+    if (!payment_id) {
+      return NextResponse.json({ error: 'Payment ID is required' }, { status: 400 })
+    }
+
+    await client.query('BEGIN')
+
+    // Verify the payment exists, belongs to this work order, and isn't already reversed
+    const paymentResult = await client.query(
+      `SELECT id, amount, payment_method, reversed_at
+       FROM payments
+       WHERE id = $1 AND work_order_id = $2 AND is_reversal = false`,
+      [payment_id, workOrderId]
+    )
+
+    if (paymentResult.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
+    }
+
+    const original = paymentResult.rows[0]
+
+    if (original.reversed_at) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ error: 'Payment has already been reversed' }, { status: 400 })
+    }
+
+    const reversedAmount = parseFloat(original.amount)
+
+    // Mark the original payment as reversed
+    await client.query(
+      'UPDATE payments SET reversed_at = NOW() WHERE id = $1',
+      [payment_id]
+    )
+
+    // Insert a negative reversal record
+    await client.query(
+      `INSERT INTO payments (
+        work_order_id, amount, payment_method,
+        card_surcharge, paid_at, recorded_by, notes,
+        is_reversal, reversal_of
+      ) VALUES ($1, $2, $3, 0, NOW(), $4, $5, true, $6)`,
+      [
+        workOrderId,
+        -reversedAmount,
+        original.payment_method,
+        user_id || 1,
+        `Reversal of $${reversedAmount.toFixed(2)} ${original.payment_method} payment`,
+        payment_id,
+      ]
+    )
+
+    // Recalculate total paid from all payments (positives + negatives)
+    const remainingResult = await client.query(
+      'SELECT COALESCE(SUM(amount), 0) as total_paid FROM payments WHERE work_order_id = $1',
+      [workOrderId]
+    )
+
+    const newTotalPaid = parseFloat(remainingResult.rows[0].total_paid)
+
+    // Update work order amount_paid and potentially revert payment_status
+    const woResult = await client.query(
+      `UPDATE work_orders
+       SET amount_paid = $1,
+           invoice_status = CASE
+             WHEN invoice_status = 'paid' THEN 'invoice_closed'
+             ELSE invoice_status
+           END,
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, invoice_status, total`,
+      [newTotalPaid, workOrderId]
+    )
+
+    await client.query('COMMIT')
+
+    const wo = woResult.rows[0]
+
+    return NextResponse.json({
+      success: true,
+      message: `Payment of $${reversedAmount.toFixed(2)} reversed`,
+      invoice_status: wo.invoice_status,
+      new_total_paid: newTotalPaid,
+      balance_due: parseFloat(wo.total || 0) - newTotalPaid,
+    })
+  } catch (error: any) {
+    await client.query('ROLLBACK')
+    console.error('Error reversing payment:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   } finally {
     client.release()

@@ -331,7 +331,6 @@ export function VehicleEditDialog({ open, onOpenChange, vehicle, customerId, onS
                   type="month"
                   value={formData.manufacture_date}
                   onChange={(e) => handleChange("manufacture_date", e.target.value)}
-                  placeholder="YYYY-MM"
                 />
               </div>
             </div>

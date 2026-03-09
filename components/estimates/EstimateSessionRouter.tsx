@@ -10,18 +10,21 @@ interface EstimateSessionRouterProps {
   token: string
   shopProfile: any
   workOrderId: number
+  preview?: boolean
 }
 
 /**
  * Client-side wrapper that detects if the viewer is a logged-in staff member.
- * - Staff: redirects to the internal RO detail view
- * - Customer (no auth): renders the customer-facing estimate page
+ * - Staff (no preview): redirects to the internal RO detail view with zero side effects
+ * - Staff (preview mode): renders the customer-facing estimate page without tracking
+ * - Customer (no auth): renders the customer-facing estimate page and logs the view
  */
 export function EstimateSessionRouter({
   estimate,
   token,
   shopProfile,
   workOrderId,
+  preview = false,
 }: EstimateSessionRouterProps) {
   const router = useRouter()
   const [checking, setChecking] = useState(true)
@@ -31,6 +34,8 @@ export function EstimateSessionRouter({
       try {
         const authToken = localStorage.getItem("auth_token")
         if (!authToken) {
+          // No auth token — this is a customer. Track the view.
+          trackCustomerView(token)
           setChecking(false)
           return
         }
@@ -41,10 +46,17 @@ export function EstimateSessionRouter({
         })
 
         if (res.ok) {
+          // Authenticated staff member
+          if (preview) {
+            // Preview mode: show customer view without tracking
+            setChecking(false)
+            return
+          }
+
           const data = await res.json()
           const userName = data.user?.name || "Staff"
 
-          // Log staff view
+          // Log staff view (not a customer event)
           try {
             await fetch(`/api/work-orders/${workOrderId}/activity`, {
               method: "POST",
@@ -62,7 +74,7 @@ export function EstimateSessionRouter({
             // Non-critical
           }
 
-          // Redirect to the internal RO view
+          // Redirect to the internal RO view immediately — zero customer-facing side effects
           router.replace(`/repair-orders/${workOrderId}`)
           return
         }
@@ -70,11 +82,13 @@ export function EstimateSessionRouter({
         // Token invalid or network error — fall through to customer view
       }
 
+      // Invalid/expired token — treat as customer
+      trackCustomerView(token)
       setChecking(false)
     }
 
     checkSession()
-  }, [router, workOrderId])
+  }, [router, workOrderId, token, preview])
 
   if (checking) {
     return (
@@ -89,4 +103,14 @@ export function EstimateSessionRouter({
 
   // Customer view — render the estimate page as normal
   return <EstimateClient estimate={estimate} token={token} shopProfile={shopProfile} />
+}
+
+/**
+ * Fire-and-forget call to record that a customer viewed the estimate.
+ * Only called after confirming the viewer is NOT staff.
+ */
+function trackCustomerView(token: string) {
+  fetch(`/api/estimates/${token}/viewed`, { method: "POST" }).catch(() => {
+    // Non-critical — estimate still works without tracking
+  })
 }

@@ -181,10 +181,12 @@ export function CustomerSearch({ onSelectCustomer }: { onSelectCustomer?: (id: s
                         )}
                       </div>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-                        <span className="flex items-center gap-1">
-                          <Phone size={14} />
-                          {formatPhoneNumber(customer.phone_primary)}
-                        </span>
+                        {customer.phone_primary && (
+                          <span className="flex items-center gap-1">
+                            <Phone size={14} />
+                            {formatPhoneNumber(customer.phone_primary)}
+                          </span>
+                        )}
                         {customer.email && (
                           <span className="flex items-center gap-1">
                             <Mail size={14} />

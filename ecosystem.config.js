@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'ai-automotive-repair',
+      name: 'roengine',
       script: 'node_modules/next/dist/bin/next',
       args: 'start -p 3000 -H 0.0.0.0',
       cwd: '/home/jsprandel/roengine',

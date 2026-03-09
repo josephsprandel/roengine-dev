@@ -253,7 +253,7 @@ export function RecommendationCard({
               {recommendation.recommended_at_mileage && (
                 <span>
                   Every {formatMileage(recommendation.recommended_at_mileage)} mi
-                  {urgency === 'OVERDUE' && milesOverdue > 0 && (
+                  {urgency === 'OVERDUE' && milesOverdue > 0 && milesOverdue <= recommendation.recommended_at_mileage / 2 && (
                     <span className="text-red-600 dark:text-red-400 font-medium ml-1">
                       ({formatMileage(milesOverdue)} mi over)
                     </span>
@@ -357,7 +357,7 @@ export function RecommendationCard({
               )}
 
               {isSentToCustomer && (
-                <span className="text-[10px] text-muted-foreground whitespace-nowrap">Waiting...</span>
+                <span className="text-[10px] text-muted-foreground">Awaiting customer response</span>
               )}
 
               {isCustomerDeclined && (

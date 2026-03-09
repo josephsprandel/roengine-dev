@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
         wo.scheduled_start, wo.scheduled_end,
         wo.bay_assignment, wo.assigned_tech_id,
         wo.customer_concern, wo.total, wo.booking_source, wo.appointment_type,
+        wo.estimated_tech_hours, wo.is_waiter, wo.bay_hold, wo.week_killer_flag,
         wo.job_state_id,
         js.name as job_state_name, js.color as job_state_color,
         js.icon as job_state_icon,

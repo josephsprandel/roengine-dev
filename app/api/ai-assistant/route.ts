@@ -32,6 +32,45 @@ export async function POST(request: NextRequest) {
     
     // Navigation commands
     if (lowerCommand.includes('go to') || lowerCommand.includes('open') || lowerCommand.includes('navigate')) {
+      // Settings tabs (check specific tabs before generic "settings")
+      const settingsTabMap: { keywords: string[]; tab: string; label: string }[] = [
+        { keywords: ['scheduling settings', 'scheduling rules', 'schedule settings', 'capacity rules', 'booking settings'], tab: 'scheduling', label: 'Scheduling Settings' },
+        { keywords: ['shop settings', 'shop profile', 'shop info', 'shop hours', 'business hours'], tab: 'shop', label: 'Shop Settings' },
+        { keywords: ['appearance settings', 'appearance', 'theme', 'dark mode', 'light mode', 'branding'], tab: 'appearance', label: 'Appearance Settings' },
+        { keywords: ['business settings', 'billing', 'labor rate', 'tax rate', 'invoicing', 'job states'], tab: 'business', label: 'Business Settings' },
+        { keywords: ['vendor settings', 'vendors', 'vendor preferences', 'supplier'], tab: 'vendors', label: 'Vendor Settings' },
+        { keywords: ['canned jobs', 'canned job', 'job templates', 'preset jobs'], tab: 'canned-jobs', label: 'Canned Jobs Settings' },
+        { keywords: ['recycle bin', 'trash', 'deleted', 'restore'], tab: 'recycle-bin', label: 'Recycle Bin' },
+      ]
+
+      for (const entry of settingsTabMap) {
+        if (entry.keywords.some(kw => lowerCommand.includes(kw))) {
+          return NextResponse.json({
+            intent: 'navigation',
+            message: `Opening ${entry.label}.`,
+            action: 'navigate',
+            url: `/settings?tab=${entry.tab}`
+          })
+        }
+      }
+
+      // Main pages
+      if (lowerCommand.includes('dashboard') || lowerCommand.includes('home') || lowerCommand.includes('main page')) {
+        return NextResponse.json({
+          intent: 'navigation',
+          message: 'Taking you to the dashboard.',
+          action: 'navigate',
+          url: '/'
+        })
+      }
+      if (lowerCommand.includes('schedule') || lowerCommand.includes('calendar') || lowerCommand.includes('appointment')) {
+        return NextResponse.json({
+          intent: 'navigation',
+          message: 'Opening the schedule.',
+          action: 'navigate',
+          url: '/schedule'
+        })
+      }
       if (lowerCommand.includes('customer')) {
         return NextResponse.json({
           intent: 'navigation',
@@ -54,6 +93,14 @@ export async function POST(request: NextRequest) {
           message: 'Opening parts manager.',
           action: 'navigate',
           url: '/parts-manager'
+        })
+      }
+      if (lowerCommand.includes('communication') || lowerCommand.includes('comms') || lowerCommand.includes('message') || lowerCommand.includes('inbox')) {
+        return NextResponse.json({
+          intent: 'navigation',
+          message: 'Opening communications.',
+          action: 'navigate',
+          url: '/communications'
         })
       }
       if (lowerCommand.includes('setting')) {

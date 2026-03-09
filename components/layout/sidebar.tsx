@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { List, X, Wrench, SquaresFour, Users, ChatCircle, Gear, Lightning, Package, SignOut, UserCircle, CaretUp, CalendarBlank } from "@phosphor-icons/react"
+import { useState, useEffect, useCallback } from "react"
+import { List, X, Wrench, SquaresFour, Users, ChatCircle, Gear, Lightning, Package, SignOut, UserCircle, CaretUp, CalendarBlank, Clock, ChartBar } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import Image from "next/image"
@@ -19,12 +19,31 @@ export function Sidebar() {
   const [isOpen, setIsOpen] = useState(true)
   const [shopLogo, setShopLogo] = useState<string | null>(null)
   const [shopName, setShopName] = useState<string>("RO Engine")
-  const { user, roles, logout } = useAuth()
+  const { user, roles, logout, hasRole } = useAuth()
+  const isHoursAdmin = hasRole("Owner") || hasRole("Manager")
+
+  // Setup incomplete badge
+  const [setupIncomplete, setSetupIncomplete] = useState(false)
+
+  // Timeclock state
+  const [clockStatus, setClockStatus] = useState<'clocked_in' | 'clocked_out' | null>(null)
+  const [lastEvent, setLastEvent] = useState<string | null>(null)
+  const [shopTimezone, setShopTimezone] = useState('America/Chicago')
+  const [clockLoading, setClockLoading] = useState(false)
 
   const userInitials = user?.name
     ? user.name.split(" ").map(part => part[0]).join("").toUpperCase().slice(0, 2)
     : "?"
   const primaryRole = roles.length > 0 ? roles[0].name : "User"
+
+  // Short name: "Joe S." from "Joe Sprandel"
+  const shortName = user?.name
+    ? (() => {
+        const parts = user.name.trim().split(/\s+/)
+        if (parts.length === 1) return parts[0]
+        return `${parts[0]} ${parts[parts.length - 1][0]}.`
+      })()
+    : ""
 
   useEffect(() => {
     // Fetch shop profile to get logo
@@ -49,6 +68,16 @@ export function Sidebar() {
 
     fetchShopProfile()
 
+    // Check setup status for incomplete badge
+    fetch('/api/setup')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && data.setup_complete && data.setup_steps_skipped?.length > 0) {
+          setSetupIncomplete(true)
+        }
+      })
+      .catch(() => {})
+
     // Listen for logo update events
     const handleLogoUpdate = () => {
       fetchShopProfile()
@@ -60,6 +89,72 @@ export function Sidebar() {
     }
   }, [])
 
+  // Timeclock: fetch status on mount
+  const fetchClockStatus = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('auth_token')
+      if (!token) return
+      const res = await fetch('/api/timeclock/status', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setClockStatus(data.status)
+        setLastEvent(data.lastEvent)
+        if (data.timezone) setShopTimezone(data.timezone)
+      }
+    } catch {
+      // Non-critical — silently fail
+    }
+  }, [])
+
+  useEffect(() => {
+    if (user) fetchClockStatus()
+    const handleClockEvent = () => fetchClockStatus()
+    window.addEventListener('clock-status-changed', handleClockEvent)
+    return () => window.removeEventListener('clock-status-changed', handleClockEvent)
+  }, [user, fetchClockStatus])
+
+  const handleClockToggle = async () => {
+    setClockLoading(true)
+    try {
+      const token = localStorage.getItem('auth_token')
+      if (!token) return
+      const endpoint = clockStatus === 'clocked_in'
+        ? '/api/timeclock/clock-out'
+        : '/api/timeclock/clock-in'
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        await fetchClockStatus()
+        toast.success(clockStatus === 'clocked_in' ? 'Clocked out' : 'Clocked in')
+        window.dispatchEvent(new Event('clock-status-changed'))
+      } else {
+        const data = await res.json()
+        toast.error(data.error || 'Failed to update clock status')
+      }
+    } catch {
+      toast.error('Failed to update clock status')
+    } finally {
+      setClockLoading(false)
+    }
+  }
+
+  function formatClockTime(isoTimestamp: string): string {
+    const date = new Date(isoTimestamp)
+    return date.toLocaleString('en-US', {
+      timeZone: shopTimezone,
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).toLowerCase()
+  }
+
   const navItems = [
     { icon: SquaresFour, label: "Dashboard", href: "/" },
     { icon: CalendarBlank, label: "Schedule", href: "/schedule" },
@@ -67,9 +162,10 @@ export function Sidebar() {
     { icon: Users, label: "Customers", href: "/customers" },
     { icon: Package, label: "Parts Manager", href: "/parts-manager" },
     { icon: ChatCircle, label: "Communications", href: "/communications" },
+    { icon: ChartBar, label: "Reports", href: "/reports" },
 
     { icon: Lightning, label: "AI Assistant", href: "/ai-assistant", beta: true },
-    { icon: Gear, label: "Settings", href: "/settings" },
+    { icon: Gear, label: "Settings", href: "/settings", setupBadge: true },
   ]
 
   return (
@@ -125,12 +221,15 @@ export function Sidebar() {
               {item.beta && (
                 <span className="text-xs px-2 py-0.5 rounded-full bg-sidebar-primary/20 text-sidebar-primary">β</span>
               )}
+              {item.setupBadge && setupIncomplete && (
+                <span className="w-2 h-2 rounded-full bg-orange-400" title="Setup incomplete" />
+              )}
             </a>
           ))}
         </nav>
 
-        {/* User profile */}
-        <div className="px-4 py-4 border-t border-sidebar-border">
+        {/* User profile + Timeclock */}
+        <div className="px-4 py-4 border-t border-sidebar-border space-y-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-3 px-4 py-3 rounded-lg bg-sidebar-accent/50 hover:bg-sidebar-accent w-full text-left transition-colors cursor-pointer">
@@ -138,8 +237,22 @@ export function Sidebar() {
                   {userInitials}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-sidebar-foreground truncate">{user?.name ?? "Loading..."}</p>
-                  <p className="text-xs text-sidebar-accent-foreground truncate">{primaryRole}</p>
+                  <p className="text-sm font-medium text-sidebar-foreground truncate">
+                    {shortName ? `${shortName} in ${shopName}` : user?.name ?? "Loading..."}
+                  </p>
+                  <p className={cn(
+                    "text-[10px] font-semibold uppercase tracking-wide",
+                    clockStatus === 'clocked_in'
+                      ? 'text-green-500'
+                      : clockStatus === 'clocked_out'
+                      ? 'text-orange-400'
+                      : 'text-sidebar-accent-foreground'
+                  )}>
+                    {clockStatus === 'clocked_in' ? 'CLOCKED IN: ' : clockStatus === 'clocked_out' ? 'CLOCKED OUT: ' : primaryRole}
+                    {clockStatus && lastEvent && (
+                      <span className="font-normal">{formatClockTime(lastEvent)}</span>
+                    )}
+                  </p>
                 </div>
                 <CaretUp size={16} className="text-sidebar-accent-foreground shrink-0" />
               </button>
@@ -155,12 +268,46 @@ export function Sidebar() {
                 Profile Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <a href="/hours">
+                  <Clock size={16} />
+                  My Hours
+                </a>
+              </DropdownMenuItem>
+              {isHoursAdmin && (
+                <DropdownMenuItem asChild>
+                  <a href="/hours?view=admin">
+                    <Clock size={16} />
+                    Hours Manager
+                  </a>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={logout}>
                 <SignOut size={16} />
                 Sign Out
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Timeclock toggle button */}
+          {clockStatus !== null && (
+            <button
+              onClick={handleClockToggle}
+              disabled={clockLoading}
+              className={cn(
+                "w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
+                clockStatus === 'clocked_in'
+                  ? 'bg-red-500/15 text-red-400 hover:bg-red-500/25'
+                  : 'bg-green-500/15 text-green-400 hover:bg-green-500/25'
+              )}
+            >
+              <Clock size={16} weight="bold" />
+              {clockLoading
+                ? 'Updating...'
+                : clockStatus === 'clocked_in' ? 'Clock Out' : 'Clock In'}
+            </button>
+          )}
         </div>
       </aside>
 

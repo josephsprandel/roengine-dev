@@ -49,6 +49,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/book']
 // Route prefixes that don't require authentication
 const PUBLIC_ROUTE_PREFIXES = ['/estimates/', '/images/vehicles/', '/api/booking/', '/tech']
+// Routes exempt from setup redirect
+const SETUP_EXEMPT_ROUTES = ['/setup', '/login', '/logout']
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -114,6 +116,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       router.push('/login')
     }
   }, [isLoading, isAuthenticated, pathname, router])
+
+  // Redirect Owner/Manager to setup wizard if setup not complete
+  useEffect(() => {
+    if (isLoading || !isAuthenticated || !user) return
+    if (SETUP_EXEMPT_ROUTES.includes(pathname)) return
+    if (PUBLIC_ROUTES.includes(pathname) || PUBLIC_ROUTE_PREFIXES.some(p => pathname.startsWith(p))) return
+
+    const isManager = roles.some(r => ['Owner', 'Manager'].includes(r.name))
+    if (!isManager) return
+
+    // Check setup status
+    fetch('/api/setup')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && data.setup_complete === false) {
+          router.push('/setup')
+        }
+      })
+      .catch(() => {
+        // If setup check fails, don't block — let them use the app
+      })
+  }, [isLoading, isAuthenticated, user, roles, pathname, router])
 
   // Login function
   async function login(email: string, password: string) {
