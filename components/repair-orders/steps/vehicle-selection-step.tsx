@@ -215,6 +215,11 @@ export function VehicleSelectionStep({
           (extracted as any).tire_size = result.data.tire_size || "";
         }
 
+        // Capture saved intake image paths from the API response
+        if (result.savedImages && result.savedImages.length > 0) {
+          (extracted as any).savedIntakeImages = result.savedImages
+        }
+
         setExtractedData(extracted)
         setManualData((prev) => ({ ...prev, ...extracted }))
         setAnalysisComplete(true)

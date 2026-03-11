@@ -158,6 +158,23 @@ export function useServiceManagement({
         servicePayload.description_completed = updated.descriptionCompleted || null
       }
 
+      // Persist position fields
+      if (updated.position !== undefined) {
+        servicePayload.position = updated.position || null
+      }
+      if (updated.positionType !== undefined) {
+        servicePayload.position_type = updated.positionType || null
+      }
+      if (updated.positionOverrideReason !== undefined) {
+        servicePayload.position_override_reason = updated.positionOverrideReason || null
+      }
+      if (updated.positionOverrideNote !== undefined) {
+        servicePayload.position_override_note = updated.positionOverrideNote || null
+      }
+      if (updated.positionConfidence !== undefined) {
+        servicePayload.position_confidence = updated.positionConfidence || null
+      }
+
       await fetch(`/api/work-orders/${woId}/services`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

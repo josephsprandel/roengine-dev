@@ -21,7 +21,8 @@ import { UISettings } from "@/components/settings/ui-settings"
 import { RecycleBinSettings } from "@/components/settings/recycle-bin-settings"
 import { PaymentMethodsSettings } from "@/components/settings/payment-methods-settings"
 import { PhoneAssistantSettings } from "@/components/settings/phone-assistant-settings"
-import { Settings, Building2, CreditCard, Palette, CalendarClock, ClipboardList, Truck, Trash2, Phone, Search } from "lucide-react"
+import { DecalDesignerSettings } from "@/components/decal-designer/DecalDesignerSettings"
+import { Settings, Building2, CreditCard, Palette, CalendarClock, ClipboardList, Truck, Trash2, Phone, Search, Tag } from "lucide-react"
 
 const TABS = [
   { id: "shop", label: "Shop", icon: Building2 },
@@ -32,6 +33,7 @@ const TABS = [
   { id: "phone", label: "Phone", icon: Phone },
   { id: "canned-jobs", label: "Canned Jobs", icon: ClipboardList },
   { id: "recycle-bin", label: "Recycle Bin", icon: Trash2 },
+  { id: "decal-designer", label: "Decal Designer", icon: Tag },
 ] as const
 
 type TabId = (typeof TABS)[number]["id"]
@@ -54,6 +56,7 @@ const SEARCH_INDEX: SearchEntry[] = [
   { terms: ["hours", "operating hours", "business hours", "open", "close", "schedule"], tab: "shop", section: "Shop Profile", label: "Operating Hours" },
   { terms: ["timezone", "time zone", "tz"], tab: "shop", section: "Shop Profile", label: "Timezone" },
   { terms: ["oil change", "oil interval", "oil presets", "oci"], tab: "shop", section: "Shop Profile", label: "Oil Change Presets" },
+  { terms: ["decal", "decal designer", "label designer", "oil decal", "zpl", "sticker", "label"], tab: "decal-designer", section: "Decal Designer", label: "Decal Designer" },
   { terms: ["services", "specialties", "tags", "description"], tab: "shop", section: "Shop Profile", label: "Services & Tags" },
   { terms: ["team", "users", "staff", "permissions", "employees"], tab: "shop", section: "Team & Permissions", label: "Team & Users" },
   { terms: ["roles", "admin", "technician", "advisor", "permissions"], tab: "shop", section: "Team & Permissions", label: "Roles" },
@@ -347,6 +350,10 @@ function SettingsContent() {
           <>
             <RecycleBinSettings />
           </>
+        )}
+
+        {activeTab === "decal-designer" && (
+          <DecalDesignerSettings />
         )}
       </div>
     </div>

@@ -17,6 +17,7 @@
  */
 
 import { query } from '@/lib/db'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,7 +83,9 @@ export interface FormattedService {
   driving_condition: string
   parts: { part_number: string; description: string; qty: number; unit: string }[]
   estimated_labor_hours: number
-  labor_source: string
+  labor_source: 'gemini_labor' | 'gemini' | 'fallback'
+  labor_confidence?: 'high' | 'medium' | 'low'
+  labor_notes?: string
   notes: string
   urgency: 'OVERDUE' | 'DUE_NOW' | 'COMING_SOON' | 'NOT_DUE'
   priority: number
@@ -402,6 +405,135 @@ export function calculateUrgency(
 }
 
 // ---------------------------------------------------------------------------
+// Labor hour fallback standards (used when Gemini labor call fails)
+// ---------------------------------------------------------------------------
+
+const LABOR_STANDARDS: Record<string, number> = {
+  oil_change: 0.5,
+  transmission_service: 0.5,
+  differential_service: 0.5,
+  coolant_service: 0.5,
+  filter_replacement: 0.25,
+  air_filter: 0.25,
+  cabin_filter: 0.25,
+  tire_service: 0.25,
+  tire_rotation: 0.25,
+  brake_service: 1.0,
+  spark_plugs: 1.0,
+  belts_hoses: 1.5,
+  battery_service: 0.25,
+  inspection: 0.5,
+  fluid_service: 0.5,
+  other: 0.5,
+}
+
+// ---------------------------------------------------------------------------
+// Gemini labor time estimation
+// ---------------------------------------------------------------------------
+
+interface LaborEstimate {
+  hours: number
+  confidence: 'high' | 'medium' | 'low'
+  notes: string
+}
+
+/**
+ * Estimate labor hours for a single service using Gemini.
+ * Returns null if Gemini is unavailable or the call fails.
+ */
+async function estimateLaborHours(
+  vehicleDesc: string,
+  engineDesc: string,
+  serviceName: string
+): Promise<LaborEstimate | null> {
+  const apiKey = process.env.GOOGLE_AI_API_KEY
+  if (!apiKey) return null
+
+  const prompt = `You are an automotive labor time estimator with knowledge of flat-rate labor guides (Mitchell, AllData, Chilton). Estimate realistic labor hours for the following service on the specified vehicle. Return ONLY a JSON object, no markdown.
+
+Vehicle: ${vehicleDesc}
+Engine: ${engineDesc}
+Service: ${serviceName}
+
+Consider:
+- Engine accessibility and complexity for this specific model/engine
+- Whether special tools or procedures are typically required
+- Typical dealer and independent shop flat-rate times
+- Return the REALISTIC independent shop time, not the padded dealer time
+
+Return:
+{
+  "hours": number (to nearest 0.1, minimum 0.1),
+  "confidence": "high" | "medium" | "low",
+  "notes": "brief explanation of what drives the time estimate"
+}`
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash',
+      generationConfig: { maxOutputTokens: 256, temperature: 0.1 },
+    })
+
+    const result = await model.generateContent(prompt)
+    const text = result.response.text()
+    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return null
+
+    const parsed = JSON.parse(jsonMatch[0])
+    const hours = Math.max(0.1, Math.round((parsed.hours || 0.5) * 10) / 10)
+    const confidence = ['high', 'medium', 'low'].includes(parsed.confidence) ? parsed.confidence : 'low'
+
+    return {
+      hours,
+      confidence,
+      notes: parsed.notes || '',
+    }
+  } catch (err) {
+    console.error(`[Labor Estimate] Failed for "${serviceName}":`, (err as Error).message)
+    return null
+  }
+}
+
+/**
+ * Enrich services with Gemini-estimated labor hours.
+ * Runs all estimates in parallel. Falls back to LABOR_STANDARDS on failure.
+ */
+async function enrichServicesWithLaborEstimates(
+  services: FormattedService[],
+  vehicleDesc: string,
+  engineDesc: string
+): Promise<FormattedService[]> {
+  const promises = services.map(async (service) => {
+    // Inspections are always 0 hours
+    if (service.is_inspection) return service
+
+    const estimate = await estimateLaborHours(vehicleDesc, engineDesc, service.service_name)
+
+    if (estimate) {
+      return {
+        ...service,
+        estimated_labor_hours: estimate.hours,
+        labor_source: 'gemini_labor' as const,
+        labor_confidence: estimate.confidence,
+        labor_notes: estimate.notes,
+      }
+    }
+
+    // Fallback to LABOR_STANDARDS
+    const fallbackHours = LABOR_STANDARDS[service.service_category] || 0.5
+    return {
+      ...service,
+      estimated_labor_hours: fallbackHours,
+      labor_source: 'fallback' as const,
+    }
+  })
+
+  return Promise.all(promises)
+}
+
+// ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
 
@@ -419,10 +551,15 @@ export async function lookupMaintenanceSchedule(
   // 2. If single config, build single-variant response
   if (configs.length === 1) {
     const config = configs[0]
-    const services = await buildServicesForConfig(config.id, mileage)
+    let services = await buildServicesForConfig(config.id, mileage)
     if (services.length === 0) {
       return { success: false, source: 'database' }
     }
+
+    // Enrich with Gemini labor estimates (parallel)
+    const vehicleDesc = `${year} ${make} ${model}`
+    const engineDesc = `${config.displacement_liters}L ${buildEngineType(config)} ${config.fuel_type}`
+    services = await enrichServicesWithLaborEstimates(services, vehicleDesc, engineDesc)
 
     return {
       success: true,
@@ -447,7 +584,13 @@ export async function lookupMaintenanceSchedule(
   // 3. Multiple configs — build multi-variant response
   const variants: VariantResult[] = []
   for (const config of configs) {
-    const services = await buildServicesForConfig(config.id, mileage)
+    let services = await buildServicesForConfig(config.id, mileage)
+
+    // Enrich with Gemini labor estimates (parallel per variant)
+    const vehicleDesc = `${year} ${make} ${model}`
+    const engineDesc = `${config.displacement_liters}L ${buildEngineType(config)} ${config.fuel_type}`
+    services = await enrichServicesWithLaborEstimates(services, vehicleDesc, engineDesc)
+
     variants.push({
       engine_displacement: `${config.displacement_liters}L`,
       engine_type: buildEngineType(config),

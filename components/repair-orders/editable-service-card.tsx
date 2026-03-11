@@ -36,6 +36,23 @@ import { PartDetailsModal } from "./part-details-modal"
 import { PhotoLightbox } from "./ro-detail/PhotoLightbox"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { calculateServiceDiscount } from "@/lib/invoice-calculator"
+import { PositionSelector } from "./PositionSelector"
+import { PairRecommendationWarn } from "./PairRecommendationWarn"
+
+export interface VehicleContext {
+  year?: string | number | null
+  make?: string | null
+  model?: string | null
+  engine?: string | null
+}
+
+interface PositionRuleState {
+  requires_position: boolean
+  position_type: string
+  valid_positions: string[]
+  pair_recommended: boolean
+  detected_position: string | null
+}
 
 interface EditableServiceCardProps {
   service: ServiceData
@@ -45,6 +62,7 @@ interface EditableServiceCardProps {
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>
   isDragging?: boolean
   roTechnician?: string
+  vehicleInfo?: VehicleContext
 }
 
 const lineItemCategories = [
@@ -808,6 +826,7 @@ export function EditableServiceCard({
   dragHandleProps,
   isDragging,
   roTechnician,
+  vehicleInfo,
 }: EditableServiceCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isCatalogOpen, setIsCatalogOpen] = useState(false)
@@ -818,6 +837,8 @@ export function EditableServiceCard({
   const [isRewriting, setIsRewriting] = useState(false)
   const [autoRewrite, setAutoRewrite] = useState(true)
   const [localTitle, setLocalTitle] = useState(service.name)
+  const [positionRule, setPositionRule] = useState<PositionRuleState | null>(null)
+  const [showPairWarn, setShowPairWarn] = useState(false)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const serviceRef = useRef(service)
   serviceRef.current = service
@@ -862,7 +883,66 @@ export function EditableServiceCard({
     } catch {
       // silent fail
     }
-  }, [localTitle, autoRewrite])
+
+    // Fetch position rules for this title (runs after normalize, uses final title)
+    try {
+      const finalTitle = lastCommittedTitle.current || raw
+      const params = new URLSearchParams({ title: finalTitle })
+      if (vehicleInfo?.year) params.set('year', String(vehicleInfo.year))
+      if (vehicleInfo?.make) params.set('make', vehicleInfo.make)
+      if (vehicleInfo?.model) params.set('model', vehicleInfo.model)
+      if (vehicleInfo?.engine) params.set('engine', vehicleInfo.engine)
+      const posRes = await fetch(`/api/position-rules?${params}`)
+      if (posRes.ok) {
+        const rule = await posRes.json()
+        setPositionRule(rule)
+        setShowPairWarn(false)
+        // Auto-set detected position if found
+        if (rule.detected_position && !serviceRef.current.position) {
+          onUpdateRef.current({
+            ...serviceRef.current,
+            name: lastCommittedTitle.current,
+            position: rule.detected_position,
+            positionType: rule.position_type,
+            positionConfidence: rule.confidence,
+          })
+        }
+      }
+    } catch {
+      // Position lookup failed — non-critical
+    }
+  }, [localTitle, autoRewrite, vehicleInfo])
+
+  const handlePositionChange = useCallback((value: string) => {
+    const svc = serviceRef.current
+    const updated = {
+      ...svc,
+      position: value,
+      positionType: positionRule?.position_type || null,
+      positionConfidence: 'manual' as string | null,
+      positionOverrideReason: null as string | null,
+      positionOverrideNote: null as string | null,
+    }
+
+    // Check if pair warning is needed (single corner on a pair-recommended service)
+    const isSingleCorner = positionRule?.position_type === 'single_corner' && positionRule?.pair_recommended
+    if (isSingleCorner) {
+      setShowPairWarn(true)
+    } else {
+      setShowPairWarn(false)
+    }
+
+    onUpdateRef.current(updated)
+  }, [positionRule])
+
+  const handlePairOverride = useCallback((reason: string, note: string) => {
+    setShowPairWarn(false)
+    onUpdateRef.current({
+      ...serviceRef.current,
+      positionOverrideReason: reason,
+      positionOverrideNote: note || null,
+    })
+  }, [])
 
   const handleWriteDescription = useCallback(async () => {
     setIsRewriting(true)
@@ -1211,6 +1291,26 @@ export function EditableServiceCard({
               </select>
             </div>
           </div>
+
+          {/* Position Selector */}
+          {positionRule && positionRule.requires_position && (
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Position</Label>
+              <PositionSelector
+                positionType={positionRule.position_type}
+                validPositions={positionRule.valid_positions}
+                value={service.position || null}
+                onChange={handlePositionChange}
+              />
+              {showPairWarn && service.position && (
+                <PairRecommendationWarn
+                  serviceName={service.name}
+                  selectedPosition={service.position}
+                  onReasonSelected={handlePairOverride}
+                />
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">

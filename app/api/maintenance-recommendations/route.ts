@@ -67,6 +67,9 @@ const STANDARD_SERVICE_NAMES = [
  * Apply labor hour fallbacks if Gemini returned 0
  */
 function applyLaborFallback(service: any): any {
+  // If already enriched by gemini_labor (DB path), don't override
+  if (service.labor_source === 'gemini_labor') return service
+
   if (service.estimated_labor_hours === 0 || !service.estimated_labor_hours) {
     const fallback = LABOR_STANDARDS[service.service_category] || 0.5
     return {

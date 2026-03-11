@@ -136,7 +136,9 @@ export async function POST(request: NextRequest) {
           description: service.service_name,
           hours: service.estimated_labor_hours || 0,
           rate: shopLaborRate,
-          total: (service.estimated_labor_hours || 0) * shopLaborRate
+          total: (service.estimated_labor_hours || 0) * shopLaborRate,
+          ...(service.labor_confidence ? { confidence: service.labor_confidence } : {}),
+          ...(service.labor_notes ? { notes: service.labor_notes } : {}),
         }]
 
         // Build parts items JSON

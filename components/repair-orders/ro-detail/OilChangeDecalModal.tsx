@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Printer, X } from "lucide-react"
+import { Printer, Monitor, X, Loader2 } from "lucide-react"
 import { formatPhoneNumber } from "@/lib/utils/phone-format"
+import { generateOilChangeZPL, generateZPLFromLayout } from "@/lib/print/zpl-templates"
+import { toast } from "sonner"
 
 interface Preset {
   id: number
@@ -34,8 +36,11 @@ function addMonths(date: Date, months: number): Date {
   return d
 }
 
-function formatMonthYear(date: Date): string {
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+function formatDate(date: Date): string {
+  const dd = String(date.getDate()).padStart(2, '0')
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const yyyy = date.getFullYear()
+  return `${dd}/${mm}/${yyyy}`
 }
 
 export function OilChangeDecalModal({ open, onOpenChange, currentMileage, roId }: OilChangeDecalModalProps) {
@@ -49,10 +54,25 @@ export function OilChangeDecalModal({ open, onOpenChange, currentMileage, roId }
   const [shopWebsite, setShopWebsite] = useState("")
   const [logoUrl, setLogoUrl] = useState("")
   const [loaded, setLoaded] = useState(false)
+  const [printing, setPrinting] = useState(false)
+  const [zplFailed, setZplFailed] = useState(false)
+  const [savedLayout, setSavedLayout] = useState<any[] | null>(null)
 
   useEffect(() => {
     if (!open) return
     setLoaded(false)
+    setZplFailed(false)
+    // Fetch saved decal layout (fire-and-forget on error)
+    fetch("/api/settings/decal-layout")
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.layout && Array.isArray(data.layout) && data.layout.length > 0) {
+          setSavedLayout(data.layout)
+        } else {
+          setSavedLayout(null)
+        }
+      })
+      .catch(() => setSavedLayout(null))
     fetch("/api/decals/oil-change")
       .then((res) => res.ok ? res.json() : null)
       .then((data) => {
@@ -76,7 +96,7 @@ export function OilChangeDecalModal({ open, onOpenChange, currentMileage, roId }
           } else {
             // Fallback if no presets exist
             setNextMileage(current ? formatMileage(current + 5000) : formatMileage(5000))
-            setNextDate(formatMonthYear(addMonths(new Date(), 6)))
+            setNextDate(formatDate(addMonths(new Date(), 6)))
           }
         }
         setLoaded(true)
@@ -85,7 +105,7 @@ export function OilChangeDecalModal({ open, onOpenChange, currentMileage, roId }
         const current = currentMileage || 0
         setMileage(current ? formatMileage(current) : "")
         setNextMileage(current ? formatMileage(current + 5000) : "5,000")
-        setNextDate(formatMonthYear(addMonths(new Date(), 6)))
+        setNextDate(formatDate(addMonths(new Date(), 6)))
         setLoaded(true)
       })
   }, [open, currentMileage])
@@ -93,7 +113,7 @@ export function OilChangeDecalModal({ open, onOpenChange, currentMileage, roId }
   function applyPreset(preset: Preset, current?: number) {
     const mi = current ?? currentMileage ?? 0
     setNextMileage(mi ? formatMileage(mi + preset.miles) : formatMileage(preset.miles))
-    setNextDate(formatMonthYear(addMonths(new Date(), preset.months)))
+    setNextDate(formatDate(addMonths(new Date(), preset.months)))
   }
 
   function handlePresetChange(presetId: string) {
@@ -102,8 +122,10 @@ export function OilChangeDecalModal({ open, onOpenChange, currentMileage, roId }
     if (preset) applyPreset(preset)
   }
 
-  function handlePrint() {
-    // Log the print
+  async function handlePrint() {
+    setPrinting(true)
+
+    // Log the print (fire-and-forget)
     fetch("/api/decals/oil-change", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -115,7 +137,36 @@ export function OilChangeDecalModal({ open, onOpenChange, currentMileage, roId }
       }),
     }).catch(() => {})
 
-    // Open print window
+    // Generate ZPL — use saved designer layout if available, else default template
+    const fieldData = { shopName, nextMileage, nextDate }
+    const zpl = savedLayout
+      ? generateZPLFromLayout(savedLayout, fieldData)
+      : generateOilChangeZPL(fieldData)
+
+    try {
+      const res = await fetch("/api/print/zpl", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ zpl }),
+      })
+      const data = await res.json()
+
+      if (res.ok && data.success) {
+        toast.success("Decal printed")
+        onOpenChange(false)
+      } else {
+        toast.error(data.error || "Print failed")
+        setZplFailed(true)
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Could not reach print server")
+      setZplFailed(true)
+    } finally {
+      setPrinting(false)
+    }
+  }
+
+  function handleBrowserFallback() {
     const params = new URLSearchParams({
       shop: shopName,
       phone: shopPhone,
@@ -200,9 +251,15 @@ export function OilChangeDecalModal({ open, onOpenChange, currentMileage, roId }
             <X size={14} />
             Skip
           </Button>
-          <Button className="gap-1.5" onClick={handlePrint} disabled={!loaded}>
-            <Printer size={14} />
-            Print Decal
+          {zplFailed && (
+            <Button variant="outline" className="gap-1.5" onClick={handleBrowserFallback}>
+              <Monitor size={14} />
+              Print via Browser
+            </Button>
+          )}
+          <Button className="gap-1.5" onClick={handlePrint} disabled={!loaded || printing}>
+            {printing ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+            {printing ? "Printing..." : "Print Decal"}
           </Button>
         </DialogFooter>
       </DialogContent>

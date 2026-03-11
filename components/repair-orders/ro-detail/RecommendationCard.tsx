@@ -184,6 +184,8 @@ export function RecommendationCard({
   const needsParts = hasUnpricedParts
 
   const laborHours = laborItems.reduce((sum, item) => sum + item.hours, 0)
+  const laborNotes = laborItems[0]?.notes || null
+  const laborConfidence = laborItems[0]?.confidence || null
 
   const handleCardClick = () => {
     if (hasFinding) {
@@ -287,7 +289,10 @@ export function RecommendationCard({
 
           {/* Middle: Labor + Parts summary */}
           <div className="flex items-center gap-4 text-xs flex-shrink-0">
-            <div className="flex items-center gap-1 text-muted-foreground">
+            <div
+              className="flex items-center gap-1 text-muted-foreground"
+              title={laborNotes ? `${laborHours}h (${laborConfidence} confidence): ${laborNotes}` : undefined}
+            >
               <Wrench className="h-3 w-3 text-blue-500" />
               <span>{laborHours}h</span>
               <span className="font-medium text-foreground">${laborTotal.toFixed(2)}</span>

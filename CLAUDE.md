@@ -1,13 +1,13 @@
 # RO Engine — CLAUDE.md
 # AutoHouse Automotive | Owner: Fren (Joe Sprandel)
-# Last updated: 2026-03-05
+# Last updated: 2026-03-09
 ## Project Overview
 RO Engine is an AI-native shop management SaaS platform replacing ShopWare.
 Stack: Next.js (App Router), PostgreSQL (shopops3), Node.js, PM2, Caddy reverse proxy.
 Server: Ryzen 7 5700X, 64GB ECC RAM, RTX 3060 | Domain: arologik.com | Static IP required.
 DB: shopops3 on localhost, user: shopops
 ## Key Integrations
-- Twilio: SMS (consent-gated, templates in DB)
+- Bird: SMS (consent-gated, templates in DB)
 - Hostgator SMTP/IMAP: email via Nodemailer — CRITICAL: name: 'autohousenwa.com' in transporter config for EHLO
 - Retell AI: inbound call screening via Telnyx +1 479-300-0590 — prompt-as-code in retell/system-prompt.md
 - Ollama (qwen3:14b): local AI inference on RTX 3060 for service title normalization and description rewriting
@@ -27,6 +27,10 @@ DB: shopops3 on localhost, user: shopops
 - Staff visiting /estimates/[token] must redirect BEFORE any events are logged or statuses updated
 - Retell system prompt source of truth is retell/system-prompt.md — never edit in Retell dashboard UI
 - Service card text inputs (title, line item descriptions) must use local state + commit on blur — onChange → onUpdate triggers async DB writes that cause race conditions with controlled inputs
+- Position validation uses tiered lookup: service_position_rules cache → local AI → Gemini fallback
+- Pair recommendation warns are soft — advisor must select override reason to proceed, cannot skip silently
+- Override reasons are a controlled list (customer_declined, active_suspension, recently_replaced, insurance_limited, other) — never free text without a reason code
+- position lives as a separate field on services — never baked into the title string
 ## Lessons Learned — AVOID THESE MISTAKES
 ### Email
 - Nodemailer EHLO must send hostname not 127.0.0.1. Fix: add name: 'autohousenwa.com' to createTransport config
@@ -75,9 +79,9 @@ DB: shopops3 on localhost, user: shopops
 - When a fix feels hacky, pause and implement the elegant solution
 - All business values (labor rate, tax rate, phone, hours, address) must come from shop_profile — never hardcode
 - Phone numbers are stored as numeric-only strings in DB (e.g. "4793012880") — always render through formatPhoneNumber() from @/lib/utils/phone-format before displaying in any UI or print output, never display raw numeric strings
-## Current State (as of 2026-02-24)
+## Current State (as of 2026-03-09)
 ### Completed
-- SMS integration (Twilio, templates, webhooks, consent)
+- SMS integration (Bird, templates, webhooks, consent)
 - Email integration (Hostgator SMTP/IMAP, deliverability fixed)
 - Unified customer document flow (tokenized URLs, state machine: Estimate → In Progress → Ready → Invoice)
 - Send to Customer button (single blue button, modal with SMS/Email/Both)
@@ -132,14 +136,21 @@ DB: shopops3 on localhost, user: shopops
   - Fallback "Print OC Decal" button in RO detail action bar (always visible)
   - Settings: oil_interval_miles + oil_interval_months on shop_profile, editable in Shop Settings
   - API: /api/decals/oil-change (GET shop defaults, POST log print)
+- Position Validation System (migration 070):
+  - service_position_rules table (30 seeded rules), position_override_reasons table (5 codes)
+  - lib/position-rules.ts (Layer 1 DB lookup), lib/position-validator.ts (orchestrator)
+  - lib/local-ai.ts: added localAIPositionAnalysis() alongside existing localAIRewrite()
+  - PositionSelector.tsx, PairRecommendationWarn.tsx components
+  - editable-service-card.tsx: position lookup on title blur, auto-applies detected position
+  - InvoiceActionsPanel.tsx: pre-close position completeness soft warning
+  - scripts/cleanup-service-positions.ts: one-time batch history cleanup job
 ### Immediate Priorities
 1. Print invoice polish
 2. Parts Manager interface improvements
 3. Mobile responsive audit (use Chrome DevTools MCP: npx chrome-devtools-mcp@latest)
 4. End-to-end customer flow retest (email opt-in fixed, Preview as Customer working)
-5. Retell billing past due — resolve before 14-day shutdown
-6. Add mileage param to book_appointment tool schema in Retell dashboard
-7. Set up daily cron for GET /api/retell/sync-date (keeps date current)
+5. Add mileage param to book_appointment tool schema in Retell dashboard
+6. Set up daily cron for GET /api/retell/sync-date (keeps date current)
 ### Known Issues
 - Parts Manager Cores tab is still a UI mockup with no backend
 - Dashboard AI Insights widget is hardcoded fake data
@@ -236,7 +247,7 @@ Shop Profile fields are a natural two-column grid.
 - Don't over-explain, don't ask for permission to proceed on obvious next steps
 ## Appendix: Quick Reference for RO Engine Development
 Given our SaaS context (Node.js/TypeScript automotive shop management
-platform, Retell AI integration, Twilio SMS, email integration),
+platform, Retell AI integration, Bird SMS, email integration),
 here's what's most relevant:
 **For development workflow:**
 - Claude Code with Opus 4.6 as default model

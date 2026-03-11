@@ -39,6 +39,7 @@ export async function GET(
         COALESCE(discount_amount, 0) as discount_amount,
         COALESCE(discount_type, 'percent') as discount_type,
         description_draft, description_completed,
+        position, position_type, position_override_reason, position_override_note, position_confidence,
         created_at, updated_at
       FROM services
       WHERE work_order_id = $1

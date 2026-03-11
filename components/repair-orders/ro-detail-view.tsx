@@ -51,6 +51,7 @@ import { SMSDialog } from "./ro-detail/SMSDialog"
 import { OilChangeDecalModal } from "./ro-detail/OilChangeDecalModal"
 import { EmailDialog } from "./ro-detail/EmailDialog"
 import { SendToCustomerDialog } from "./ro-detail/SendToCustomerDialog"
+import { IntakePhotosSection } from "./ro-detail/IntakePhotosSection"
 
 /**
  * Convert database services with items to ServiceData format
@@ -141,6 +142,11 @@ function convertDbServicesToServiceData(dbServices: any[], defaultLaborRate: num
       discountType: svc.discount_type || 'percent',
       descriptionDraft: svc.description_draft || '',
       descriptionCompleted: svc.description_completed || '',
+      position: svc.position || null,
+      positionType: svc.position_type || null,
+      positionOverrideReason: svc.position_override_reason || null,
+      positionOverrideNote: svc.position_override_note || null,
+      positionConfidence: svc.position_confidence || null,
     }
   })
 }
@@ -984,6 +990,9 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
         )}
       </div>
 
+      {/* Intake Photos */}
+      <IntakePhotosSection workOrderId={workOrder.id} />
+
       {/* AI Maintenance Recommendations */}
       {workOrder.vehicle_id && (
         <RecommendationsSection
@@ -1125,6 +1134,12 @@ export function RODetailView({ roId, onClose }: { roId: string; onClose?: () => 
                   isDragging={dragIndex === index}
                   roTechnician="Unassigned"
                   dragHandleProps={createDragHandleProps(index)}
+                  vehicleInfo={workOrder.vehicle_id ? {
+                    year: workOrder.year,
+                    make: workOrder.make,
+                    model: workOrder.model,
+                    engine: workOrder.engine,
+                  } : undefined}
                 />
               </div>
             ))}

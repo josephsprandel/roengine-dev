@@ -40,6 +40,7 @@ export interface VehicleData {
   build_date?: string // MM/YY format from AI extraction
   tire_size?: string // Tire specification from door jamb
   isNew?: boolean
+  savedIntakeImages?: Array<{ file_path: string; photo_type: string; original_name?: string; file_size?: number }> // snake_case keys match POST /api/intake-images
 }
 
 export interface LineItem {
@@ -91,6 +92,11 @@ export interface ServiceData {
   discountType?: 'percent' | 'flat'
   descriptionDraft?: string
   descriptionCompleted?: string
+  position?: string | null
+  positionType?: string | null
+  positionOverrideReason?: string | null
+  positionOverrideNote?: string | null
+  positionConfidence?: string | null
 }
 
 interface ROCreationWizardProps {
@@ -306,6 +312,22 @@ export function ROCreationWizard({ initialCustomerId, initialScheduledStart, ini
               }),
             })
           }
+        }
+      }
+
+      // Step 5: Link intake photos if any were saved during AI analysis
+      if (vehicleData.savedIntakeImages && vehicleData.savedIntakeImages.length > 0) {
+        try {
+          await fetch('/api/intake-images', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              work_order_id: workOrderId,
+              images: vehicleData.savedIntakeImages,
+            }),
+          })
+        } catch (linkErr) {
+          console.error('[RO Wizard] Failed to link intake images:', linkErr)
         }
       }
 

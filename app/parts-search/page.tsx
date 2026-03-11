@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Search, Car, Package, DollarSign, AlertCircle, CheckCircle2, XCircle, ShoppingCart, Trash2, RefreshCw, ClipboardList } from 'lucide-react';
+import { Loader2, Search, Car, Package, DollarSign, AlertCircle, CheckCircle2, XCircle, ShoppingCart, Trash2, RefreshCw, ClipboardList, Store } from 'lucide-react';
 
 interface Vehicle {
   vin: string;
@@ -76,6 +76,50 @@ interface WorldpacSearchResult {
   raw?: any;
 }
 
+// First Call Online (O'Reilly) types
+interface FirstCallPart {
+  partNumber: string;
+  brandCode: string;
+  brandName: string;
+  description: string;
+  listPrice: number;
+  cost: number;
+  customerPrice: number;
+  corePrice: number;
+  availability: {
+    storeQty: number;
+    networkQty: number;
+    totalQty: number;
+  };
+  catalogKey: string;
+  partTypeId: string;
+  partTypeName: string | null;
+  warranty: string | null;
+  supplier: string;
+}
+
+interface FirstCallSearchResult {
+  success: boolean;
+  vehicle?: {
+    vin: string;
+    year: number;
+    make: string;
+    model: string;
+    descriptor: string;
+  };
+  parts: FirstCallPart[];
+  worksheetHeaderId?: number;
+  worksheetVehicleId?: number;
+  totalParts: number;
+  durationSeconds: number;
+  error?: { code: string; message: string };
+}
+
+interface FcPartType {
+  id: string;
+  name: string;
+}
+
 interface CartItem {
   partNumber: string;
   description: string;
@@ -121,6 +165,16 @@ export default function PartsSearchPage() {
   const [wpResults, setWpResults] = useState<WorldpacSearchResult | null>(null);
   const [wpRaw, setWpRaw] = useState<any>(null);
 
+  // First Call Online state
+  const [fcConnected, setFcConnected] = useState<boolean | null>(null);
+  const [fcPartType, setFcPartType] = useState('');       // selected part type ID
+  const [fcPartTypeSearch, setFcPartTypeSearch] = useState(''); // search input text
+  const [fcPartTypes, setFcPartTypes] = useState<FcPartType[]>([]); // full list from API
+  const [fcPartTypeOpen, setFcPartTypeOpen] = useState(false);     // dropdown open state
+  const [fcLoading, setFcLoading] = useState(false);
+  const [fcError, setFcError] = useState('');
+  const [fcResults, setFcResults] = useState<FirstCallSearchResult | null>(null);
+
   // Cart state
   const [cart, setCart] = useState<CartItem[]>([]);
   const [poNumber, setPoNumber] = useState('');
@@ -143,6 +197,27 @@ export default function PartsSearchPage() {
       .then(res => res.json())
       .then(data => setWpConnected(data.connected))
       .catch(() => setWpConnected(false));
+  }, []);
+
+  // Check First Call connection + load part types on page load
+  useEffect(() => {
+    fetch('/api/suppliers/firstcall/validate')
+      .then(res => res.json())
+      .then(data => {
+        setFcConnected(data.success === true);
+        if (data.success) {
+          // Fetch part types once connected
+          fetch('/api/suppliers/firstcall/part-types')
+            .then(r => r.json())
+            .then(d => {
+              if (d.success && d.partTypes) {
+                setFcPartTypes(d.partTypes);
+              }
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => setFcConnected(false));
   }, []);
 
   // Load work orders for dropdown
@@ -407,6 +482,66 @@ export default function PartsSearchPage() {
     } finally {
       setWpLoading(false);
     }
+  };
+
+  // First Call search handler
+  const handleFirstCallSearch = async () => {
+    if (!vin || vin.length !== 17 || !fcPartType) return;
+
+    setFcError('');
+    setFcLoading(true);
+    setFcResults(null);
+
+    try {
+      const res = await fetch('/api/suppliers/firstcall/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vin, partTypeId: fcPartType }),
+      });
+
+      const data: FirstCallSearchResult = await res.json();
+
+      if (!data.success) {
+        setFcError(data.error?.message || 'Search failed');
+      }
+
+      setFcResults(data);
+    } catch (err: any) {
+      setFcError(err.message || 'Search failed. Check First Call connection.');
+    } finally {
+      setFcLoading(false);
+    }
+  };
+
+  const addFcToCart = (part: FirstCallPart) => {
+    const qty = rowQuantities[part.partNumber] || 1;
+    setCart(prev => {
+      const existing = prev.find(c => c.partNumber === part.partNumber);
+      if (existing) {
+        return prev.map(c =>
+          c.partNumber === part.partNumber ? { ...c, quantity: c.quantity + qty } : c
+        );
+      }
+      return [...prev, {
+        partNumber: part.partNumber,
+        description: part.description,
+        brand: part.brandName,
+        price: part.customerPrice,
+        quantity: qty,
+        supplierPartId: part.catalogKey,
+      }];
+    });
+    setRowQuantities(prev => ({ ...prev, [part.partNumber]: 1 }));
+  };
+
+  const getFcAvailabilityBadge = (avail: FirstCallPart['availability']) => {
+    if (avail.storeQty > 0) {
+      return <Badge className="bg-green-600 hover:bg-green-700 text-white">In Store ({avail.storeQty})</Badge>;
+    }
+    if (avail.networkQty > 0) {
+      return <Badge className="bg-blue-500 hover:bg-blue-600 text-white">Network ({avail.networkQty})</Badge>;
+    }
+    return <Badge className="bg-gray-400 hover:bg-gray-500 text-white">Unavailable</Badge>;
   };
 
   const getWpAvailabilityBadge = (availability: WorldpacPart['availability']) => {
@@ -818,6 +953,232 @@ export default function PartsSearchPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* First Call Online (O'Reilly) Search */}
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Store className="h-5 w-5" />
+              First Call Online (O&apos;Reilly)
+            </CardTitle>
+            <div className="flex items-center gap-2 text-sm">
+              {fcConnected === null && (
+                <span className="text-muted-foreground">Checking...</span>
+              )}
+              {fcConnected === true && (
+                <span className="flex items-center gap-1 text-green-600">
+                  <CheckCircle2 className="h-4 w-4" /> Connected
+                </span>
+              )}
+              {fcConnected === false && (
+                <span className="flex items-center gap-1 text-red-500">
+                  <XCircle className="h-4 w-4" /> Not Connected
+                </span>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <Label className="text-muted-foreground text-xs">VIN (shared)</Label>
+              <Input
+                value={vin}
+                onChange={(e) => setVin(e.target.value.toUpperCase())}
+                maxLength={17}
+                className="font-mono"
+                placeholder="YV440MRR5H2128371"
+              />
+            </div>
+            <div className="relative">
+              <Label className="text-muted-foreground text-xs">Part Type</Label>
+              <Input
+                value={fcPartTypeSearch}
+                onChange={(e) => {
+                  setFcPartTypeSearch(e.target.value);
+                  setFcPartTypeOpen(true);
+                  // Clear selection if user edits text
+                  if (fcPartType) {
+                    const selected = fcPartTypes.find(pt => pt.id === fcPartType);
+                    if (selected && e.target.value !== selected.name) {
+                      setFcPartType('');
+                    }
+                  }
+                }}
+                onFocus={() => setFcPartTypeOpen(true)}
+                placeholder={fcPartTypes.length > 0 ? "Type to search part types..." : "Loading part types..."}
+                className={fcPartType ? 'border-green-500' : ''}
+              />
+              {fcPartTypeOpen && fcPartTypeSearch.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full max-h-60 overflow-auto rounded-md border bg-popover shadow-lg">
+                  {fcPartTypes
+                    .filter(pt => pt.name.toLowerCase().includes(fcPartTypeSearch.toLowerCase()))
+                    .slice(0, 20)
+                    .map(pt => (
+                      <button
+                        key={pt.id}
+                        className="w-full px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                        onClick={() => {
+                          setFcPartType(pt.id);
+                          setFcPartTypeSearch(pt.name);
+                          setFcPartTypeOpen(false);
+                        }}
+                      >
+                        {pt.name}
+                      </button>
+                    ))
+                  }
+                  {fcPartTypes.filter(pt => pt.name.toLowerCase().includes(fcPartTypeSearch.toLowerCase())).length === 0 && (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">No matching part types</div>
+                  )}
+                </div>
+              )}
+              {/* Close dropdown when clicking outside */}
+              {fcPartTypeOpen && (
+                <div className="fixed inset-0 z-40" onClick={() => setFcPartTypeOpen(false)} />
+              )}
+            </div>
+          </div>
+
+          <Button
+            onClick={handleFirstCallSearch}
+            disabled={fcLoading || vin.length !== 17 || !fcPartType}
+            className="w-full"
+            variant="outline"
+          >
+            {fcLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Searching O&apos;Reilly...
+              </>
+            ) : (
+              <>
+                <Search className="mr-2 h-4 w-4" />
+                Search First Call
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* First Call Error */}
+      {fcError && (
+        <Card className="mb-6 border-red-500">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="h-5 w-5" />
+              <span>{fcError}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* First Call Vehicle Info */}
+      {fcResults?.success && fcResults.vehicle && (
+        <Card className="mb-6 bg-green-50 dark:bg-green-950">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <Car className="h-6 w-6 text-green-600" />
+              <div>
+                <h3 className="font-semibold text-lg">{fcResults.vehicle.descriptor}</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  VIN: {fcResults.vehicle.vin} &bull; {fcResults.totalParts} parts found in {fcResults.durationSeconds}s
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* First Call Results */}
+      {fcResults?.success && fcResults.parts.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader className="bg-green-50 dark:bg-green-950 pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">O&apos;Reilly Results</CardTitle>
+              <Badge variant="secondary">
+                <Package className="mr-1 h-3 w-3" />
+                {fcResults.totalParts} {fcResults.totalParts === 1 ? 'part' : 'parts'}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="pb-2 pr-4 font-medium text-muted-foreground">Part Number</th>
+                    <th className="pb-2 pr-4 font-medium text-muted-foreground">Description</th>
+                    <th className="pb-2 pr-4 font-medium text-muted-foreground">Brand</th>
+                    <th className="pb-2 pr-4 font-medium text-muted-foreground text-right">Cost</th>
+                    <th className="pb-2 pr-4 font-medium text-muted-foreground text-right">List</th>
+                    <th className="pb-2 pr-4 font-medium text-muted-foreground text-right">Customer</th>
+                    <th className="pb-2 pr-4 font-medium text-muted-foreground text-right">Core</th>
+                    <th className="pb-2 pr-4 font-medium text-muted-foreground">Availability</th>
+                    <th className="pb-2 pr-4 font-medium text-muted-foreground">Warranty</th>
+                    <th className="pb-2 font-medium text-muted-foreground text-center">Order</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fcResults.parts.map((part, idx) => (
+                    <tr key={idx} className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-slate-900">
+                      <td className="py-3 pr-4 font-mono text-xs">{part.partNumber}</td>
+                      <td className="py-3 pr-4 max-w-[200px] truncate">{part.description || '\u2014'}</td>
+                      <td className="py-3 pr-4">{part.brandName || '\u2014'}</td>
+                      <td className="py-3 pr-4 text-right font-medium">
+                        {part.cost != null ? `$${part.cost.toFixed(2)}` : '\u2014'}
+                      </td>
+                      <td className="py-3 pr-4 text-right text-muted-foreground">
+                        {part.listPrice != null ? `$${part.listPrice.toFixed(2)}` : '\u2014'}
+                      </td>
+                      <td className="py-3 pr-4 text-right text-muted-foreground">
+                        {part.customerPrice != null ? `$${part.customerPrice.toFixed(2)}` : '\u2014'}
+                      </td>
+                      <td className="py-3 pr-4 text-right text-muted-foreground">
+                        {part.corePrice > 0 ? `$${part.corePrice.toFixed(2)}` : '\u2014'}
+                      </td>
+                      <td className="py-3 pr-4">{getFcAvailabilityBadge(part.availability)}</td>
+                      <td className="py-3 pr-4 text-xs text-muted-foreground max-w-[120px] truncate">
+                        {part.warranty || '\u2014'}
+                      </td>
+                      <td className="py-3">
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            min={1}
+                            value={rowQuantities[part.partNumber] || 1}
+                            onChange={(e) => setRowQuantities(prev => ({ ...prev, [part.partNumber]: Math.max(1, parseInt(e.target.value) || 1) }))}
+                            className="w-14 h-7 text-xs text-center"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => addFcToCart(part)}
+                          >
+                            <ShoppingCart className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* First Call No Results */}
+      {fcResults?.success && fcResults.parts.length === 0 && (
+        <Card className="mb-6">
+          <CardContent className="pt-6 text-center py-8">
+            <Package className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">No parts found for this vehicle and part type.</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* PartsTech Search */}
       <Card className="mb-6">
